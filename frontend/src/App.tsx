@@ -1,7 +1,8 @@
 import { ReactNode } from "react";
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import type { Role } from "./api/types";
 import { homePath, useAuth } from "./auth/AuthContext";
+import { useCurrentTenant } from "./auth/currentTenant";
 import { AdminShell, PLATFORM_NAV, TENANT_NAV } from "./layouts/AdminShell";
 import { Account } from "./pages/Account";
 import { AcceptInvite } from "./pages/AcceptInvite";
@@ -57,10 +58,17 @@ function PlatformArea() {
 }
 
 function TenantArea() {
-  const { user } = useAuth();
+  const { current, tenants, select } = useCurrentTenant();
+  const navigate = useNavigate();
+  const switcher = tenants.length > 1 ? (
+    <select className="input tenant-switch" aria-label="Customer" value={current?.id ?? ""}
+      onChange={(e) => { select(e.target.value); navigate("/tenant/documents"); }}>
+      {tenants.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+    </select>
+  ) : undefined;
   return (
-    <AdminShell eyebrow="Tenant" title={user?.tenant_name ?? "My customer"} nav={TENANT_NAV}>
-      <Routes>
+    <AdminShell eyebrow={tenants.length > 1 ? `Customer · ${tenants.length}` : "Customer"} title={current?.name ?? "My customer"} titleControl={switcher} nav={TENANT_NAV}>
+      <Routes key={current?.id}>
         <Route path="users" element={<Users />} />
         <Route path="settings" element={<TenantSettings />} />
         <Route path="documents" element={<TenantDocuments />} />

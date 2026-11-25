@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { errorText } from "../../api/client";
 import type { ChatFull, ChatMessage, ChatSummary, ScopeOption } from "../../api/types";
 import { useAuth } from "../../auth/AuthContext";
+import { MobileBar } from "../../layouts/AdminShell";
 import { Icon } from "../../components/Icon";
 import { chatApi } from "./chatApi";
 import { ChatSidebar } from "./ChatSidebar";
@@ -22,6 +23,8 @@ export function ChatPage() {
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const end = useRef<HTMLDivElement>(null);
+  const [drawer, setDrawer] = useState(false);
+  useEffect(() => setDrawer(false), [chatId]);
 
   const refreshList = useCallback((q: string) => chatApi.list(q).then(setChats).catch(() => undefined), []);
 
@@ -89,8 +92,11 @@ export function ChatPage() {
   const scopeLabel = scope?.id ? scope.name : "all customers";
 
   return (
-    <div className="shell chat-shell">
-      <ChatSidebar chats={chats} query={query} onQuery={setQuery} onNew={newChat}
+    <div className={`shell chat-shell${drawer ? " drawer-open" : ""}`}>
+      <MobileBar title={chat?.title ?? "New chat"} onMenu={() => setDrawer(true)}
+        right={<button className="icon-btn" style={{ border: 0 }} aria-label="New chat" onClick={newChat}><Icon name="plus" size={20} /></button>} />
+      <div className="drawer-backdrop" onClick={() => setDrawer(false)} aria-hidden="true" />
+      <ChatSidebar chats={chats} query={query} onQuery={setQuery} onNew={() => { newChat(); setDrawer(false); }} onClose={() => setDrawer(false)}
         onRename={async (id, title) => {
           const s = await chatApi.rename(id, title);
           setChats((cs) => cs.map((c) => (c.id === id ? s : c)));
@@ -120,7 +126,7 @@ export function ChatPage() {
                   Choose the customer with <strong>@</strong> (or keep <strong>All customers</strong>), then ask. Answers come only from the
                   documentation in use, with the source of every statement. The customer stays fixed for the whole chat.
                 </p>
-                {user?.role === "tenant_admin" && <p className="muted small">As tenant admin you can test answers on your own customer only.</p>}
+                {user?.role === "tenant_admin" && <p className="muted small">As tenant admin you can test answers on your own customers only.</p>}
               </div>
             )}
             {messages.map((m, i) =>

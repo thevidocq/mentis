@@ -5,7 +5,7 @@ import { ROLE_LABEL, Role } from "../api/types";
 import { Brand } from "../components/Logo";
 import { PasswordFields, passwordProblem } from "../components/PasswordFields";
 
-interface Info { email: string; full_name: string; role: Role; tenant_name: string | null }
+interface Info { email: string; full_name: string; role: Role; tenant_names: string[] }
 
 export function AcceptInvite() {
   const { token = "" } = useParams();
@@ -49,7 +49,7 @@ export function AcceptInvite() {
             <form className="stack" onSubmit={submit}>
               <p style={{ margin: 0 }}>
                 Welcome {info.full_name}. You are joining as <strong>{ROLE_LABEL[info.role]}</strong>
-                {info.tenant_name ? <> for <strong>{info.tenant_name}</strong></> : null}.
+                {info.tenant_names.length ? <> for <strong>{info.tenant_names.join(", ")}</strong></> : null}.
               </p>
               <label className="field">Email
                 <input className="input" value={info.email} readOnly autoComplete="username" />

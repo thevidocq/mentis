@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api/client";
 import type { Tenant } from "../../api/types";
-import { useAuth } from "../../auth/AuthContext";
+import { useCurrentTenant } from "../../auth/currentTenant";
 import { DocumentsPage } from "./DocumentsPage";
 import { PreviewPage } from "./PreviewPage";
 
@@ -24,11 +24,11 @@ export function GeneralPreview() {
 }
 
 export function TenantDocuments() {
-  const { user } = useAuth();
-  return user?.tenant_id ? <DocumentsPage tenantId={user.tenant_id} title="Documents" previewBase="/tenant/documents/preview" /> : null;
+  const { current } = useCurrentTenant();
+  return current ? <DocumentsPage key={current.id} tenantId={current.id} title="Documents" previewBase="/tenant/documents/preview" /> : null;
 }
 
 export function TenantPreview() {
-  const { user } = useAuth();
-  return user?.tenant_id ? <PreviewPage tenantId={user.tenant_id} backTo="/tenant/documents" /> : null;
+  const { current } = useCurrentTenant();
+  return current ? <PreviewPage key={current.id} tenantId={current.id} backTo="/tenant/documents" /> : null;
 }

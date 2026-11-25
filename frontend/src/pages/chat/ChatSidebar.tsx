@@ -15,9 +15,10 @@ interface Props {
   onNew: () => void;
   onRename: (id: string, title: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  onClose: () => void;
 }
 
-export function ChatSidebar({ chats, query, onQuery, onNew, onRename, onDelete }: Props) {
+export function ChatSidebar({ chats, query, onQuery, onNew, onRename, onDelete, onClose }: Props) {
   const { user } = useAuth();
   const [renaming, setRenaming] = useState<ChatSummary | null>(null);
   const [title, setTitle] = useState("");
@@ -29,6 +30,7 @@ export function ChatSidebar({ chats, query, onQuery, onNew, onRename, onDelete }
       <div className="brand" style={{ justifyContent: "space-between" }}>
         <Brand />
         <button className="btn btn-sm" onClick={onNew}><Icon name="plus" />New chat</button>
+        <button className="icon-btn drawer-close" style={{ border: 0 }} aria-label="Close menu" onClick={onClose}><Icon name="x" /></button>
       </div>
       <div className="sidebar-block">
         <input className="input" type="search" placeholder="Search chats…" aria-label="Search chats" value={query}
