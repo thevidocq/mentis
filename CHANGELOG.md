@@ -6,6 +6,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Changed
+- **Docker builds reuse their cache across releases**: system packages (Tesseract) and Python dependencies are installed from a list extracted from `pyproject.toml` before the app code is copied, and `npm ci` runs on `package.json`/`package-lock.json` with the version blanked; a version bump or a code change no longer reinstalls them (the first build after this change still installs everything once).
+
+### Fixed
+- Web proxy: the API is resolved at request time under its own alias `mentis-api`; before, `docker compose up -d api` could leave the web container on the old IP (502), and joining `equalizer_edge` could send `/api/` to another stack's `api` service.
+- `restore.sh --with-env` replaced `.env` before the RESTORE confirmation (a cancelled restore kept the swapped secrets), and left the database role on its old password; on a new server it failed when the `api` container did not exist yet.
+- `backup.sh` aborted the whole backup when a MinIO file changed while being archived (GNU tar exit 1).
+- `check.sh` reported OK after a failed upgrade build (old containers still running): it now checks that the API version matches the checkout; it also read `MENTIS_WEB_PORT` wrong from a `.env` with CRLF or single quotes and ignored `MENTIS_WEB_BIND`.
+- Syslog: a collector host name that cannot be encoded (e.g. `collector..local`) stopped the forwarding thread for good and made the Test button fail with an error 500; UDP messages cut at 8000 bytes could end in half a UTF-8 character.
+- Log CSV export: cells starting with a tab or carriage return were not neutralised against spreadsheet formulas.
+- Configuration import: syslog, SMTP and embedding values and AI provider options (e.g. a price as text, which broke the usage page) were not validated, keys such as `indexed_model` were imported, a non-text tenant name gave an error 500, and the dry run reported "not found" for AI providers added by the same file.
+- `backups/` is ignored by git (backups contain `.env`); the nginx example in INSTALL.md waits 300 s for the API, like the web container.
+
 ## [0.3.0] - 2026-11-25
 
 ### Added

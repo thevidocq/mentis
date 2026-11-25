@@ -22,6 +22,7 @@ from app.services.logs import log_event
 router = APIRouter(tags=["logs"])
 super_admin = require_roles(Role.SUPER_ADMIN)
 EXPORT_MAX = 100_000
+FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
 
 
 class LogOut(BaseModel):
@@ -120,8 +121,8 @@ def export_logs(request: Request, f: Filters = Depends(filters), db: Session = D
     for e in rows:
         cells = [e.ts.isoformat(), e.kind, e.level, e.action, e.actor_email or "", names.get(e.tenant_id, "") if e.tenant_id else "",
                  e.target or "", e.ip or "", json.dumps(e.detail or {}, default=str)]
-        # Neutralise spreadsheet formulas in exported text.
-        w.writerow([("'" + c) if isinstance(c, str) and c[:1] in ("=", "+", "-", "@") else c for c in cells])
+        # Neutralise spreadsheet formulas in exported text (OWASP: = + - @ and leading tab or carriage return).
+        w.writerow([("'" + c) if isinstance(c, str) and c[:1] in FORMULA_START else c for c in cells])
     log_event(db, "logs.exported", actor=admin, ip=client_ip(request), detail={"rows": len(rows)})
     name = f"mentis-logs-{utcnow():%Y%m%d-%H%M}.csv"
     return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv",
@@ -165,7 +166,7 @@ def test_syslog(db: Session = Depends(get_db), admin: User = Depends(super_admin
                    target="Test message from Mentis", detail={})
     try:
         syslog.send_one(cfg, syslog.format_event(e, cfg.get("app_name") or "mentis"))
-    except OSError as ex:
+    except (OSError, ValueError) as ex:  # ValueError: e.g. UnicodeError for a host name IDNA cannot encode
         return {"ok": False, "error": f"{ex.__class__.__name__}: {ex}"}
     note = " UDP gives no delivery confirmation: check the collector." if cfg["protocol"] == "udp" else ""
     return {"ok": True, "message": f"Test message sent to {cfg['host']}:{cfg['port']} ({cfg['protocol'].upper()}).{note}"}

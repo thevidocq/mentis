@@ -39,6 +39,10 @@ services:
     # Lets AI providers reach a model server on the host (e.g. Ollama at http://host.docker.internal:11434/v1).
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    networks:
+      default:
+        # The web container proxies to this name: a joined network (e.g. equalizer_edge) may have its own "api".
+        aliases: [mentis-api]
     depends_on:
       postgres:
         condition: service_healthy
