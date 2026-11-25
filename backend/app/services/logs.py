@@ -11,6 +11,13 @@ from app.models.base import utcnow
 _log = logging.getLogger("mentis")
 
 
+def _only_tenant(actor: User | None) -> uuid.UUID | None:
+    if actor is None or actor.role != "tenant_admin":
+        return None
+    ids = actor.tenant_ids
+    return next(iter(ids)) if len(ids) == 1 else None
+
+
 def log_event(
     db: Session,
     action: str,
@@ -32,7 +39,7 @@ def log_event(
         action=action,
         actor_user_id=actor.id if actor else None,
         actor_email=actor.email if actor else actor_email,
-        tenant_id=tenant_id if tenant_id is not None else (actor.tenant_id if actor else None),
+        tenant_id=tenant_id if tenant_id is not None else _only_tenant(actor),
         target=target,
         ip=ip,
         detail=detail or {},

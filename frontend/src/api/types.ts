@@ -6,15 +6,20 @@ export interface User {
   email: string;
   full_name: string;
   role: Role;
-  tenant_id: string | null;
+  tenants: TenantRef[]; // tenant admins: the customers they administer
   totp_enabled: boolean;
   preferences: { theme?: Theme };
-  tenant_name?: string | null;
+}
+
+export interface TenantRef {
+  id: string;
+  name: string;
 }
 
 export interface AdminUser extends User {
   is_active: boolean;
   locked: boolean;
+  manageable: boolean;
 }
 
 export interface TenantSettings {
@@ -38,7 +43,7 @@ export interface Invitation {
   email: string;
   full_name: string;
   role: Role;
-  tenant_id: string | null;
+  tenants: TenantRef[];
   expires_at: string;
 }
 

@@ -6,6 +6,7 @@ interface AuthState {
   user: User | null;
   loading: boolean;
   needsSetup: boolean;
+  webSetup: boolean;
   refresh: () => Promise<void>;
   setUser: (u: User | null) => void;
   logout: () => Promise<void>;
@@ -23,6 +24,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUserState] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [needsSetup, setNeedsSetup] = useState(false);
+  const [webSetup, setWebSetup] = useState(false);
 
   const setUser = useCallback((u: User | null) => {
     setUserState(u);
@@ -31,8 +33,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     try {
-      const status = await api<{ needs_setup: boolean }>("/setup/status");
+      const status = await api<{ needs_setup: boolean; web_setup?: boolean }>("/setup/status");
       setNeedsSetup(status.needs_setup);
+      setWebSetup(!!status.web_setup);
       setUser(status.needs_setup ? null : await api<User>("/auth/me").catch(() => null));
     } finally {
       setLoading(false);
@@ -49,7 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void refresh();
   }, [refresh]);
 
-  return <Ctx.Provider value={{ user, loading, needsSetup, refresh, setUser, logout }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ user, loading, needsSetup, webSetup, refresh, setUser, logout }}>{children}</Ctx.Provider>;
 }
 
 export function useAuth(): AuthState {

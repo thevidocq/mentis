@@ -2,7 +2,7 @@
 
 Mentis is a multi-tenant AI assistant for SOC analysts. It answers questions from each customer's own documentation (procedures, escalation matrices, runbooks) and cites its sources on every answer. Read-only integrations with the customer's ticketing, EDR and SIEM tools are planned.
 
-> Status: `0.1.0`, first release. See [CHANGELOG](CHANGELOG.md) and [release notes](docs/releases/).
+> Status: `0.2.0`. See [CHANGELOG](CHANGELOG.md) and [release notes](docs/releases/).
 
 ![Answer with sources](docs/screenshots/chat-answer.png)
 
@@ -14,6 +14,8 @@ Mentis is a multi-tenant AI assistant for SOC analysts. It answers questions fro
 - **AI providers**: Claude, OpenAI, Daybreak Blue, gpt-oss (vLLM), Ollama. One LLM per customer with automatic fallback. Embeddings run locally (bge-m3), vectors are in Qdrant.
 - **Security**: mandatory 2FA, three roles (super-admin, tenant admin, analyst), encrypted secrets, metadata-only logs.
 - **Operations**: service status, Logs with CSV export and syslog forwarding to a SIEM, retention, LLM usage and cost per customer, backup/restore scripts, configuration export/import.
+- Tenant admins of one or more customers, with a customer selector.
+- Works from a phone: drawer menus, card tables, full-screen chat.
 - Light, Medium and Dark themes, plus in-app help for each profile.
 
 ## Screenshots
@@ -33,6 +35,13 @@ The screenshots use fictional demo data.
 | ![Logs](docs/screenshots/logs.png) Logs, metadata only for chats | ![Syslog](docs/screenshots/logs-syslog.png) Syslog forwarding to a SIEM |
 | ![Retention](docs/screenshots/retention.png) Retention | ![Configuration import](docs/screenshots/configuration-import.png) Configuration import with preview |
 | ![Account](docs/screenshots/account.png) Account and themes | |
+
+### On a phone
+
+| | | |
+|---|---|---|
+| ![Chat](docs/screenshots/mobile-chat.png) | ![History](docs/screenshots/mobile-history.png) | ![Menu](docs/screenshots/mobile-menu.png) |
+| ![Users](docs/screenshots/mobile-users.png) | ![Invite with several customers](docs/screenshots/mobile-invite.png) | ![Customer selector](docs/screenshots/mobile-customer-selector.png) |
 
 ## Documentation
 

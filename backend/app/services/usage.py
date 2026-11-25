@@ -20,11 +20,11 @@ def _price(providers: dict[str, LlmProvider], name: str | None) -> tuple[float |
     return o.get("price_in"), o.get("price_out")
 
 
-def usage(db: Session, since: datetime, until: datetime, tenant_id: uuid.UUID | None = None, only_tenant: bool = False) -> dict:
-    """Rows per (customer, provider). only_tenant=True restricts to tenant_id (tenant admins)."""
+def usage(db: Session, since: datetime, until: datetime, tenant_ids: set[uuid.UUID] | None = None) -> dict:
+    """Rows per (customer, provider). tenant_ids restricts to those customers (tenant admins)."""
     stmt = select(AuditEvent).where(AuditEvent.action == "chat.answered", AuditEvent.ts >= since, AuditEvent.ts < until)
-    if only_tenant:
-        stmt = stmt.where(AuditEvent.tenant_id == tenant_id)
+    if tenant_ids is not None:
+        stmt = stmt.where(AuditEvent.tenant_id.in_(tenant_ids))
     names = {t.id: t.name for t in db.scalars(select(Tenant))}
     providers = {p.name: p for p in db.scalars(select(LlmProvider))}
     rows: dict[tuple, dict] = {}

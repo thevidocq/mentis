@@ -6,7 +6,7 @@ import { Brand } from "../components/Logo";
 import { PasswordFields, passwordProblem } from "../components/PasswordFields";
 
 export function Setup() {
-  const { refresh } = useAuth();
+  const { refresh, webSetup } = useAuth();
   const navigate = useNavigate();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -30,6 +30,25 @@ export function Setup() {
     } finally {
       setBusy(false);
     }
+  }
+
+  if (!webSetup) {
+    return (
+      <div className="center-page">
+        <Brand />
+        <div className="card auth-card">
+          <div className="card-head"><h2>Setup on the server</h2></div>
+          <div className="card-body stack">
+            <p className="muted" style={{ margin: 0 }}>
+              No super-admin exists yet. For security, create it on the server, from the Mentis folder:
+            </p>
+            <pre className="code-block">docker compose exec api python -m app.cli create-admin</pre>
+            <p className="muted small" style={{ margin: 0 }}>Then reload this page and sign in.</p>
+            <button className="btn" onClick={() => void refresh()}>Reload</button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

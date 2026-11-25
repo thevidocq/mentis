@@ -20,6 +20,10 @@ With a customer selected, Mentis searches that customer's documentation plus the
 
 > Always check the source before acting on a contact or a time. Answers come only from the documents, but the documents can be out of date.
 
+## On a phone
+
+The chat fills the screen. The ☰ button at the top left opens the history; **+** at the top right starts a new chat.
+
 ## History
 
 - Past chats are in the left sidebar, grouped by day, with their customer under the title.

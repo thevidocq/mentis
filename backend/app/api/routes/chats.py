@@ -90,7 +90,7 @@ class ScopeOption(BaseModel):
 
 def _scope_name(db: Session, chat: Chat) -> str:
     if chat.scope_tenant_id is None:
-        return "All customers"
+        return answering.all_label(db.get(User, chat.user_id))
     t = db.get(Tenant, chat.scope_tenant_id)
     return t.name if t else "Deleted customer"
 
@@ -114,9 +114,8 @@ def _own_chat(db: Session, user: User, chat_id: uuid.UUID) -> Chat:
 
 
 def _check_scope(db: Session, user: User, tenant_id: uuid.UUID | None) -> None:
-    if user.role == Role.TENANT_ADMIN:
-        if tenant_id is None or tenant_id != user.tenant_id:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Tenant admins can chat only on their own customer.")
+    if user.role == Role.TENANT_ADMIN and tenant_id is not None and not user.administers(tenant_id):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Tenant admins can chat only on their own customers.")
     if tenant_id is not None:
         t = db.get(Tenant, tenant_id)
         if t is None:
@@ -169,10 +168,11 @@ def _ask(db: Session, user: User, chat: Chat, question: str, first: bool, reques
 
 @router.get("/scopes", response_model=list[ScopeOption])
 def scopes(db: Session = Depends(get_db), user: User = Depends(current_user)) -> list[ScopeOption]:
-    """What the user can pick with @. Tenant admins: only their tenant. General is not a scope: it is searched with the customers."""
+    """What the user can pick with @. Tenant admins: their own customers. General is not a scope: it is searched with the customers."""
     if user.role == Role.TENANT_ADMIN:
-        t = db.get(Tenant, user.tenant_id) if user.tenant_id else None
-        return [ScopeOption(id=t.id, name=t.name, is_general=False)] if t and t.status != "disabled" else []
+        own = [t for t in user.tenants if t.status != "disabled"]
+        head = [ScopeOption(id=None, name="All my customers", is_general=False)] if len(own) > 1 else []
+        return head + [ScopeOption(id=t.id, name=t.name, is_general=False) for t in own]
     rows = db.scalars(select(Tenant).where(Tenant.status != "disabled", Tenant.is_global.is_(False)).order_by(Tenant.name)).all()
     return [ScopeOption(id=None, name="All customers", is_general=False)] + [ScopeOption(id=t.id, name=t.name, is_general=False) for t in rows]
 
@@ -187,8 +187,9 @@ def list_chats(q: str | None = Query(None, max_length=200), limit: int = Query(1
         stmt = stmt.where(Chat.title.ilike(like) | Chat.id.in_(in_messages))
     chats = db.scalars(stmt.order_by(Chat.updated_at.desc()).limit(limit)).all()
     names = {t.id: t.name for t in db.scalars(select(Tenant))}
+    every = answering.all_label(user)
     return [ChatSummary(id=c.id, title=c.title, scope_tenant_id=c.scope_tenant_id, updated_at=c.updated_at,
-                        scope_name="All customers" if c.scope_tenant_id is None else names.get(c.scope_tenant_id, "Deleted customer"))
+                        scope_name=every if c.scope_tenant_id is None else names.get(c.scope_tenant_id, "Deleted customer"))
             for c in chats]
 
 

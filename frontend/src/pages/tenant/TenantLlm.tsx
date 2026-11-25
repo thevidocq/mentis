@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, errorText } from "../../api/client";
 import type { LlmProvider } from "../../api/types";
-import { useAuth } from "../../auth/AuthContext";
+import { useCurrentTenant } from "../../auth/currentTenant";
 import { PageHead } from "../../layouts/AdminShell";
 import { UsageTable, usd, useUsage } from "../platform/Usage";
 
@@ -62,13 +62,13 @@ export function TenantLlmForm({ tenantId, onSaved }: { tenantId: string; onSaved
 }
 
 export function TenantLlm() {
-  const { user } = useAuth();
+  const { current } = useCurrentTenant();
   return (
     <>
       <PageHead title="LLM" />
       <div className="page-body" style={{ maxWidth: 760 }}>
         <p className="muted" style={{ margin: 0 }}>Which AI model writes the answers about this customer. Analysts see the model's name under each answer.</p>
-        {user?.tenant_id && <div className="card"><div className="card-body"><TenantLlmForm tenantId={user.tenant_id} /></div></div>}
+        {current && <div className="card"><div className="card-body"><TenantLlmForm key={current.id} tenantId={current.id} /></div></div>}
         <TenantUsage />
       </div>
     </>

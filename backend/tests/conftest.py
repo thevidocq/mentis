@@ -2,6 +2,7 @@ import os
 
 os.environ["MENTIS_SECRET_KEY"] = "test-secret-key-0123456789"
 os.environ["MENTIS_COOKIE_SECURE"] = "false"
+os.environ["MENTIS_WEB_SETUP"] = "true"
 
 import pytest
 from fastapi.testclient import TestClient

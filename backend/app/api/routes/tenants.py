@@ -62,7 +62,7 @@ def list_tenants(db: Session = Depends(get_db), user: User = Depends(current_use
     Tenant admins see only their own."""
     q = select(Tenant).order_by(Tenant.is_global.desc(), Tenant.name)
     if user.role == Role.TENANT_ADMIN.value:
-        q = q.where(Tenant.id == user.tenant_id)
+        q = q.where(Tenant.id.in_(user.tenant_ids))
     return [_out(db, t) for t in db.scalars(q)]
 
 
@@ -82,7 +82,7 @@ def create_tenant(body: TenantCreate, request: Request, db: Session = Depends(ge
 
 @router.get("/{tenant_id}", response_model=TenantOut)
 def get_tenant(tenant_id: uuid.UUID, db: Session = Depends(get_db), user: User = Depends(current_user)) -> TenantOut:
-    if user.role == Role.TENANT_ADMIN.value and user.tenant_id != tenant_id:
+    if user.role == Role.TENANT_ADMIN.value and not user.administers(tenant_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found.")
     return _out(db, _get(db, tenant_id))
 
@@ -93,7 +93,7 @@ def update_tenant(
     db: Session = Depends(get_db), user: User = Depends(current_user),
 ) -> TenantOut:
     is_super = user.role == Role.SUPER_ADMIN.value
-    is_own_admin = user.role == Role.TENANT_ADMIN.value and user.tenant_id == tenant_id
+    is_own_admin = user.role == Role.TENANT_ADMIN.value and user.administers(tenant_id)
     if not (is_super or is_own_admin):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Not allowed.")
     tenant = _get(db, tenant_id)

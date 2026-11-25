@@ -14,9 +14,10 @@ Check that everything is up (after install or upgrade):
 ./check.sh
 ```
 
-Reset a user's 2FA or unlock an account without the interface:
+Create the first super-admin, reset a user's 2FA or unlock an account without the interface:
 
 ```
+docker compose exec api python -m app.cli create-admin
 docker compose exec api python -m app.cli reset-2fa user@example.com
 docker compose exec api python -m app.cli unlock user@example.com
 ```

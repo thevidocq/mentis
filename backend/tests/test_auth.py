@@ -35,7 +35,7 @@ def test_setup_creates_general_tenant_and_super_admin_once(client, admin_setup):
     db = _db()
     general = db.scalar(select(Tenant).where(Tenant.is_global.is_(True)))
     assert general is not None and general.slug == "general"
-    assert client.get("/api/setup/status").json() == {"needs_setup": False}
+    assert client.get("/api/setup/status").json()["needs_setup"] is False
     again = client.post("/api/setup", json={"email": "x@example.com", "full_name": "X", "password": PASSWORD})
     assert again.status_code == 409
 

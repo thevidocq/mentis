@@ -162,7 +162,7 @@ def test_provider(provider_id: uuid.UUID, db: Session = Depends(get_db), _: User
 
 def _tenant_for(db: Session, user: User, tenant_id: uuid.UUID) -> Tenant:
     t = db.get(Tenant, tenant_id)
-    ok = t is not None and (user.role == Role.SUPER_ADMIN.value or (user.role == Role.TENANT_ADMIN.value and user.tenant_id == tenant_id))
+    ok = t is not None and user.administers(tenant_id)
     if not ok:
         raise HTTPException(404, "Tenant not found.")
     return t

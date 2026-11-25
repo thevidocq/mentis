@@ -15,6 +15,7 @@ from app.api.schemas import (
     THEMES,
     PasswordChangeRequest,
     ProfileUpdate,
+    TenantRef,
     UserOut,
     VerifyRequest,
 )
@@ -31,7 +32,7 @@ from app.core.security import (
     verify_password,
     verify_totp,
 )
-from app.models import Tenant, User
+from app.models import User
 from app.models.base import utcnow
 from app.services import sessions
 from app.services.logs import log_event
@@ -40,11 +41,9 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 def user_out(db: Session, user: User) -> UserOut:
-    out = UserOut.model_validate(user, from_attributes=True)
-    if user.tenant_id:
-        tenant = db.get(Tenant, user.tenant_id)
-        out.tenant_name = tenant.name if tenant else None
-    return out
+    return UserOut(id=user.id, email=user.email, full_name=user.full_name, role=user.role,
+                   tenants=[TenantRef(id=t.id, name=t.name) for t in user.tenants],
+                   totp_enabled=user.totp_enabled, preferences=user.preferences or {})
 
 PURPOSE_MFA = "mfa"
 PURPOSE_ENROLL = "enroll"

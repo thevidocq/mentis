@@ -1,5 +1,5 @@
-import { ReactNode } from "react";
-import { Link, NavLink } from "react-router-dom";
+import { ReactNode, useEffect, useState } from "react";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import { ROLE_LABEL } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import { Icon, IconName } from "../components/Icon";
@@ -16,15 +16,25 @@ export function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase()).join("") || "?";
 }
 
-export function AdminShell({ eyebrow, title, nav, children }: { eyebrow: string; title: string; nav: NavItem[]; children: ReactNode }) {
+export function AdminShell({ eyebrow, title, titleControl, nav, children }: {
+  eyebrow: string; title: string; titleControl?: ReactNode; nav: NavItem[]; children: ReactNode;
+}) {
   const { user } = useAuth();
+  const [open, setOpen] = useState(false);
+  const location = useLocation();
+  useEffect(() => setOpen(false), [location.pathname]); // close the drawer after navigating
   return (
-    <div className="shell">
-      <aside className="sidebar">
-        <div className="brand"><Brand /></div>
+    <div className={`shell${open ? " drawer-open" : ""}`}>
+      <MobileBar title={title} onMenu={() => setOpen(true)} />
+      <div className="drawer-backdrop" onClick={() => setOpen(false)} aria-hidden="true" />
+      <aside className="sidebar" aria-label="Menu">
+        <div className="brand">
+          <Brand />
+          <button className="icon-btn drawer-close" style={{ border: 0 }} aria-label="Close menu" onClick={() => setOpen(false)}><Icon name="x" /></button>
+        </div>
         <div className="sidebar-block">
           <div className="eyebrow">{eyebrow}</div>
-          <strong>{title}</strong>
+          {titleControl ?? <strong>{title}</strong>}
         </div>
         <nav className="nav" aria-label={`${eyebrow} menu`}>
           {nav.map((item) => (
@@ -38,7 +48,7 @@ export function AdminShell({ eyebrow, title, nav, children }: { eyebrow: string;
         {user && (
           <Link to="/account" className="user-link">
             <div className="avatar">{initials(user.full_name)}</div>
-            <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
+            <div style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0 }}>
               <span style={{ fontWeight: 600 }}>{user.full_name}</span>
               <span className="muted small">{ROLE_LABEL[user.role]} · Account</span>
             </div>
@@ -48,6 +58,17 @@ export function AdminShell({ eyebrow, title, nav, children }: { eyebrow: string;
       </aside>
       <main className="main">{children}</main>
     </div>
+  );
+}
+
+/** Top bar shown only on small screens: menu button, logo and the page title. */
+export function MobileBar({ title, onMenu, right }: { title: string; onMenu: () => void; right?: ReactNode }) {
+  return (
+    <header className="mobile-bar">
+      <button className="icon-btn" style={{ border: 0 }} aria-label="Open menu" onClick={onMenu}><Icon name="menu" size={20} /></button>
+      <span className="mobile-title">{title}</span>
+      {right}
+    </header>
   );
 }
 

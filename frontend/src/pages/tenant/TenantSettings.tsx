@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, errorText } from "../../api/client";
 import type { Tenant, TenantSettings as Settings } from "../../api/types";
-import { useAuth } from "../../auth/AuthContext";
+import { useCurrentTenant } from "../../auth/currentTenant";
 import { PageHead } from "../../layouts/AdminShell";
 
 const OPTIONS: { key: keyof Settings; label: string; help: string }[] = [
@@ -11,13 +11,13 @@ const OPTIONS: { key: keyof Settings; label: string; help: string }[] = [
 ];
 
 export function TenantSettings() {
-  const { user } = useAuth();
+  const { current } = useCurrentTenant();
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user?.tenant_id) api<Tenant>(`/tenants/${user.tenant_id}`).then(setTenant).catch((e) => setError(errorText(e)));
-  }, [user?.tenant_id]);
+    if (current) api<Tenant>(`/tenants/${current.id}`).then(setTenant).catch((e) => setError(errorText(e)));
+  }, [current]);
 
   async function toggle(key: keyof Settings, value: boolean) {
     if (!tenant) return;

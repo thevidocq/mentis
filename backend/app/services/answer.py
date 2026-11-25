@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.models import Chat, ChatMessage, Tenant
+from app.models import Chat, ChatMessage, Role, Tenant, User
 from app.services import llm, prompts, retrieval
 from app.services.llm_config import providers_for
 
@@ -31,10 +31,21 @@ class Answer:
     passages: int = 0
 
 
+def all_label(user: User | None) -> str:
+    return "All my customers" if user is not None and user.role == Role.TENANT_ADMIN.value else "All customers"
+
+
 def scope_tenants(db: Session, chat: Chat) -> tuple[list[Tenant], str, Tenant | None]:
     """Tenants searched for this chat, the scope label, and the scope tenant (None = all customers)."""
     general = db.scalar(select(Tenant).where(Tenant.is_global.is_(True)))
     if chat.scope_tenant_id is None:
+        owner = db.get(User, chat.user_id)
+        if owner is not None and owner.role == Role.TENANT_ADMIN.value:
+            # A tenant admin's "all customers" means all of its own customers (as they are now), plus General.
+            tenants = [t for t in owner.tenants if t.status != "disabled"]
+            if general is not None and tenants:
+                tenants.append(general)
+            return tenants, all_label(owner), None
         tenants = list(db.scalars(select(Tenant).where(Tenant.status != "disabled")))
         return tenants, "All customers", None
     tenant = db.get(Tenant, chat.scope_tenant_id)
@@ -93,8 +104,12 @@ def _cited(answer_text: str, passages) -> tuple[str, list[dict]]:
     return text, citations
 
 
+def _whose(scope_label: str) -> str:
+    return "your customers'" if scope_label in ("All customers", "All my customers") else f"{scope_label}'s"
+
+
 def not_found_text(scope_label: str) -> str:
-    target = "the customers' documentation" if scope_label == "All customers" else f"the documentation of {scope_label}"
+    target = "the customers' documentation" if scope_label in ("All customers", "All my customers") else f"the documentation of {scope_label}"
     return f"Not found in {target}. No document in use covers this question."
 
 
@@ -107,7 +122,11 @@ def answer(db: Session, chat: Chat, question: str, first: bool) -> Answer:
                                         limit=s.chat_passages, min_score=s.chat_min_score) if tenants else []
     if not passages:
         # No LLM call: nothing to ground an answer on, so nothing can be invented.
-        return Answer(status="not_found", content=not_found_text(scope_label), tenants=[scope_label],
+        content = not_found_text(scope_label)
+        if len(question.split()) <= 2:  # "ciao", "hello", "test": explain what to ask instead
+            content = (f"I answer questions about {_whose(scope_label)} procedures from the documents in use, "
+                       "for example: *Who do I call for a brute-force alert?* or *What is the SLA for a critical incident?*")
+        return Answer(status="not_found", content=content, tenants=[scope_label],
                       title=question[:60] if first else None)
 
     want_followups = (scope_tenant.settings or {}).get("suggested_followups", True) if scope_tenant else True

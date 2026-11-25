@@ -126,7 +126,7 @@ def test_test_question_respects_tenant_scope(super_admin):
     alfa, beta = _tenant(super_admin, "Alfa"), _tenant(super_admin, "Beta")
     bv = _upload(super_admin, beta["id"], "B.docx", _docx("Beta secret procedure"))
     run_jobs(super_admin)
-    r = super_admin.post("/api/invitations", json={"email": "ta@example.com", "full_name": "TA", "role": "tenant_admin", "tenant_id": alfa["id"]})
+    r = super_admin.post("/api/invitations", json={"email": "ta@example.com", "full_name": "TA", "role": "tenant_admin", "tenant_ids": [alfa["id"]]})
     new_client(super_admin.app).post(f"/api/invitations/accept/{r.json()['invite_url'].rsplit('/', 1)[1]}", json={"password": PASSWORD})
     ta = new_client(super_admin.app)
     login(ta, "ta@example.com")

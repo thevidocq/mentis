@@ -2,8 +2,16 @@
 # Post-install / post-upgrade check. Run from the repository root: ./check.sh
 set -u
 
-API_URL="${MENTIS_API_URL:-http://127.0.0.1:8000}"
+cd "$(dirname "$0")" || exit 1
 fail=0
+# Web port from .env (MENTIS_WEB_PORT), default 8080.
+env_value() { [ -f .env ] && grep -E "^$1=" .env | tail -1 | cut -d= -f2- | tr -d '"' ; }
+WEB_PORT="$(env_value MENTIS_WEB_PORT)"
+WEB_URL="${MENTIS_WEB_URL:-http://127.0.0.1:${WEB_PORT:-8080}}"
+# The API publishes no host port: ask it from inside its container.
+api_get() {
+  docker compose exec -T api python -c "import sys,urllib.request;sys.stdout.write(urllib.request.urlopen('http://127.0.0.1:8000$1',timeout=5).read().decode())" 2>/dev/null
+}
 
 ok()   { printf '  \033[32mOK\033[0m    %s\n' "$1"; }
 bad()  { printf '  \033[31mFAIL\033[0m  %s\n' "$1"; fail=1; }
@@ -30,17 +38,16 @@ done
 
 echo
 echo "API:"
-body=$(curl -fsS --max-time 5 "$API_URL/api/health" 2>/dev/null) && ok "health: $body" || bad "health endpoint not reachable at $API_URL"
-setup=$(curl -fsS --max-time 5 "$API_URL/api/setup/status" 2>/dev/null)
+body=$(api_get /api/health) && [ -n "$body" ] && ok "health: $body" || bad "API health endpoint not answering"
+setup=$(api_get /api/setup/status)
 case "$setup" in
-  *'"needs_setup":true'*)  echo "  INFO  first-run setup not done yet" ;;
+  *'"needs_setup":true'*)  echo "  INFO  no super-admin yet: docker compose exec api python -m app.cli create-admin" ;;
   *'"needs_setup":false'*) ok "setup completed" ;;
   *) bad "setup status not readable" ;;
 esac
 
 echo
 echo "Web:"
-WEB_URL="${MENTIS_WEB_URL:-http://127.0.0.1:8080}"
 curl -fsS --max-time 5 "$WEB_URL/" 2>/dev/null | grep -q '<div id="root">' && ok "frontend served at $WEB_URL" || bad "frontend not reachable at $WEB_URL"
 curl -fsS --max-time 5 "$WEB_URL/api/health" >/dev/null 2>&1 && ok "API reachable through the web proxy" || bad "web proxy to API not working"
 
