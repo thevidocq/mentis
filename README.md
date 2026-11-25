@@ -43,7 +43,8 @@ The screenshots use fictional demo data.
 | | | |
 |---|---|---|
 | ![Chat](docs/screenshots/mobile-chat.png) | ![History](docs/screenshots/mobile-history.png) | ![Menu](docs/screenshots/mobile-menu.png) |
-| ![Users](docs/screenshots/mobile-users.png) | ![Invite with several customers](docs/screenshots/mobile-invite.png) | ![Customer selector](docs/screenshots/mobile-customer-selector.png) |
+| ![Users](docs/screenshots/mobile-users.png) | ![Invite with several customers](docs/screenshots/mobile-invite.png) | ![Customer selector with search](docs/screenshots/mobile-customer-selector.png) |
+| ![Account](docs/screenshots/mobile-account.png) | | |
 
 ## Documentation
 

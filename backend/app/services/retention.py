@@ -14,6 +14,7 @@ from app.models import (
     Chat,
     ChatMessage,
     Invitation,
+    PasswordReset,
     PlatformSetting,
 )
 from app.models.base import utcnow
@@ -59,6 +60,7 @@ def purge(db: Session) -> dict:
     # Housekeeping, whatever the settings: expired sign-in sessions and invitations expired for a week.
     db.execute(delete(AuthSession).where(AuthSession.expires_at < now))
     db.execute(delete(Invitation).where(Invitation.accepted_at.is_(None), Invitation.expires_at < now - timedelta(days=7)))
+    db.execute(delete(PasswordReset).where(PasswordReset.expires_at < now - timedelta(days=7)))
     cfg["last_purge"], cfg["last_result"] = now.isoformat(), result
     _store(db, cfg)
     db.commit()

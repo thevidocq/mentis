@@ -14,6 +14,7 @@ from argon2.exceptions import InvalidHashError, VerificationError
 _hasher = PasswordHasher()
 
 MIN_PASSWORD_LENGTH = 12
+MAX_PASSWORD_LENGTH = 256  # bounds the hashing work a single request can cause
 
 
 # --- Passwords ---------------------------------------------------------------
@@ -33,6 +34,8 @@ def password_problem(password: str) -> str | None:
     """Return a reason the password is too weak, or None if acceptable."""
     if len(password) < MIN_PASSWORD_LENGTH:
         return f"Password must be at least {MIN_PASSWORD_LENGTH} characters long."
+    if len(password) > MAX_PASSWORD_LENGTH:
+        return f"Password must be at most {MAX_PASSWORD_LENGTH} characters long."
     if password.lower() == password or password.upper() == password:
         return "Password must mix upper and lower case letters."
     if not any(c.isdigit() for c in password):

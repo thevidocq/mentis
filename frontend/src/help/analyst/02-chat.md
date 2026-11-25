@@ -13,7 +13,8 @@ With a customer selected, Mentis searches that customer's documentation plus the
 ## Read the answer
 
 - The labels above the answer say **which customer** it refers to. With All customers, an answer covering several customers names each one.
-- Every statement ends with a number like **1**: click it to see the source. The **Sources** list shows customer, document, version and page; click a source to read the exact passage.
+- Every statement ends with a number like **1**: click it to open the source.
+- **Sources** under the answer is closed by default and says how many documents and sections were used. Open it to see each document (with its version) and the cited sections; click a section to read the exact passage. The customer is shown only when the answer mixes customers or uses General.
 - A customer's own procedure wins over General documentation; when they differ, the answer says so.
 - **Not found**: if the documentation in use does not cover the question, Mentis says so and does not guess. Ask your tenant admin to add the missing procedure.
 - Under the answer: up to three **suggested questions** (one click asks them), thumbs up / thumbs down buttons to rate the answer, copy, and the name of the AI model that wrote it.

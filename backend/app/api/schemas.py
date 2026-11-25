@@ -47,7 +47,7 @@ class SetupRequest(BaseModel):
 
 class LoginRequest(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(max_length=1024)
 
 
 class LoginResponse(BaseModel):
@@ -71,5 +71,5 @@ class VerifyRequest(BaseModel):
 
 
 class PasswordChangeRequest(BaseModel):
-    current_password: str
+    current_password: str = Field(max_length=1024)
     new_password: str

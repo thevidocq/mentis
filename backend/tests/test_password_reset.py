@@ -87,3 +87,11 @@ def test_reset_unlocks_and_disabled_users_get_no_link(super_admin, monkeypatch):
     anon.post("/api/auth/password/forgot", json={"email": "an@example.com"})
     assert len(sent) == n
     assert super_admin.post(f"/api/users/{uid}/password-reset").status_code == 409
+
+
+def test_password_too_long_is_refused(super_admin):
+    from app.core.security import password_problem
+
+    assert "at most" in password_problem("Aa1" + "x" * 300)
+    anon = new_client(super_admin.app)
+    assert anon.post("/api/auth/login", json={"email": "a@example.com", "password": "x" * 5000}).status_code == 422

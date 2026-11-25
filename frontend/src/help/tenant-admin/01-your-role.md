@@ -4,7 +4,7 @@ You administer the customers ticked on your account (or all of them, if you have
 
 ## Several customers
 
-If you administer more than one customer, the **customer selector** at the top of the menu chooses which one Documents, LLM, Users and Settings show. Your choice is remembered on this device. On a phone, open the menu with the ☰ button.
+If you administer more than one customer, the **customer selector** at the top of the menu chooses which one Documents, LLM, Users and Settings show. Tap it and type in **Search customers…** to find one among many; General is always first, then the customers you used last. Your choice is remembered on this device. On a phone, open the menu with the ☰ button.
 
 ## What you can do today
 

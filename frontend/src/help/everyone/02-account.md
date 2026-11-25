@@ -1,6 +1,6 @@
 # Your account
 
-Open **Account** by selecting your name at the bottom of the left menu. On a phone, open the menu first with the ☰ button at the top left.
+Open **Account** by selecting your name at the bottom of the left menu. The page opens inside the usual menu, so you can go anywhere from there. On a phone, open the menu first with the ☰ button at the top left.
 
 ## Profile
 
@@ -18,4 +18,4 @@ If your session expires or is ended elsewhere, the next action takes you back to
 
 ## Sign out
 
-At the bottom of the menu, next to your name: the **?** opens Help and the red arrow (**Log out**) signs you out. On a phone, open the menu with ☰. **Sign out** is also at the top of the Account page.
+At the bottom of the menu, next to your name: the **?** opens Help and the red arrow (**Log out**) signs you out. On a phone, open the menu with ☰.

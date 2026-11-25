@@ -66,6 +66,7 @@ One chat = one customer scope, locked at the first message; integrations are cho
 - Citations: documents as [1], [2] (document, version, page/sheet/slide); live integration data as [A], [B] (source, object, read time).
 - If the documentation does not cover the question: "Not found in <customer> documentation", never an invented procedure. With no passage above the score threshold the LLM is not called at all; the model can also flag not-found itself.
 - Passages go to the LLM as numbered, untrusted data blocks labelled with their customer; citation numbers not among them are dropped.
+- Sources under the answer are compact: one closed line ("Sources · 1 document · 8 sections"), opened into one block per document (version) with its cited sections in number order. The customer badge appears only when the answer mixes customers or uses General. A click on [n] opens the panel on that section.
 - The last turns of the chat are sent as context; short follow-ups also reuse the previous question for retrieval.
 
 **Suggested follow-ups**
@@ -199,6 +200,7 @@ PostgreSQL (users, tenants, chats, audit) | Qdrant (one collection per tenant) |
 ## Security, audit and retention
 
 - **Auth:** local login + TOTP 2FA from day one; SSO/OIDC (Entra ID) configurable later.
+- **Password reset:** "Forgot password?" emails a one-time link (60 minutes; same answer whether the email exists; at most one email every 2 minutes per user). Admins who can manage a user create a 24-hour link from Users, emailed or shown to copy when SMTP is off. The link only sets the password: 2FA is still required, every session is closed, the account is unlocked, and both events are logged. Expired links are purged.
 - **Isolation:** server-side tenant filter on every retrieval and integration call; chat tenant fixed in the database.
 - **Read-only:** no writes to customer systems from chat.
 - **Secrets:** encrypted at rest, write-only in the UI.
