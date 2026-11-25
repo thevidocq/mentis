@@ -104,6 +104,10 @@ def _cited(answer_text: str, passages) -> tuple[str, list[dict]]:
     return text, citations
 
 
+def _whose(scope_label: str) -> str:
+    return "your customers'" if scope_label in ("All customers", "All my customers") else f"{scope_label}'s"
+
+
 def not_found_text(scope_label: str) -> str:
     target = "the customers' documentation" if scope_label in ("All customers", "All my customers") else f"the documentation of {scope_label}"
     return f"Not found in {target}. No document in use covers this question."
@@ -118,7 +122,11 @@ def answer(db: Session, chat: Chat, question: str, first: bool) -> Answer:
                                         limit=s.chat_passages, min_score=s.chat_min_score) if tenants else []
     if not passages:
         # No LLM call: nothing to ground an answer on, so nothing can be invented.
-        return Answer(status="not_found", content=not_found_text(scope_label), tenants=[scope_label],
+        content = not_found_text(scope_label)
+        if len(question.split()) <= 2:  # "ciao", "hello", "test": explain what to ask instead
+            content = (f"I answer questions about {_whose(scope_label)} procedures from the documents in use, "
+                       "for example: *Who do I call for a brute-force alert?* or *What is the SLA for a critical incident?*")
+        return Answer(status="not_found", content=content, tenants=[scope_label],
                       title=question[:60] if first else None)
 
     want_followups = (scope_tenant.settings or {}).get("suggested_followups", True) if scope_tenant else True

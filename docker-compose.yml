@@ -21,7 +21,8 @@ services:
       MENTIS_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       MENTIS_SECRET_KEY: ${MENTIS_SECRET_KEY}
       MENTIS_COOKIE_SECURE: ${MENTIS_COOKIE_SECURE:-true}
-      MENTIS_TRUSTED_PROXIES: ${MENTIS_TRUSTED_PROXIES:-*}
+      # Proxies whose X-Forwarded-For is believed: private networks (the web container, a proxy on this host).
+      MENTIS_TRUSTED_PROXIES: ${MENTIS_TRUSTED_PROXIES:-127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
       MENTIS_PUBLIC_URL: ${MENTIS_PUBLIC_URL:-http://localhost}
       MENTIS_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       MENTIS_MINIO_ENDPOINT: minio:9000

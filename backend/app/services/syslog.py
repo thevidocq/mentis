@@ -6,6 +6,7 @@ collector never delays a request. If the queue is full, events are dropped and c
 
 import json
 import logging
+import os
 import queue
 import socket
 import ssl
@@ -92,6 +93,16 @@ class Forwarder:
         self.dropped = 0
         self.sent = 0
         self.last_error: str | None = None
+        # The worker forks one child per job, and the child exits without running atexit
+        # handlers: a background thread there could lose events. Children send synchronously.
+        self.synchronous = False
+        os.register_at_fork(after_in_child=self._after_fork)
+
+    def _after_fork(self) -> None:
+        self._q = queue.Queue(maxsize=10000)
+        self._thread = None
+        self._lock = threading.Lock()
+        self.synchronous = True
 
     def reload(self, cfg: dict | None) -> None:
         with self._lock:
@@ -109,6 +120,14 @@ class Forwarder:
     def submit(self, db: Session, e: AuditEvent) -> None:
         cfg = self.config(db)
         if not (cfg.get("enabled") and cfg.get("host")):
+            return
+        if self.synchronous:
+            try:
+                send_one(cfg, format_event(e, cfg.get("app_name") or "mentis"), timeout=2)
+                self.sent += 1
+            except OSError as ex:
+                self.dropped += 1
+                self.last_error = f"{ex.__class__.__name__}: {ex}"[:200]
             return
         try:
             self._q.put_nowait(format_event(e, cfg.get("app_name") or "mentis"))

@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     cookie_secure: bool = True
     # First super-admin from the browser. Off: use `python -m app.cli create-admin` on the server.
     web_setup: bool = False
+    # Interactive API documentation at /api/docs (development only).
+    api_docs: bool = False
 
     # MFA challenge lifetime (between password check and TOTP code).
     mfa_challenge_ttl_seconds: int = 300

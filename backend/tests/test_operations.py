@@ -270,3 +270,34 @@ def test_importing_own_export_changes_nothing(super_admin):
     raw = super_admin.get("/api/platform/config/export").content
     r = super_admin.post("/api/platform/config/import", files={"file": ("c.json", raw, "application/json")})
     assert r.json()["changes"] == []
+
+
+def test_forked_worker_sends_syslog_synchronously(super_admin):
+    received: list[bytes] = []
+
+    class Handler(socketserver.BaseRequestHandler):
+        def handle(self):
+            while chunk := self.request.recv(65536):
+                received.append(chunk)
+
+    srv = _Collector(("127.0.0.1", 0), Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        super_admin.put("/api/platform/syslog", json={"enabled": True, "host": "127.0.0.1", "port": srv.server_address[1], "protocol": "tcp"})
+        syslog.forwarder.synchronous = True  # as in a forked job process
+        _tenant(super_admin, "Sync")
+        import time
+        for _ in range(50):
+            if b"tenant.created" in b"".join(received):
+                break
+            time.sleep(0.02)
+        assert b"tenant.created" in b"".join(received)
+    finally:
+        syslog.forwarder.synchronous = False
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_api_docs_are_off_by_default(client):
+    assert client.get("/api/docs").status_code == 404
+    assert client.get("/api/openapi.json").status_code == 404

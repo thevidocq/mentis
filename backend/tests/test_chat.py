@@ -336,3 +336,10 @@ def test_super_admin_changes_tenants_and_deleting_one_keeps_the_admin(super_admi
     # Deleting its last tenant deletes the admin.
     super_admin.request("DELETE", f"/api/tenants/{beta['id']}", json={"confirm_name": "Beta"})
     assert "ta@example.com" not in {u["email"] for u in super_admin.get("/api/users").json()}
+
+
+def test_greeting_gets_a_hint_not_an_llm_call(super_admin, fake_llm):
+    _provider(super_admin)
+    alfa, _ = _setup(super_admin)
+    a = super_admin.post("/api/chats", json={"tenant_id": alfa["id"], "message": "Ciao!"}).json()["answer"]
+    assert a["status"] == "not_found" and "Alfa's procedures" in a["content"] and fake_llm.requests == []
