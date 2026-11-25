@@ -17,6 +17,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 - Tenant deletion and user deletion also remove the related chats.
 - Help: Using the chat (analyst), LLM and testing answers (tenant admin), AI providers (super-admin); updated getting started, tenants, roles.
 - Migration 0004.
+- README rewritten with features and screenshots (`docs/screenshots/`, fictional demo data).
 - Release notes for v0.1.0-alpha.2 (`docs/releases/v0.1.0-alpha.2.md`).
 - **Indexing** (0.1.0 part 3b): chunks embedded through any OpenAI-compatible endpoint and stored in Qdrant, one collection per customer. New `embeddings` container (Hugging Face TEI, CPU) with BAAI/bge-m3 by default.
 - Indexing is the last ingestion step; a version that cannot be indexed fails and never replaces the active one. Activation, approval, restore, deletion and tenant deletion keep Qdrant in sync.
