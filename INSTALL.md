@@ -13,7 +13,7 @@
 ```bash
 git clone https://github.com/thevidocq/mentis.git
 cd mentis
-git checkout v0.1.0        # a release; main is the development version
+git checkout v0.1.1        # a release; main is the development version
 cp .env.example .env
 # Set every CHANGE_ME. For MENTIS_SECRET_KEY:  openssl rand -hex 32
 nano .env
