@@ -61,6 +61,14 @@ One chat = one customer scope, locked at the first message; integrations are cho
 - Citations: documents as [1], [2] (document, version, page/sheet/slide); live integration data as [A], [B] (source, object, read time).
 - If the documentation does not cover the question: "Not found in <customer> documentation", never an invented procedure.
 
+**Suggested follow-ups**
+
+- 2–3 clickable chips under each answer, produced by the same LLM call (structured output), no extra request.
+- Grounded: only questions the retrieved sources can answer, so a click never lands on "not found".
+- A click sends the question as a new message in the same chat and customer scope.
+- A suggestion needing an integration pre-selects its `#` chip, only if that integration is enabled for the customer.
+- Per-tenant setting, default on.
+
 **Titles**
 
 - Generated after the first exchange by a short call to the chat tenant's LLM (4–6 words, no customer name).
@@ -201,7 +209,7 @@ PostgreSQL (users, tenants, chats, audit) | Qdrant (one collection per tenant) |
 1. First-run setup (creates the super-admin), auth with 2FA, roles, account page, themes.
 2. Tenants (incl. General), onboarding by email invite (SMTP settings), deletion.
 3. Ingestion pipeline with versioning, preview and approval.
-4. Chat with `@` lock, citations, history, titles, answer feedback (thumbs up/down).
+4. Chat with `@` lock, citations, history, titles, suggested follow-ups, answer feedback (thumbs up/down).
 5. AI providers (Anthropic default, OpenAI Chat/Responses, Ollama), local embeddings, LLM usage per tenant (tokens, estimated cost).
 6. Service status page, single Logs section, retention.
 7. Backup and restore script (PostgreSQL, Qdrant, MinIO).
