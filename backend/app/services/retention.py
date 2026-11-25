@@ -8,7 +8,14 @@ from datetime import timedelta
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.models import AuditEvent, Chat, ChatMessage, PlatformSetting
+from app.models import (
+    AuditEvent,
+    AuthSession,
+    Chat,
+    ChatMessage,
+    Invitation,
+    PlatformSetting,
+)
 from app.models.base import utcnow
 
 KEY = "retention"
@@ -49,6 +56,9 @@ def purge(db: Session) -> dict:
     if cfg["logs_days"]:
         cutoff = now - timedelta(days=cfg["logs_days"])
         result["log_events"] = db.execute(delete(AuditEvent).where(AuditEvent.ts < cutoff)).rowcount or 0
+    # Housekeeping, whatever the settings: expired sign-in sessions and invitations expired for a week.
+    db.execute(delete(AuthSession).where(AuthSession.expires_at < now))
+    db.execute(delete(Invitation).where(Invitation.accepted_at.is_(None), Invitation.expires_at < now - timedelta(days=7)))
     cfg["last_purge"], cfg["last_result"] = now.isoformat(), result
     _store(db, cfg)
     db.commit()

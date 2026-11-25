@@ -26,8 +26,8 @@ def text_image(lines: list[str], width=1240, height=600, size=34) -> Image.Image
 
 def native_pdf() -> bytes:
     from reportlab.lib.pagesizes import A4
-    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table
     from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table
 
     buf = io.BytesIO()
     st = getSampleStyleSheet()

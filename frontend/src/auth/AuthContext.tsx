@@ -52,6 +52,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    const lost = () => setUserState(null);
+    window.addEventListener("mentis:session-lost", lost);
+    return () => window.removeEventListener("mentis:session-lost", lost);
+  }, []);
+
   return <Ctx.Provider value={{ user, loading, needsSetup, webSetup, refresh, setUser, logout }}>{children}</Ctx.Provider>;
 }
 

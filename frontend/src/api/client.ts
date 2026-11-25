@@ -27,8 +27,16 @@ export async function api<T = unknown>(path: string, options: { method?: string;
   });
   if (res.status === 204) return undefined as T;
   const data = await res.json().catch(() => null);
+  if (res.status === 401) sessionLost(path);
   if (!res.ok) throw new ApiError(res.status, detailMessage(data, `Request failed (${res.status}).`));
   return data as T;
+}
+
+// The session expired or was revoked (password changed elsewhere, account disabled):
+// tell the app, which goes back to the sign-in page. Sign-in steps report their own 401s.
+const SIGN_IN_PATHS = ["/auth/login", "/auth/totp", "/setup", "/invitations/accept"];
+function sessionLost(path: string) {
+  if (!SIGN_IN_PATHS.some((p) => path.startsWith(p))) window.dispatchEvent(new Event("mentis:session-lost"));
 }
 
 export async function apiUpload<T = unknown>(path: string, form: FormData): Promise<T> {
@@ -39,6 +47,7 @@ export async function apiUpload<T = unknown>(path: string, form: FormData): Prom
     body: form,
   });
   const data = await res.json().catch(() => null);
+  if (res.status === 401) sessionLost(path);
   if (!res.ok) throw new ApiError(res.status, detailMessage(data, `Upload failed (${res.status}).`));
   return data as T;
 }

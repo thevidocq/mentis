@@ -59,6 +59,7 @@ def main() -> None:
     user = _user(db, args.email)
     if args.command == "reset-2fa":
         user.totp_secret_enc = None
+        user.totp_last_step = None
         user.totp_enabled = False
         db.commit()
         revoke_all_sessions(db, user)

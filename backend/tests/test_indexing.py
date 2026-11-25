@@ -6,9 +6,8 @@ from fastapi.testclient import TestClient
 from qdrant_client import models
 
 from app.core import db as db_module
-from app.models import DocumentVersion
 from app.services import embeddings, retrieval, vector_index
-from tests import fake_embeddings, samples
+from tests import fake_embeddings
 from tests.conftest import PASSWORD, login, new_client, run_jobs
 
 

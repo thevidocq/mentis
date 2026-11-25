@@ -67,6 +67,9 @@ def login(c, email, password=PASSWORD):
     challenge = r.json()["challenge"]
     secret = c.post("/api/auth/totp/enroll", json={"challenge": challenge}).json()["secret"]
     r = c.post("/api/auth/totp/verify", json={"challenge": challenge, "code": pyotp.TOTP(secret).now()})
+    if r.status_code == 401 and "already used" in r.text:  # same user signed in twice within 30 s
+        import time
+        r = c.post("/api/auth/totp/verify", json={"challenge": challenge, "code": pyotp.TOTP(secret).at(time.time() + 30)})
     assert r.status_code == 200, r.text
     return secret
 

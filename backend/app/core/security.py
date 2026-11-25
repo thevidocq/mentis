@@ -61,11 +61,29 @@ def totp_uri(secret: str, account: str, issuer: str) -> str:
     return pyotp.TOTP(secret).provisioning_uri(name=account, issuer_name=issuer)
 
 
-def verify_totp(secret: str, code: str) -> bool:
+def totp_step(secret: str, code: str, now: float | None = None) -> int | None:
+    """The 30-second time step the code belongs to (current one ±1), or None if the code is wrong.
+
+    The caller stores the step and refuses steps not newer than the last one used, so a code
+    seen once (over a shoulder, in a proxy log) cannot be replayed.
+    """
+    import hmac
+    import time
+
     code = code.strip().replace(" ", "")
     if not code.isdigit():
-        return False
-    return pyotp.TOTP(secret).verify(code, valid_window=1)
+        return None
+    totp = pyotp.TOTP(secret)
+    now = time.time() if now is None else now
+    current = int(now // totp.interval)
+    for step in (current, current - 1, current + 1):
+        if hmac.compare_digest(totp.generate_otp(step), code):
+            return step
+    return None
+
+
+def verify_totp(secret: str, code: str) -> bool:
+    return totp_step(secret, code) is not None
 
 
 # --- Signed MFA challenges ---------------------------------------------------
