@@ -6,7 +6,7 @@ Read `docs/DESIGN.md` before changing anything. It is the source of truth for sc
 
 - **English only** in the repository: code, comments, docs, commit messages, UI strings.
 - **Update `CHANGELOG.md` on every commit** (under `[Unreleased]`), so another session can resume the work.
-- **Keep docs current:** `INSTALL.md`, `docs/DESIGN.md`, admin and user manuals must reflect the latest implementation.
+- **Keep docs current:** `INSTALL.md`, `docs/DESIGN.md` and the in-app Help (`frontend/src/help/<profile>/*.md`, which are also the manuals) must reflect the latest implementation. A feature is not done until its help topic is written or updated.
 - **Pull requests only:** work on a branch, open a PR, the owner merges. Never push to `main` directly.
 - **Modular code:** no monolithic files; one responsibility per module or component.
 - **Tenant isolation is server-side:** every query and integration call filters by the tenant stored on the chat or the request context, never by client input alone.

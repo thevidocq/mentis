@@ -6,6 +6,7 @@ import { AdminShell, PLATFORM_NAV, TENANT_NAV } from "./layouts/AdminShell";
 import { Account } from "./pages/Account";
 import { AcceptInvite } from "./pages/AcceptInvite";
 import { ChatHome } from "./pages/ChatHome";
+import { Help } from "./pages/Help";
 import { Login } from "./pages/Login";
 import { Placeholder } from "./pages/Placeholder";
 import { Setup } from "./pages/Setup";
@@ -75,6 +76,7 @@ export function App() {
       <Route path="/login" element={user ? <Navigate to={homePath(user)} replace /> : <Login />} />
       <Route path="/invite/:token" element={<AcceptInvite />} />
       <Route path="/account" element={<RequireRole><Account /></RequireRole>} />
+      <Route path="/help" element={<RequireRole><Help /></RequireRole>} />
       <Route path="/admin/*" element={<RequireRole roles={["super_admin"]}><PlatformArea /></RequireRole>} />
       <Route path="/tenant/*" element={<RequireRole roles={["tenant_admin"]}><TenantArea /></RequireRole>} />
       <Route path="/chat" element={<RequireRole><ChatHome /></RequireRole>} />
