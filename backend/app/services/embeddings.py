@@ -98,7 +98,8 @@ def embed(cfg: dict, texts: list[str]) -> list[list[float]]:
                 batch = texts[i : i + s.embedding_batch_size]
                 r = client.post(f"{cfg['url']}/embeddings", json={"model": cfg["model"], "input": batch}, headers=headers)
                 if r.status_code != 200:
-                    raise EmbeddingError(f"Embedding service answered {r.status_code}: {r.text[:200]}")
+                    body = r.text.replace(cfg["api_key"], "[redacted]") if cfg.get("api_key") else r.text  # a key echoed back
+                    raise EmbeddingError(f"Embedding service answered {r.status_code}: {body[:200]}")
                 data = sorted(r.json()["data"], key=lambda d: d["index"])
                 if len(data) != len(batch):
                     raise EmbeddingError("Embedding service returned a wrong number of vectors.")

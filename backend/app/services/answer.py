@@ -80,16 +80,30 @@ def _retrieval_query(question: str, history: list[ChatMessage]) -> str:
     return f"{previous}\n{question}" if previous and len(question.split()) <= 8 else question
 
 
+def _partial_answer(text: str) -> str | None:
+    """The "answer" string of a JSON reply cut short (the model hit its token limit)."""
+    m = re.search(r'\{\s*"answer"\s*:\s*"((?:[^"\\]|\\.)*)', text, re.S)
+    if m is None:
+        return None
+    raw = re.sub(r"\\(u[0-9a-fA-F]{0,3})?$", "", m.group(1))  # drop an escape cut in half
+    try:
+        return json.loads(f'"{raw}"', strict=False)
+    except ValueError:
+        return None
+
+
 def _parse_json(text: str) -> dict | None:
     cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
     for candidate in (cleaned, cleaned[cleaned.find("{"): cleaned.rfind("}") + 1] if "{" in cleaned else ""):
         try:
-            data = json.loads(candidate)
+            # strict=False: many models put raw line breaks inside the answer string.
+            data = json.loads(candidate, strict=False)
             if isinstance(data, dict) and isinstance(data.get("answer"), str):
                 return data
         except (ValueError, TypeError):
             continue
-    return None
+    partial = _partial_answer(cleaned)
+    return {"answer": partial} if partial is not None else None
 
 
 def _cited(answer_text: str, passages) -> tuple[str, list[dict]]:
@@ -153,7 +167,9 @@ def answer(db: Session, chat: Chat, question: str, first: bool) -> Answer:
     raw_answer = data["answer"] if data else reply.text.strip()
     text, citations = _cited(raw_answer, passages)
     is_not_found = bool(data and data.get("not_found")) or not text.strip()
-    followups = [f.strip() for f in (data.get("followups") or []) if isinstance(f, str) and f.strip()][:3] if data and want_followups else []
+    raw_followups = data.get("followups") if data else None
+    followups = [f.strip() for f in raw_followups if isinstance(f, str) and f.strip()][:3] \
+        if isinstance(raw_followups, list) and want_followups else []
     title = data.get("title") if data and isinstance(data.get("title"), str) else None
 
     names = list(dict.fromkeys(c["tenant"] for c in citations if not c["is_general"]))

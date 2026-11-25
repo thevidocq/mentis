@@ -191,6 +191,12 @@ def reindex(request: Request, db: Session = Depends(get_db), admin: User = Depen
     else:
         row.value = {"status": "queued"}
     db.commit()
+    try:
+        jobs.enqueue_reindex()
+    except Exception:  # noqa: BLE001 - Redis down: do not leave the state "queued" forever (it blocks every later reindex)
+        row = db.get(PlatformSetting, REINDEX_STATE)
+        row.value = {"status": "failed", "error": "The job queue (Redis) is not reachable. Try again later."}
+        db.commit()
+        raise HTTPException(503, "The job queue (Redis) is not reachable. Try again later.") from None
     log_event(db, "index.reindex_requested", actor=admin, ip=client_ip(request))
-    jobs.enqueue_reindex()
     return {"status": "queued"}
