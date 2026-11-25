@@ -25,6 +25,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 - Migration 0002: invitations, platform settings, user preferences.
 - `MENTIS_PUBLIC_URL` setting for invitation links.
 - Backend test suite (27 tests).
+- Web interface (React + Vite + TypeScript) served by an nginx `web` container on `127.0.0.1:8080`, proxying `/api`:
+  - first-run setup, two-step sign-in with QR-code TOTP enrollment, invitation acceptance;
+  - platform admin with left menu: Tenants (onboard, edit, delete with typed-name confirmation, General locked), Users (invite, edit role/tenant/active, reset 2FA, delete, pending invitations), Email (SMTP) with test email, Service status (API and database);
+  - tenant admin: Users (own tenant admins), Settings (include General, approval before publishing, suggested follow-ups);
+  - account page: profile edit, Light/Medium/Dark theme (saved per user), password change, 2FA status, sign out;
+  - chat placeholder for analysts; upcoming sections marked "soon".
+- `GET /api/auth/me` now includes `tenant_name`.
+- `check.sh` also checks the web container and the `/api` proxy.
 
 ## [0.0.0] – repository bootstrap
 

@@ -13,6 +13,7 @@ class UserOut(BaseModel):
     tenant_id: uuid.UUID | None
     totp_enabled: bool
     preferences: dict = {}
+    tenant_name: str | None = None
 
 
 THEMES = ("light", "medium", "dark")

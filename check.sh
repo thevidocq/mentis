@@ -11,7 +11,7 @@ bad()  { printf '  \033[31mFAIL\033[0m  %s\n' "$1"; fail=1; }
 echo "Mentis check"
 echo
 echo "Containers:"
-for svc in api postgres qdrant minio redis; do
+for svc in web api postgres qdrant minio redis; do
   id=$(docker compose ps -q "$svc" 2>/dev/null)
   if [ -z "$id" ]; then bad "$svc: not running"; continue; fi
   state=$(docker inspect -f '{{.State.Status}}' "$id")
@@ -32,6 +32,12 @@ case "$setup" in
   *'"needs_setup":false'*) ok "setup completed" ;;
   *) bad "setup status not readable" ;;
 esac
+
+echo
+echo "Web:"
+WEB_URL="${MENTIS_WEB_URL:-http://127.0.0.1:8080}"
+curl -fsS --max-time 5 "$WEB_URL/" 2>/dev/null | grep -q '<div id="root">' && ok "frontend served at $WEB_URL" || bad "frontend not reachable at $WEB_URL"
+curl -fsS --max-time 5 "$WEB_URL/api/health" >/dev/null 2>&1 && ok "API reachable through the web proxy" || bad "web proxy to API not working"
 
 echo
 if [ "$fail" -eq 0 ]; then echo "All checks passed."; else echo "Some checks failed. See: docker compose logs --tail=100"; fi
