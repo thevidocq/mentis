@@ -20,6 +20,7 @@ export function ChatHome() {
           <label className="field">Search history<input className="input" type="search" placeholder="Search chats…" disabled /></label>
         </div>
         <nav className="nav" aria-label="Chat history"><span className="muted small" style={{ padding: "8px 10px" }}>No chats yet.</span></nav>
+        <Link to="/help" className="user-link" style={{ padding: "10px 16px" }}><Icon name="help" />Help</Link>
         <Link to="/account" className="user-link">
           <div className="avatar">{initials(user.full_name)}</div>
           <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>

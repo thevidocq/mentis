@@ -70,6 +70,7 @@ export const PLATFORM_NAV: NavItem[] = [
   { to: "/admin/retention", label: "Retention", icon: "clock", soon: true },
   { to: "/admin/status", label: "Service status", icon: "pulse" },
   { to: "/admin/logs", label: "Logs", icon: "list", soon: true },
+  { to: "/help", label: "Help", icon: "help" },
 ];
 
 export const TENANT_NAV: NavItem[] = [
@@ -78,4 +79,5 @@ export const TENANT_NAV: NavItem[] = [
   { to: "/tenant/llm", label: "LLM", icon: "brain", soon: true },
   { to: "/tenant/users", label: "Users", icon: "users" },
   { to: "/tenant/settings", label: "Settings", icon: "sliders" },
+  { to: "/help", label: "Help", icon: "help" },
 ];
