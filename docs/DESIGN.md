@@ -144,9 +144,11 @@ Admin areas use a left menu with the logo top-left; content takes the full width
 | Area | Menu | Key content |
 | --- | --- | --- |
 | Tenant admin | Documents, Integrations, LLM, Users, Settings | Document table with versions, rename/delete, upload, preview |
-| Platform admin | Tenants, General documentation, AI providers, Embedding and Qdrant, Retention, Service status, Audit log | Tenant table with edit/delete (delete confirmed by typing the name; General locked) |
+| Platform admin | Tenants, General documentation, AI providers, Embedding and Qdrant, Retention, Service status, Logs | Tenant table with edit/delete (delete confirmed by typing the name; General locked) |
 | Service status | (platform admin) | Summary + per-service state, latency, detail: API, frontend, workers, PostgreSQL, Qdrant, MinIO, embeddings, each LLM provider, each integration |
 | Account | (every user) | Profile with edit, theme picker, password change, 2FA status |
+
+**Logs (one section, platform admin only):** audit events (who did what: questions, uploads, approvals, deletions, config changes, integration calls) and system events (API and worker errors, failed ingestion, LLM errors, integration timeouts) in one view, with type, tenant, user, level and period filters, search, export, and syslog forwarding to a SIEM. Tenant admins get no log page; a failed or poorly read document shows its reason in the document's own row and preview.
 
 **UI rules**
 
@@ -196,12 +198,14 @@ PostgreSQL (users, tenants, chats, audit) | Qdrant (one collection per tenant) |
 
 **0.1.0 (MVP)**
 
-1. Auth with 2FA, roles, account page, themes.
-2. Tenants (incl. General), onboarding, deletion.
+1. First-run setup (creates the super-admin), auth with 2FA, roles, account page, themes.
+2. Tenants (incl. General), onboarding by email invite (SMTP settings), deletion.
 3. Ingestion pipeline with versioning, preview and approval.
-4. Chat with `@` lock, citations, history, titles.
-5. AI providers (Anthropic default, OpenAI Chat/Responses, Ollama) and local embeddings.
-6. Service status page, audit log, retention.
+4. Chat with `@` lock, citations, history, titles, answer feedback (thumbs up/down).
+5. AI providers (Anthropic default, OpenAI Chat/Responses, Ollama), local embeddings, LLM usage per tenant (tokens, estimated cost).
+6. Service status page, single Logs section, retention.
+7. Backup and restore script (PostgreSQL, Qdrant, MinIO).
+8. Import/export of platform and tenant configuration.
 
 **Next**
 
@@ -221,3 +225,4 @@ PostgreSQL (users, tenants, chats, audit) | Qdrant (one collection per tenant) |
 - [ ] Mockups still to draw: login, tenant onboarding, users and roles, AI provider and integration config, audit log, chat states.
 - [ ] Domain and trademark check for "Mentis".
 - [ ] License.
+- [ ] Can the super-admin read chat content in the logs, or only metadata (who, when, which tenant)?
