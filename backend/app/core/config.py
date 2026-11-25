@@ -31,6 +31,24 @@ class Settings(BaseSettings):
     # Issuer name shown in authenticator apps.
     totp_issuer: str = "Mentis"
 
+    # Object storage (MinIO) for original documents and page images.
+    minio_endpoint: str = "minio:9000"
+    minio_access_key: str = "mentis"
+    minio_secret_key: str = "change-me"
+    minio_bucket: str = "mentis-documents"
+    minio_secure: bool = False
+
+    # Job queue (Redis) for the ingestion worker.
+    redis_url: str = "redis://redis:6379/0"
+
+    # Upload limits.
+    max_upload_mb: int = 50
+    # Uncompressed size limit for DOCX/PPTX/XLSX (zip containers), against zip bombs.
+    max_unzipped_mb: int = 300
+    # Parsing limits per version.
+    max_pages: int = 1000
+    ingest_timeout_seconds: int = 1800
+
     # Base URL users open in the browser; used to build invitation links.
     public_url: str = "http://localhost"
     invitation_ttl_hours: int = 72

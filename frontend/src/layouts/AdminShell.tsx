@@ -63,7 +63,7 @@ export function PageHead({ title, children }: { title: string; children?: ReactN
 export const PLATFORM_NAV: NavItem[] = [
   { to: "/admin/tenants", label: "Tenants", icon: "tenants" },
   { to: "/admin/users", label: "Users", icon: "users" },
-  { to: "/admin/general", label: "General documentation", icon: "book", soon: true },
+  { to: "/admin/general", label: "General documentation", icon: "book" },
   { to: "/admin/ai", label: "AI providers", icon: "chip", soon: true },
   { to: "/admin/embedding", label: "Embedding and Qdrant", icon: "database", soon: true },
   { to: "/admin/smtp", label: "Email (SMTP)", icon: "mail" },
@@ -74,7 +74,7 @@ export const PLATFORM_NAV: NavItem[] = [
 ];
 
 export const TENANT_NAV: NavItem[] = [
-  { to: "/tenant/documents", label: "Documents", icon: "file", soon: true },
+  { to: "/tenant/documents", label: "Documents", icon: "file" },
   { to: "/tenant/integrations", label: "Integrations", icon: "link", soon: true },
   { to: "/tenant/llm", label: "LLM", icon: "brain", soon: true },
   { to: "/tenant/users", label: "Users", icon: "users" },

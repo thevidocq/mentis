@@ -1,11 +1,12 @@
 # Installing Mentis
 
-> Work in progress. Available now: web interface with first-run setup, login (password + mandatory TOTP 2FA), tenants, users and invitations, SMTP, account settings and three themes. Document ingestion and chat come next.
+> Work in progress. Available now: web interface with first-run setup, login (password + mandatory TOTP 2FA), tenants, users and invitations, SMTP, account settings, three themes, in-app Help, and document upload with versions, OCR and preview. Indexing (embeddings + Qdrant) and chat come next.
 
 ## Requirements
 
 - Linux host with Docker Engine and the Docker Compose plugin.
 - At least 4 vCPU and 8 GB RAM; 16 GB recommended once documents are ingested (OCR and local embeddings are CPU- and RAM-heavy).
+- The `worker` container (document processing) is limited to 2 CPUs and 3 GB RAM by default; change `MENTIS_WORKER_CPUS` / `MENTIS_WORKER_MEMORY` in `.env`.
 
 ## Install
 
@@ -52,6 +53,17 @@ server {
 ```
 
 Browsers accept the secure session cookie on `http://127.0.0.1` and `http://localhost`. If you reach the app over plain HTTP from another host name, set `MENTIS_COOKIE_SECURE=false` in `.env` (test only), otherwise sign-in will not stick.
+
+## Document processing
+
+Uploaded documents are processed by the `worker` container. If uploads stay **Queued**, check it:
+
+```bash
+docker compose ps worker
+docker compose logs -f worker
+```
+
+Parser: `MENTIS_PARSER=standard` (default). To try Docling in the lab, set `MENTIS_PARSER=docling` and `MENTIS_PARSER_EXTRAS=worker,docling` in `.env`, then `docker compose up -d --build worker` (large download: PyTorch and models).
 
 ## Upgrade
 

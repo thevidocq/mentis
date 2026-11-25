@@ -7,6 +7,7 @@ import { Account } from "./pages/Account";
 import { AcceptInvite } from "./pages/AcceptInvite";
 import { ChatHome } from "./pages/ChatHome";
 import { Help } from "./pages/Help";
+import { GeneralDocuments, TenantDocuments, GeneralPreview, TenantPreview } from "./pages/documents/routes";
 import { Login } from "./pages/Login";
 import { Placeholder } from "./pages/Placeholder";
 import { Setup } from "./pages/Setup";
@@ -34,7 +35,8 @@ function PlatformArea() {
         <Route path="users" element={<Users />} />
         <Route path="smtp" element={<SmtpSettings />} />
         <Route path="status" element={<ServiceStatus />} />
-        <Route path="general" element={soon("General documentation", "Uploading documentation for the General tenant")} />
+        <Route path="general" element={<GeneralDocuments />} />
+        <Route path="general/preview/:versionId" element={<GeneralPreview />} />
         <Route path="ai" element={soon("AI providers", "LLM provider configuration")} />
         <Route path="embedding" element={soon("Embedding and Qdrant", "Embedding configuration")} />
         <Route path="retention" element={soon("Retention", "Retention settings")} />
@@ -52,7 +54,8 @@ function TenantArea() {
       <Routes>
         <Route path="users" element={<Users />} />
         <Route path="settings" element={<TenantSettings />} />
-        <Route path="documents" element={soon("Documents", "Document upload, versions and preview")} />
+        <Route path="documents" element={<TenantDocuments />} />
+        <Route path="documents/preview/:versionId" element={<TenantPreview />} />
         <Route path="integrations" element={soon("Integrations", "Ticketing, EDR and SIEM integrations")} />
         <Route path="llm" element={soon("LLM", "Choosing the tenant's LLM")} />
         <Route path="*" element={<Navigate to="documents" replace />} />

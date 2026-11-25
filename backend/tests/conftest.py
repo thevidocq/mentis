@@ -18,15 +18,34 @@ PASSWORD = "Correct-Horse-42"
 
 @pytest.fixture
 def client():
+    from app.services import jobs, storage
+
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
     Base.metadata.create_all(engine)
     db_module.set_engine(engine)
+    # In-memory object storage and inline job execution (no MinIO/Redis in tests).
+    store = storage.MemoryStorage()
+    storage.set_storage(store)
+    queued: list[str] = []
+    jobs.set_runner(lambda name, vid: queued.append(vid))
     with TestClient(create_app()) as c:
         c.headers.update(HEADERS)
+        c.storage = store
+        c.queued = queued
         yield c
+    storage.set_storage(None)
+    jobs.set_runner(None)
     engine.dispose()
+
+
+def run_jobs(c):
+    """Process every queued ingestion job, like the worker would."""
+    from app.worker.tasks import ingest_version
+
+    while c.queued:
+        ingest_version(c.queued.pop(0))
 
 
 def login(c, email, password=PASSWORD):

@@ -62,3 +62,43 @@ export const ROLE_LABEL: Record<Role, string> = {
   tenant_admin: "Tenant admin",
   analyst: "Analyst",
 };
+
+export type VersionStatus = "queued" | "processing" | "ready" | "failed";
+export type Approval = "not_required" | "pending" | "approved" | "rejected";
+
+export interface DocVersion {
+  id: string;
+  version: number;
+  original_filename: string;
+  file_type: "pdf" | "docx" | "pptx" | "xlsx";
+  size_bytes: number;
+  status: VersionStatus;
+  approval: Approval;
+  is_active: boolean;
+  note: string | null;
+  error: string | null;
+  stats: { pages?: number; ocr_pages?: number; tables?: number; empty_pages?: number; low_confidence_pages?: number; chars?: number; warnings?: string[] };
+  uploaded_at: string;
+  processed_at: string | null;
+}
+
+export interface DocSummary {
+  id: string;
+  name: string;
+  created_at: string;
+  active: DocVersion | null;
+  latest: DocVersion;
+  versions: number;
+}
+
+export interface DocPage {
+  index: number;
+  kind: "page" | "section" | "slide" | "sheet";
+  label: string;
+  text: string;
+  method: "native" | "ocr";
+  ocr_confidence: number | null;
+  tables: number;
+  has_image: boolean;
+  flags: string[];
+}

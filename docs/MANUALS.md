@@ -11,12 +11,14 @@ In the app: **Help** in the left menu. Each profile sees its own guide plus the 
 - [Users and invitations](../frontend/src/help/super-admin/03-users.md)
 - [Email (SMTP)](../frontend/src/help/super-admin/04-email.md)
 - [Service status and operations](../frontend/src/help/super-admin/05-status-operations.md)
+- [General documentation](../frontend/src/help/super-admin/06-general-documentation.md)
 
 ## Tenant admin
 
 - [Your role as tenant admin](../frontend/src/help/tenant-admin/01-your-role.md)
 - [Users of your customer](../frontend/src/help/tenant-admin/02-users.md)
 - [Customer settings](../frontend/src/help/tenant-admin/03-settings.md)
+- [Documents](../frontend/src/help/tenant-admin/04-documents.md)
 
 ## Analyst
 

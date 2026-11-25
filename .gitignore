@@ -27,3 +27,4 @@ data/
 .idea/
 .vscode/
 *.swp
+dump.rdb

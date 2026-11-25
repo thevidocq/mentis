@@ -7,6 +7,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 ## [Unreleased]
 
 ### Added
+- **Documents** (0.1.0 part 3a): upload with validation (PDF/DOCX/PPTX/XLSX only, content must match extension, macro-enabled/encrypted/old formats refused, zip-bomb guard, 50 MB limit, sanitized names); originals in MinIO; versions by file name; identical re-upload refused.
+- Ingestion worker (`worker` container, RQ on Redis, OCR with Tesseract eng+ita, CPU/RAM limits): per-page Markdown text with tables, PDF page images, OCR confidence, quality flags, chunks per page for the coming index. Optional Docling parser behind `MENTIS_PARSER=docling` (not verified yet).
+- Version lifecycle: active version per document, approval before publishing (tenant setting), reject, make an older version active, retry failed; a failed or rejected version never replaces the active one.
+- Documents UI for tenant admins and **General documentation** for super-admins: drag-and-drop upload, versions, rename, delete, download original; **preview** with original page next to extracted text, OCR badges and warnings, approve/reject.
+- Service status now reports PostgreSQL, MinIO, Redis queue and the ingestion worker (`GET /api/platform/status`).
+- Tenant deletion also removes documents, versions, pages, chunks and stored files.
+- Help: Documents (tenant admin), General documentation (super-admin), updated status/operations.
+- Migration 0003.
 - Backend foundation: FastAPI app, settings, SQLAlchemy models (tenants, users, auth sessions, log events), Alembic initial migration (applied automatically at container start).
 - First-run setup (`POST /api/setup`): creates the General tenant and the first super-admin, only once.
 - Login with mandatory TOTP 2FA: password step, enrollment on first login, code verification; server-side sessions in an HttpOnly SameSite=Strict cookie; logout; current user; password change (signs out other sessions).
