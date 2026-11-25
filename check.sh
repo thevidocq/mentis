@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Post-install / post-upgrade check. Run from the repository root: ./check.sh
+set -u
+
+API_URL="${MENTIS_API_URL:-http://127.0.0.1:8000}"
+fail=0
+
+ok()   { printf '  \033[32mOK\033[0m    %s\n' "$1"; }
+bad()  { printf '  \033[31mFAIL\033[0m  %s\n' "$1"; fail=1; }
+
+echo "Mentis check"
+echo
+echo "Containers:"
+for svc in api postgres qdrant minio redis; do
+  id=$(docker compose ps -q "$svc" 2>/dev/null)
+  if [ -z "$id" ]; then bad "$svc: not running"; continue; fi
+  state=$(docker inspect -f '{{.State.Status}}' "$id")
+  health=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}n/a{{end}}' "$id")
+  if [ "$state" = "running" ] && { [ "$health" = "healthy" ] || [ "$health" = "n/a" ]; }; then
+    ok "$svc: $state ($health)"
+  else
+    bad "$svc: $state ($health)"
+  fi
+done
+
+echo
+echo "API:"
+body=$(curl -fsS --max-time 5 "$API_URL/api/health" 2>/dev/null) && ok "health: $body" || bad "health endpoint not reachable at $API_URL"
+setup=$(curl -fsS --max-time 5 "$API_URL/api/setup/status" 2>/dev/null)
+case "$setup" in
+  *'"needs_setup":true'*)  echo "  INFO  first-run setup not done yet" ;;
+  *'"needs_setup":false'*) ok "setup completed" ;;
+  *) bad "setup status not readable" ;;
+esac
+
+echo
+if [ "$fail" -eq 0 ]; then echo "All checks passed."; else echo "Some checks failed. See: docker compose logs --tail=100"; fi
+exit "$fail"

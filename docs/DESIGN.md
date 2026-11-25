@@ -229,8 +229,8 @@ PostgreSQL (users, tenants, chats, audit) | Qdrant (one collection per tenant) |
 
 **Open points**
 
-- [ ] Approval before publishing a new document version: default on or off?
+- [x] Approval before publishing a new document version: off by default, enabled per tenant.
 - [ ] Mockups still to draw: login, tenant onboarding, users and roles, AI provider and integration config, audit log, chat states.
 - [ ] Domain and trademark check for "Mentis".
 - [ ] License.
-- [ ] Can the super-admin read chat content in the logs, or only metadata (who, when, which tenant)?
+- [x] Chat events in the logs carry metadata only (who, when, which tenant), never chat content.
