@@ -12,6 +12,15 @@ class UserOut(BaseModel):
     role: str
     tenant_id: uuid.UUID | None
     totp_enabled: bool
+    preferences: dict = {}
+
+
+THEMES = ("light", "medium", "dark")
+
+
+class ProfileUpdate(BaseModel):
+    full_name: str | None = Field(default=None, min_length=1, max_length=120)
+    theme: str | None = None
 
 
 class SetupStatus(BaseModel):

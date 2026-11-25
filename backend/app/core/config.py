@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     # Issuer name shown in authenticator apps.
     totp_issuer: str = "Mentis"
 
+    # Base URL users open in the browser; used to build invitation links.
+    public_url: str = "http://localhost"
+    invitation_ttl_hours: int = 72
+
 
 @lru_cache
 def get_settings() -> Settings:

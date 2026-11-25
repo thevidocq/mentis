@@ -10,6 +10,7 @@ services:
       MENTIS_SECRET_KEY: ${MENTIS_SECRET_KEY}
       MENTIS_COOKIE_SECURE: ${MENTIS_COOKIE_SECURE:-true}
       MENTIS_TRUSTED_PROXIES: ${MENTIS_TRUSTED_PROXIES:-*}
+      MENTIS_PUBLIC_URL: ${MENTIS_PUBLIC_URL:-http://localhost}
     depends_on:
       postgres:
         condition: service_healthy

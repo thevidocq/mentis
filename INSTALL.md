@@ -33,7 +33,7 @@ curl -X POST http://127.0.0.1:8000/api/setup \
   -d '{"email":"you@example.com","full_name":"Your Name","password":"A-Strong-Password-1"}'
 ```
 
-This creates the General tenant and the super-admin. It works only once. At the first login the user must set up an authenticator app (TOTP); 2FA is mandatory for everyone.
+This creates the General tenant and the super-admin. It works only once. Other users are invited from the platform (`POST /api/invitations`); configure SMTP first (`PUT /api/platform/smtp`), otherwise the API returns the invitation link for you to share manually. Set `MENTIS_PUBLIC_URL` in `.env` so links point to the right address. At the first login the user must set up an authenticator app (TOTP); 2FA is mandatory for everyone.
 
 Passwords: at least 12 characters, upper and lower case, at least one digit.
 
