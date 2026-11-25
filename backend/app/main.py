@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app import __version__
-from app.api.routes import auth, health, setup
+from app.api.routes import auth, health, invitations, platform, setup, tenants, users
 
 # State-changing requests must carry this header. Browsers do not send it cross-site
 # without a CORS preflight, which this API never allows, so it blocks CSRF.
@@ -25,7 +25,7 @@ def create_app() -> FastAPI:
                 return JSONResponse(status_code=403, content={"detail": "Missing request header."})
         return await call_next(request)
 
-    for module in (health, setup, auth):
+    for module in (health, setup, auth, tenants, users, invitations, platform):
         app.include_router(module.router, prefix="/api")
     return app
 

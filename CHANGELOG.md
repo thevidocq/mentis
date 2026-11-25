@@ -17,7 +17,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 - Log events (audit/system) for setup, login, 2FA, logout, password change.
 - Operator CLI: `reset-2fa`, `unlock`.
 - API service in Docker Compose, backend Dockerfile, `check.sh` post-install/upgrade check.
-- Backend test suite (13 tests).
+- Tenants API: list (analysts see all, tenant admins only their own), create with unique slug, rename/status (super-admin), settings (super-admin or own tenant admin), delete confirmed by typing the exact name; General cannot be deleted or disabled.
+- Users API: list, update (name, role, tenant, active), delete, reset 2FA; tenant admins manage only admins of their own tenant; the last active super-admin is protected; deactivation and role change revoke sessions.
+- Invitations: email invite with a 72-hour single-use link (token stored hashed); a new invite replaces a pending one; revocation; public accept endpoint sets the password. Without SMTP, the link is returned to the inviting admin to share manually.
+- SMTP settings (super-admin): host, port, STARTTLS/SSL/none, username, encrypted password (never returned), sender; test email.
+- Account: profile name and theme preference (light, medium, dark) via `PATCH /api/auth/me`.
+- Migration 0002: invitations, platform settings, user preferences.
+- `MENTIS_PUBLIC_URL` setting for invitation links.
+- Backend test suite (27 tests).
 
 ## [0.0.0] – repository bootstrap
 
