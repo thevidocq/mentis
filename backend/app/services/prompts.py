@@ -39,7 +39,9 @@ def passages_block(passages) -> str:
     for i, p in enumerate(passages, start=1):
         owner = "General" if p.is_general else p.tenant_name
         where = f"{p.document_name} v{p.version}, {p.page_label}" + (f", section \"{p.heading}\"" if p.heading else "")
-        lines.append(f'<passage n="{i}" customer="{owner}" source="{where}">\n{p.text}\n</passage>')
+        text = p.text.replace("</passage", "</ passage")  # a document cannot close its own passage
+        where = where.replace('"', "'")
+        lines.append(f'<passage n="{i}" customer="{owner}" source="{where}">\n{text}\n</passage>')
     return "\n".join(lines)
 
 

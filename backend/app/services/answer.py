@@ -59,8 +59,19 @@ def scope_tenants(db: Session, chat: Chat) -> tuple[list[Tenant], str, Tenant | 
 
 
 def _history(db: Session, chat: Chat) -> list[ChatMessage]:
-    rows = db.scalars(select(ChatMessage).where(ChatMessage.chat_id == chat.id).order_by(ChatMessage.created_at.desc()).limit(HISTORY_TURNS)).all()
-    return [m for m in reversed(rows) if m.status != "error"]
+    """The last exchanges as alternating user/assistant turns.
+
+    A question whose answer failed is dropped with it, so the model never gets two user turns in a
+    row nor a conversation that starts with the assistant (some providers refuse both).
+    """
+    rows = db.scalars(select(ChatMessage).where(ChatMessage.chat_id == chat.id)
+                      .order_by(ChatMessage.created_at.desc(), ChatMessage.role).limit(HISTORY_TURNS * 2)).all()
+    rows = list(reversed(rows))
+    turns: list[ChatMessage] = []
+    for q, a in zip(rows, rows[1:], strict=False):
+        if q.role == "user" and a.role == "assistant" and a.status != "error":
+            turns += [q, a]
+    return turns[-HISTORY_TURNS:]
 
 
 def _retrieval_query(question: str, history: list[ChatMessage]) -> str:
@@ -141,7 +152,7 @@ def answer(db: Session, chat: Chat, question: str, first: bool) -> Answer:
     data = _parse_json(reply.text)
     raw_answer = data["answer"] if data else reply.text.strip()
     text, citations = _cited(raw_answer, passages)
-    is_not_found = bool(data and data.get("not_found"))
+    is_not_found = bool(data and data.get("not_found")) or not text.strip()
     followups = [f.strip() for f in (data.get("followups") or []) if isinstance(f, str) and f.strip()][:3] if data and want_followups else []
     title = data.get("title") if data and isinstance(data.get("title"), str) else None
 

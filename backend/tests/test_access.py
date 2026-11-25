@@ -151,3 +151,25 @@ def test_llm_choice_allowed_per_tenant_and_minimal_provider_view(super_admin, fa
     u = ta.get("/api/usage").json()
     assert u["totals"]["questions"] == 1 and u["totals"]["cost_usd"] is None and u["rows"][0]["cost_usd"] is None
     assert super_admin.get("/api/usage").json()["totals"]["cost_usd"] is not None
+
+
+def test_invitation_edge_cases(super_admin):
+    alfa, beta = _tenant(super_admin, "Alfa"), _tenant(super_admin, "Beta")
+    # The super-admin invites for Beta; a tenant admin of Alfa cannot replace that invitation.
+    r = super_admin.post("/api/invitations", json={"email": "x@example.com", "full_name": "X Y", "role": "analyst", "tenant_ids": [beta["id"]]})
+    assert r.status_code == 201
+    ta = _user(super_admin, "ta@example.com", "tenant_admin", tenant_ids=[alfa["id"]])
+    r = ta.post("/api/invitations", json={"email": "x@example.com", "full_name": "X Y", "role": "analyst", "tenant_ids": [alfa["id"]]})
+    assert r.status_code == 409
+    # An invitation whose customers were all deleted cannot be accepted.
+    r = super_admin.post("/api/invitations", json={"email": "z@example.com", "full_name": "Z Y", "role": "analyst", "tenant_ids": [beta["id"]]})
+    token = r.json()["invite_url"].rsplit("/", 1)[1]
+    from app.core import db as db_module
+    from app.models import Invitation
+    import uuid
+    db = next(db_module.get_db())
+    inv = db.get(Invitation, uuid.UUID(r.json()["id"]))
+    inv.tenant_ids = [str(uuid.uuid4())]  # its customer no longer exists
+    db.commit()
+    r = new_client(super_admin.app).post(f"/api/invitations/accept/{token}", json={"password": "Correct-Horse-42!"})
+    assert r.status_code == 409

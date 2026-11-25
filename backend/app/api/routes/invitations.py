@@ -83,6 +83,10 @@ def create_invitation(body: InviteCreate, request: Request, db: Session = Depend
         raise HTTPException(e.status, e.message) from None
     if rules.email_in_use(db, email):
         raise HTTPException(status.HTTP_409_CONFLICT, "A user with this email already exists.")
+    # A new invitation replaces the pending one: only if the actor could revoke that one too.
+    pending = db.scalar(select(Invitation).where(Invitation.email == email, Invitation.accepted_at.is_(None)))
+    if pending is not None and not _manageable(db, actor, pending):
+        raise HTTPException(status.HTTP_409_CONFLICT, "This email already has a pending invitation from another admin.")
 
     inv, token = svc.create(db, email=email, full_name=body.full_name.strip(), role=body.role,
                             tenant_ids=[str(t.id) for t in tenants], all_tenants=body.all_tenants and body.role in rules.CONTENT_ROLES,
@@ -132,6 +136,8 @@ def accept_invitation(token: str, body: InviteAccept, request: Request, db: Sess
         raise HTTPException(422, problem)
     if rules.email_in_use(db, inv.email):
         raise HTTPException(status.HTTP_409_CONFLICT, "A user with this email already exists.")
+    if inv.role in rules.CONTENT_ROLES and not inv.all_tenants and not svc.tenants_of(db, inv):
+        raise HTTPException(status.HTTP_409_CONFLICT, "The customers of this invitation no longer exist. Ask for a new invitation.")
     user = svc.accept(db, inv, body.password)
     log_event(db, "user.invitation_accepted", actor=user, ip=client_ip(request))
     return {"email": user.email, "next": "login"}

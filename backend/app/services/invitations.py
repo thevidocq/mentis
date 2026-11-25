@@ -79,6 +79,10 @@ def _tenants(db: Session, inv: Invitation) -> list[Tenant]:
     return list(db.scalars(select(Tenant).where(Tenant.id.in_(ids)).order_by(Tenant.name))) if ids else []
 
 
+def tenants_of(db: Session, inv: Invitation) -> list[Tenant]:
+    return _tenants(db, inv)
+
+
 def _tenant_names(db: Session, inv: Invitation) -> list[str]:
     return [t.name for t in _tenants(db, inv)]
 

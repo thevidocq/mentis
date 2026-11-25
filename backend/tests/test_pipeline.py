@@ -97,3 +97,65 @@ def test_version_deleted_while_processing_leaves_no_points(super_admin, monkeypa
     run_jobs(super_admin)
     assert not [p for p in _points(t["id"]) if p.payload["version_id"] == v["id"]]
     assert next(db_module.get_db()).get(DocumentVersion, uuid.UUID(v["id"])) is None
+
+
+def test_history_alternates_after_a_failed_answer(super_admin, fake_llm):  # noqa: F811
+    _provider(super_admin)
+    t = _tenant(super_admin, "Alfa")
+    _upload(super_admin, t["id"], "A.docx", _docx("Escalate brute force attacks to Mario Rossi phone 111"))
+    run_jobs(super_admin)
+    an = _analyst(super_admin)
+    chat = an.post("/api/chats", json={"tenant_id": t["id"], "message": "brute force escalation contact"}).json()["chat"]
+    fake_llm.fail["api.anthropic.com"] = 500
+    assert an.post(f"/api/chats/{chat['id']}/messages", json={"message": "brute force escalation phone"}).json()["answer"]["status"] == "error"
+    del fake_llm.fail["api.anthropic.com"]
+    an.post(f"/api/chats/{chat['id']}/messages", json={"message": "brute force escalation for critical"})
+    roles = [m["role"] for m in fake_llm.requests[-1]["body"]["messages"]]
+    assert roles == ["user", "assistant", "user"]
+
+
+# --- Parsing of real-world layouts ------------------------------------------------
+
+def _parse(data, kind):
+    from app.ingestion import ParseLimits, parse
+
+    return parse(data, kind, ParseLimits(max_pages=50))
+
+
+def test_docx_content_controls_are_read():
+    import copy
+    import io
+
+    import docx
+    from docx.oxml.ns import qn
+
+    d = docx.Document()
+    d.add_paragraph("Before the control")
+    p = d.add_paragraph("Escalate to Mario Rossi inside a content control")
+    sdt = p._p.makeelement(qn("w:sdt"), {})
+    content = sdt.makeelement(qn("w:sdtContent"), {})
+    content.append(copy.deepcopy(p._p))
+    sdt.append(content)
+    p._p.addprevious(sdt)
+    p._p.getparent().remove(p._p)
+    buf = io.BytesIO()
+    d.save(buf)
+    text = "\n".join(pg.text for pg in _parse(buf.getvalue(), "docx").pages)
+    assert "Mario Rossi" in text and "Before the control" in text
+
+
+def test_pptx_grouped_shapes_are_read():
+    import io
+
+    from pptx import Presentation
+    from pptx.util import Inches
+
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[5])
+    slide.shapes.title.text = "Escalation flow"
+    group = slide.shapes.add_group_shape()
+    box = group.shapes.add_textbox(Inches(1), Inches(2), Inches(4), Inches(1))
+    box.text_frame.text = "Call Laura Bianchi within 15 minutes"
+    buf = io.BytesIO()
+    prs.save(buf)
+    assert "Laura Bianchi" in _parse(buf.getvalue(), "pptx").pages[0].text

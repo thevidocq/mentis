@@ -36,6 +36,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
   - an upload failed with a server error when Redis was down although the file was stored: it now stays Queued and the worker's recovery queues it again;
   - a single huge table row (a long Excel cell) became one oversized chunk that the embedding service could refuse, failing the whole document: it is now split with the header repeated; the local embedding service also runs with `--auto-truncate`;
   - index points of a version deleted while processing are removed.
+- Documents: Word content controls (common in corporate templates) and PowerPoint grouped shapes were skipped, so their text never reached the answers; a PDF page with a broken text layer failed the whole document (now read with OCR).
+- Worker: a job process could reuse the database connections of the worker's maintenance thread after the fork (protocol errors under load); each job now opens its own. A failed daily purge is retried at the next hourly check instead of the next day.
+- Chat: after a failed answer the next question sent two user turns in a row to the LLM (some providers refuse it); history is now clean user/assistant pairs. An empty LLM answer is shown as "not found". A document can no longer close its own passage in the prompt.
+- Invitations: a tenant admin could replace another admin's pending invitation for the same email; an invitation whose customers were all deleted created a user without customers.
+- Configuration import: malformed files (wrong types, missing retention values) caused a server error instead of a clear message.
+- Web: "Mentis cannot be reached" instead of "Failed to fetch" when offline; a clear message for files too large for the proxy; a temporary error on the Documents page clears at the next refresh.
 - These fixes (second bugfix round) were listed under 0.2.0 but did not make it into that release.
 
 ## [0.2.0] - 2026-11-25

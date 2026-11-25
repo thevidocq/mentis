@@ -5,6 +5,7 @@ PostgreSQL stays the source of truth: search results are re-checked against the 
 so a stale `active` flag in Qdrant can never surface a version that is not in use.
 """
 
+import os
 import uuid
 from functools import lru_cache
 
@@ -124,3 +125,8 @@ def stats() -> dict:
     c = client()
     names = [col.name for col in c.get_collections().collections if col.name.startswith("mentis_")]
     return {"collections": len(names), "points": sum(c.count(n, exact=False).count for n in names)}
+
+
+# A forked job process gets its own Qdrant client instead of the parent's HTTP connections.
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_default.cache_clear)

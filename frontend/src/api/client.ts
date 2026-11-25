@@ -15,8 +15,17 @@ function detailMessage(data: unknown, fallback: string): string {
   return fallback;
 }
 
+// fetch() rejects only when the server cannot be reached (offline, VPS down, proxy error).
+async function send(path: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(`/api${path}`, init);
+  } catch {
+    throw new ApiError(0, "Mentis cannot be reached. Check your connection and try again.");
+  }
+}
+
 export async function api<T = unknown>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
-  const res = await fetch(`/api${path}`, {
+  const res = await send(path, {
     method: options.method ?? "GET",
     credentials: "same-origin",
     headers: {
@@ -40,7 +49,7 @@ function sessionLost(path: string) {
 }
 
 export async function apiUpload<T = unknown>(path: string, form: FormData): Promise<T> {
-  const res = await fetch(`/api${path}`, {
+  const res = await send(path, {
     method: "POST",
     credentials: "same-origin",
     headers: { "X-Mentis-Request": "1" },
@@ -48,8 +57,9 @@ export async function apiUpload<T = unknown>(path: string, form: FormData): Prom
   });
   const data = await res.json().catch(() => null);
   if (res.status === 401) sessionLost(path);
+  if (res.status === 413) throw new ApiError(413, "The file is too large for the server.");
   if (!res.ok) throw new ApiError(res.status, detailMessage(data, `Upload failed (${res.status}).`));
   return data as T;
 }
 
-export const errorText =(e: unknown) => (e instanceof Error ? e.message : "Something went wrong.");
+export const errorText = (e: unknown) => (e instanceof Error ? e.message : "Something went wrong.");

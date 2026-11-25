@@ -1,5 +1,6 @@
 """Database engine and session handling."""
 
+import os
 from collections.abc import Iterator
 
 from sqlalchemy import create_engine
@@ -37,3 +38,15 @@ def get_db() -> Iterator[Session]:
         yield db
     finally:
         db.close()
+
+
+def _after_fork_in_child() -> None:
+    # The RQ worker forks a process per job while its maintenance thread may hold pooled
+    # connections: the child must never reuse the parent's sockets (they would be shared by two
+    # processes and corrupt the protocol). Drop the inherited pool without closing it.
+    if _engine is not None:
+        _engine.dispose(close=False)
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_after_fork_in_child)

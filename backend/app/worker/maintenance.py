@@ -26,6 +26,9 @@ def run_purge_once() -> dict | None:
         result = retention.purge(db)
         log_event(db, "retention.purged", kind="system", detail=result)
         return result
+    except Exception:
+        redis_connection().delete(LOCK)  # failed: try again at the next hourly check, not tomorrow
+        raise
     finally:
         db.close()
 
