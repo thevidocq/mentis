@@ -5,6 +5,7 @@ PostgreSQL stays the source of truth: search results are re-checked against the 
 so a stale `active` flag in Qdrant can never surface a version that is not in use.
 """
 
+import os
 import uuid
 from functools import lru_cache
 
@@ -105,18 +106,27 @@ def sync_active(tenant_id, document_id, active_version_id) -> None:
 
 
 def search(tenant_id, vector: list[float], limit: int, version_id=None, active_only: bool = True) -> list[models.ScoredPoint]:
-    if not _exists(tenant_id):
-        return []
+    """Raises VectorIndexError when Qdrant is unreachable or refuses the query (e.g. wrong vector size)."""
     must = [_match("tenant_id", tenant_id)]
     if version_id is not None:
         must.append(_match("version_id", version_id))
     elif active_only:
         must.append(_match("active", True))
-    return client().query_points(collection_name(tenant_id), query=vector, query_filter=models.Filter(must=must),
-                                 limit=limit, with_payload=True).points
+    try:
+        if not _exists(tenant_id):
+            return []
+        return client().query_points(collection_name(tenant_id), query=vector, query_filter=models.Filter(must=must),
+                                     limit=limit, with_payload=True).points
+    except Exception as e:  # noqa: BLE001 - connection errors and Qdrant rejections alike
+        raise VectorIndexError(f"The vector index (Qdrant) could not be searched: {e.__class__.__name__}") from None
 
 
 def stats() -> dict:
     c = client()
     names = [col.name for col in c.get_collections().collections if col.name.startswith("mentis_")]
     return {"collections": len(names), "points": sum(c.count(n, exact=False).count for n in names)}
+
+
+# A forked job process gets its own Qdrant client instead of the parent's HTTP connections.
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_default.cache_clear)

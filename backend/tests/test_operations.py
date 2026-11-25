@@ -257,7 +257,11 @@ def test_config_export_has_no_secrets_and_imports_elsewhere(super_admin, fake_ll
 def test_config_import_rejects_bad_files(super_admin):
     bad = [b"not json", json.dumps({"format": "other"}).encode(),
            json.dumps({"format": "mentis-config/1", "tenants": [{"name": "X", "settings": {"evil": True}}]}).encode(),
-           json.dumps({"format": "mentis-config/1", "llm_providers": [{"name": "x", "kind": "nope", "base_url": "u", "model": "m"}]}).encode()]
+           json.dumps({"format": "mentis-config/1", "llm_providers": [{"name": "x", "kind": "nope", "base_url": "u", "model": "m"}]}).encode(),
+           json.dumps({"format": "mentis-config/1", "platform": {"retention": {"chats_days": 30}}}).encode(),
+           json.dumps({"format": "mentis-config/1", "platform": {"smtp": "x"}}).encode(),
+           json.dumps({"format": "mentis-config/1", "tenants": {"name": "Alfa"}}).encode(),
+           json.dumps({"format": "mentis-config/1", "tenants": [{"name": "Alfa", "settings": []}]}).encode()]
     for raw in bad:
         r = super_admin.post("/api/platform/config/import", files={"file": ("c.json", raw, "application/json")})
         assert r.status_code == 422, raw

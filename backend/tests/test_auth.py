@@ -61,7 +61,11 @@ def test_login_requires_totp_enrollment_then_code(client, admin_setup):
     assert r.json()["next_step"] == "mfa_required"
     challenge = r.json()["challenge"]
     assert client.post("/api/auth/totp/verify", json={"challenge": challenge, "code": "000000"}).status_code == 401
-    ok = client.post("/api/auth/totp/verify", json={"challenge": challenge, "code": pyotp.TOTP(secret).now()})
+    # The code used at enrollment cannot be used again (replay).
+    replay = client.post("/api/auth/totp/verify", json={"challenge": challenge, "code": pyotp.TOTP(secret).now()})
+    assert replay.status_code == 401 and "already used" in replay.json()["detail"]
+    import time
+    ok = client.post("/api/auth/totp/verify", json={"challenge": challenge, "code": pyotp.TOTP(secret).at(time.time() + 30)})
     assert ok.status_code == 200
     assert client.get("/api/auth/me").status_code == 200
 
@@ -138,3 +142,20 @@ def test_events_logged_without_secrets(client, admin_setup):
     assert {"setup.completed", "auth.mfa.enrolled", "auth.login.success"} <= actions
     for e in _db().scalars(select(AuditEvent)):
         assert PASSWORD not in str(e.detail)
+
+
+def test_wrong_current_password_counts_as_failed_login(client, admin_setup):
+    _login_and_enroll(client)
+    for _ in range(4):
+        r = client.post("/api/auth/password", json={"current_password": "Wrong-Password-1", "new_password": "Another-Pass-123"})
+        assert r.status_code == 400
+    r = client.post("/api/auth/password", json={"current_password": "Wrong-Password-1", "new_password": "Another-Pass-123"})
+    assert r.status_code == 401  # locked: the session is revoked
+    assert client.get("/api/auth/me").status_code == 401
+
+
+def test_blank_names_are_refused(client, admin_setup):
+    _login_and_enroll(client)
+    assert client.patch("/api/auth/me", json={"full_name": "   "}).status_code == 422
+    assert client.post("/api/invitations", json={"email": "x@example.com", "full_name": "  ", "role": "analyst"}).status_code == 422
+    assert client.patch("/api/auth/me", json={"full_name": "  Alex  "}).json()["full_name"] == "Alex"

@@ -29,6 +29,8 @@ Uploading a file with the **same name** as an existing document adds a new versi
 
 A failed or rejected version never replaces the one in use. Uploading a file identical to the active version is refused.
 
+If the worker stops in the middle of a document (restart, crash, timeout), the version becomes **Failed** with "Processing was interrupted" within about half an hour: use **Retry**. A version left **Queued** because its job was lost is queued again automatically.
+
 Open **Versions** on a row to see them all. From there you can preview, download the original, **Make active** an older version, approve or reject.
 
 ## Preview: check what Mentis read

@@ -16,19 +16,21 @@ Mentis is a standalone, multi-tenant web app: an AI assistant that answers SOC a
 
 | Role | Area | Can do |
 | --- | --- | --- |
-| Super-admin | Platform admin | Onboard, edit and delete tenants; manage the General tenant; configure AI providers, embeddings, retention; view service status and audit log |
-| Tenant admin | Tenant admin | For each of its customers (one or more): upload, version, preview and approve documents; choose tenant LLM; configure integrations; manage tenant admins; test the chat |
-| Analyst | Chat + account | Chat (read-only consultation), own profile, theme, password |
+| Super-admin | Platform admin | Onboard, edit and delete tenants; users; configure AI providers, embeddings, retention; decide per tenant whether its admins choose the LLM; view service status and audit log. **No chat, no documents** |
+| Tenant admin | Tenant admin + chat | For each of its customers: upload, version, preview and approve documents (General too, if it has it); choose tenant LLM when allowed; configure integrations; invite and manage tenant admins and analysts within its customers; chat |
+| Analyst | Chat + account | Chat (read-only consultation) on its customers, own profile, theme, password |
 
-- Analysts see the **global** list of onboarded customers, not only assigned ones.
-- A tenant admin administers one or more customers (`user_tenants`). In the tenant area a selector picks the customer the pages show; in the chat `@` lists only its customers plus "All my customers".
+- Tenant admins and analysts have **assigned customers** (`user_tenants`), or `all_tenants` = every customer including future ones. General is one of the assignable customers, ticked by default. The rules live in `backend/app/services/access.py` and are re-checked on every request and every question.
+- A tenant admin grants only customers it has (all only with `all_tenants`), sees only users whose customers are all its own, and cannot change its own role or customers. Changing a user's customers revokes its sessions.
+- Tenant admins see AI providers as name + model only and usage without costs.
+- In the tenant area a selector picks the customer the pages show; in the chat `@` lists only the user's customers plus "All my customers".
 - The first super-admin is created on the server (`app.cli create-admin`); the browser setup page is off by default.
 - Every user has an account page: profile, theme (Light / Medium / Dark), password change, 2FA status.
 
 ## Tenancy model
 
 - **Customer tenant:** own documents, vector collection, LLM settings, integrations, users.
-- **General tenant:** flag `global`, exactly one. Included automatically in every retrieval. Managed by the super-admin, read-only for tenant admins. Cannot be deleted.
+- **General tenant:** flag `global`, exactly one. Included automatically in every retrieval. Managed by the tenant admins who have General among their customers (every action logged). Used in answers only for users who have it. Cannot be deleted.
 - **Precedence:** when General and customer documents disagree (escalation, SLA), the customer document wins; the answer may flag the conflict.
 - **Opt-out:** per-tenant setting "Include General documentation", default on.
 - **Isolation:** the tenant filter is applied server-side on every query, never left to the prompt or the frontend.
@@ -43,11 +45,11 @@ One chat = one customer scope, locked at the first message; integrations are cho
 - Left sidebar, clearly separated blocks: logo + "New chat" (light outlined button), history search, history grouped by day, account link at the bottom.
 - History items show title and `@customer`; the active chat has rename and delete icons.
 - Header: chat title and customer badge (lock icon once locked). The LLM that wrote each answer is shown under it, with latency.
-- Chats are private to their user. Analysts and super-admins chat on any customer; tenant admins only on their own, to test answers.
+- Chats are private to their user. Analysts and tenant admins chat on their own customers; super-admins have no chat.
 
 **`@` customer scope**
 
-- `@` opens the global customer list: "All customers" (default) plus every onboarded tenant.
+- `@` opens the user's customer list: "All my customers" / "All customers" (default, when there is more than one), each assigned active customer, then "General" (the shared documentation alone) when assigned.
 - The scope is fixed by the first message. Afterwards `@` shows the list greyed out with "Customer locked for this chat" and a link to start a new chat.
 - A chat started on "All customers" stays on "All customers".
 - The backend uses only the tenant stored on the chat, whatever the frontend sends.
@@ -163,7 +165,7 @@ Admin areas use a left menu with the logo top-left; content takes the full width
 | Area | Menu | Key content |
 | --- | --- | --- |
 | Tenant admin | Documents, Integrations, LLM, Users, Settings | Document table with versions, rename/delete, upload, preview |
-| Platform admin | Tenants, General documentation, AI providers, Embedding and Qdrant, Retention, Service status, Logs | Tenant table with edit/delete (delete confirmed by typing the name; General locked) |
+| Platform admin | Tenants, Users, AI providers, Embedding and Qdrant, Retention, Service status, Logs | Tenant table with edit/delete (delete confirmed by typing the name; General locked) |
 | Service status | (platform admin) | Summary + per-service state, latency, detail: API, frontend, workers, PostgreSQL, Qdrant, MinIO, embeddings, each LLM provider, each integration |
 | Account | (every user) | Profile with edit, theme picker, password change, 2FA status |
 

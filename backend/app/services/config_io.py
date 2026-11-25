@@ -57,9 +57,24 @@ def export_config(db: Session, tenant_ids: set | None = None) -> dict:
 def _check(data: dict) -> None:
     if not isinstance(data, dict) or data.get("format") != FORMAT:
         raise ImportError_("Not a Mentis configuration file (format mentis-config/1 expected).")
+    if not isinstance(data.get("tenants", []), list) or not isinstance(data.get("llm_providers", []), list):
+        raise ImportError_("tenants and llm_providers must be lists.")
+    platform = data.get("platform") or {}
+    if not isinstance(platform, dict) or any(not isinstance(platform.get(k, {}), dict)
+                                             for k in ("smtp", "embedding", "syslog", "retention")):
+        raise ImportError_("The platform section is malformed.")
+    if "retention" in platform:
+        for k in ("chats_days", "logs_days"):
+            v = platform["retention"].get(k)
+            if not isinstance(v, int) or isinstance(v, bool) or not 0 <= v <= retention.MAX_DAYS:
+                raise ImportError_(f"Retention {k} must be a number of days between 0 and {retention.MAX_DAYS}.")
     for t in data.get("tenants", []):
         if not isinstance(t, dict) or not str(t.get("name", "")).strip():
             raise ImportError_("Every tenant needs a name.")
+        if len(str(t["name"]).strip()) < 2 or len(str(t["name"]).strip()) > 120:
+            raise ImportError_(f"Tenant {t['name']}: the name must be 2 to 120 characters.")
+        if t.get("settings") is not None and not isinstance(t["settings"], dict):
+            raise ImportError_(f"Tenant {t['name']}: settings must be an object.")
         if t.get("status", "active") not in tenant_svc.STATUSES:
             raise ImportError_(f"Tenant {t['name']}: unknown status.")
         for k, v in (t.get("settings") or {}).items():
@@ -70,6 +85,8 @@ def _check(data: dict) -> None:
     for p in data.get("llm_providers", []):
         if not isinstance(p, dict) or not p.get("name") or p.get("kind") not in KINDS or not p.get("base_url") or not p.get("model"):
             raise ImportError_("Every AI provider needs name, a known kind, base_url and model.")
+        if not isinstance(p.get("options", {}), dict):
+            raise ImportError_(f"AI provider {p['name']}: options must be an object.")
 
 
 def import_config(db: Session, data: dict, apply: bool) -> list[str]:

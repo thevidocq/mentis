@@ -92,7 +92,7 @@ export function Account() {
                 <div><div className="muted small">Name</div>{user.full_name}</div>
                 <div><div className="muted small">Email</div>{user.email}</div>
                 <div><div className="muted small">Role</div>{ROLE_LABEL[user.role]}</div>
-                <div><div className="muted small">Customer</div>{user.role === "super_admin" ? "Platform" : user.role === "analyst" ? "All customers" : user.tenants.map((t) => t.name).join(", ")}</div>
+                <div><div className="muted small">Customer</div>{user.role === "super_admin" ? "Platform" : user.all_tenants ? "All customers, including future ones" : user.tenants.map((t) => t.name).join(", ") || "—"}</div>
               </div>
             )}
           </div>

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models import Chat, ChatMessage, Role, Tenant, User
-from app.services import llm, prompts, retrieval
+from app.services import access, llm, prompts, retrieval
 from app.services.llm_config import providers_for
 
 HISTORY_TURNS = 6
@@ -32,34 +32,46 @@ class Answer:
 
 
 def all_label(user: User | None) -> str:
-    return "All my customers" if user is not None and user.role == Role.TENANT_ADMIN.value else "All customers"
+    return "All customers" if user is not None and user.all_tenants else "All my customers"
 
 
 def scope_tenants(db: Session, chat: Chat) -> tuple[list[Tenant], str, Tenant | None]:
-    """Tenants searched for this chat, the scope label, and the scope tenant (None = all customers)."""
-    general = db.scalar(select(Tenant).where(Tenant.is_global.is_(True)))
+    """Tenants searched for this chat, the scope label, and the scope tenant (None = all the user's customers).
+
+    Access is checked again on every question: a customer removed from the user is not searched.
+    General is searched when the user has it and the customer includes it.
+    """
+    owner = db.get(User, chat.user_id)
+    if owner is None:
+        return [], "Unknown customer", None
+    visible = [t for t in access.tenants(db, owner) if t.status != "disabled"]
+    general = next((t for t in visible if t.is_global), None)
     if chat.scope_tenant_id is None:
-        owner = db.get(User, chat.user_id)
-        if owner is not None and owner.role == Role.TENANT_ADMIN.value:
-            # A tenant admin's "all customers" means all of its own customers (as they are now), plus General.
-            tenants = [t for t in owner.tenants if t.status != "disabled"]
-            if general is not None and tenants:
-                tenants.append(general)
-            return tenants, all_label(owner), None
-        tenants = list(db.scalars(select(Tenant).where(Tenant.status != "disabled")))
-        return tenants, "All customers", None
-    tenant = db.get(Tenant, chat.scope_tenant_id)
+        customers = [t for t in visible if not t.is_global]
+        return customers + ([general] if general and customers else []), all_label(owner), None
+    tenant = next((t for t in visible if t.id == chat.scope_tenant_id), None)
     if tenant is None:
         return [], "Unknown customer", None
     tenants = [tenant]
-    if general is not None and general.id != tenant.id and (tenant.settings or {}).get("include_general", True):
+    if general is not None and not tenant.is_global and (tenant.settings or {}).get("include_general", True):
         tenants.append(general)
     return tenants, tenant.name, tenant
 
 
 def _history(db: Session, chat: Chat) -> list[ChatMessage]:
-    rows = db.scalars(select(ChatMessage).where(ChatMessage.chat_id == chat.id).order_by(ChatMessage.created_at.desc()).limit(HISTORY_TURNS)).all()
-    return [m for m in reversed(rows) if m.status != "error"]
+    """The last exchanges as alternating user/assistant turns.
+
+    A question whose answer failed is dropped with it, so the model never gets two user turns in a
+    row nor a conversation that starts with the assistant (some providers refuse both).
+    """
+    rows = db.scalars(select(ChatMessage).where(ChatMessage.chat_id == chat.id)
+                      .order_by(ChatMessage.created_at.desc(), ChatMessage.role).limit(HISTORY_TURNS * 2)).all()
+    rows = list(reversed(rows))
+    turns: list[ChatMessage] = []
+    for q, a in zip(rows, rows[1:], strict=False):
+        if q.role == "user" and a.role == "assistant" and a.status != "error":
+            turns += [q, a]
+    return turns[-HISTORY_TURNS:]
 
 
 def _retrieval_query(question: str, history: list[ChatMessage]) -> str:
@@ -140,7 +152,7 @@ def answer(db: Session, chat: Chat, question: str, first: bool) -> Answer:
     data = _parse_json(reply.text)
     raw_answer = data["answer"] if data else reply.text.strip()
     text, citations = _cited(raw_answer, passages)
-    is_not_found = bool(data and data.get("not_found"))
+    is_not_found = bool(data and data.get("not_found")) or not text.strip()
     followups = [f.strip() for f in (data.get("followups") or []) if isinstance(f, str) and f.strip()][:3] if data and want_followups else []
     title = data.get("title") if data and isinstance(data.get("title"), str) else None
 

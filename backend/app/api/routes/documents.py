@@ -1,13 +1,24 @@
 """Documents of a tenant: upload, versions, preview, approval, restore, rename, delete.
 
-Access: super-admins for any tenant (they manage General), tenant admins for their own tenant only.
+Access: tenant admins, for the tenants they administer (General included when they have it).
+Super-admins manage the platform and have no access to documents.
 Every query filters by the tenant resolved here, never by IDs alone.
 """
 
+import logging
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -17,14 +28,25 @@ from sqlalchemy.orm import Session
 from app.api.deps import client_ip, require_roles
 from app.core.config import get_settings
 from app.core.db import get_db
-from app.models import Document, DocumentVersion, Role, Tenant, User, VersionPage, VersionStatus
-from app.services import jobs, retrieval, storage, versions
+from app.models import (
+    Document,
+    DocumentVersion,
+    Role,
+    Tenant,
+    User,
+    VersionPage,
+    VersionStatus,
+)
+from app.models.base import utcnow
+from app.services import access, jobs, retrieval, storage, versions
 from app.services.embeddings import EmbeddingError
+from app.services.vector_index import VectorIndexError
 from app.services.logs import log_event
 from app.services.uploads import UploadError, check_upload, safe_filename
 
+_log = logging.getLogger("mentis.documents")
 router = APIRouter(prefix="/tenants/{tenant_id}/documents", tags=["documents"])
-admins = require_roles(Role.SUPER_ADMIN, Role.TENANT_ADMIN)
+admins = require_roles(Role.TENANT_ADMIN)
 
 _MIME = {
     "pdf": "application/pdf",
@@ -100,7 +122,7 @@ class Rename(BaseModel):
 def _tenant(db: Session, user: User, tenant_id: uuid.UUID) -> Tenant:
     tenant = db.get(Tenant, tenant_id)
     allowed = tenant is not None and (
-        user.administers(tenant_id)
+        access.administers(db, user, tenant_id)
     )
     if not allowed:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found.")
@@ -119,6 +141,14 @@ def _version(db: Session, tenant: Tenant, version_id: uuid.UUID) -> DocumentVers
     if v is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Version not found.")
     return v
+
+
+def _enqueue(v: DocumentVersion) -> None:
+    """Queue processing. If Redis is down the version stays Queued: the worker's recovery queues it again."""
+    try:
+        jobs.enqueue_ingest(str(v.id))
+    except Exception:  # noqa: BLE001 - the upload itself succeeded
+        _log.warning("could not queue version %s; recovery will retry", v.id)
 
 
 def _vout(v: DocumentVersion) -> VersionOut:
@@ -203,7 +233,7 @@ async def upload(
 
     log_event(db, "document.uploaded", actor=user, tenant_id=tenant.id, target=checked.filename, ip=client_ip(request),
               detail={"version": version.version, "size": checked.size, "sha256": checked.sha256})
-    jobs.enqueue_ingest(str(version.id))
+    _enqueue(version)
     db.refresh(version)
     return _vout(version)
 
@@ -329,10 +359,10 @@ def retry_version(tenant_id: uuid.UUID, version_id: uuid.UUID, request: Request,
     v = _version(db, tenant, version_id)
     if v.status != VersionStatus.FAILED:
         raise HTTPException(status.HTTP_409_CONFLICT, "Only a failed version can be processed again.")
-    v.status, v.error = VersionStatus.QUEUED, None
+    v.status, v.error, v.status_at = VersionStatus.QUEUED, None, utcnow()
     db.commit()
     log_event(db, "document.retry", actor=user, tenant_id=tenant.id, target=v.original_filename, ip=client_ip(request), detail={"version": v.version})
-    jobs.enqueue_ingest(str(v.id))
+    _enqueue(v)
     db.refresh(v)
     return _vout(v)
 
@@ -347,7 +377,7 @@ def test_question(tenant_id: uuid.UUID, version_id: uuid.UUID, body: SearchIn, r
         raise HTTPException(status.HTTP_409_CONFLICT, "This version is not processed yet.")
     try:
         found = retrieval.search_version(db, v, body.question)
-    except EmbeddingError as e:
+    except (EmbeddingError, VectorIndexError) as e:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e)) from None
     log_event(db, "document.test_question", actor=user, tenant_id=tenant.id, target=v.original_filename,
               ip=client_ip(request), detail={"version": v.version})  # the question itself is not logged

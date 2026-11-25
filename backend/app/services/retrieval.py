@@ -11,8 +11,15 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Chunk, Document, DocumentVersion, Tenant, VersionPage, VersionStatus
-from app.services import embeddings, vector_index
+from app.models import (
+    Chunk,
+    Document,
+    DocumentVersion,
+    Tenant,
+    VersionPage,
+    VersionStatus,
+)
+from app.services import embeddings, indexing, vector_index
 
 
 @dataclass
@@ -60,6 +67,7 @@ def _passages(db: Session, hits, *, active_only: bool, version_id=None) -> list[
 def search_tenants(db: Session, tenant_ids: list[uuid.UUID], question: str, limit: int = 8, min_score: float = 0.0) -> list[Passage]:
     """Active documents of the given tenants (the caller decides which tenants, e.g. customer + General)."""
     cfg = embeddings.get_config(db)
+    indexing.check_model(cfg)  # a question embedded with another model would match nothing sensible
     [vector] = embeddings.embed(cfg, [question])
     hits = []
     for tid in tenant_ids:
@@ -71,6 +79,7 @@ def search_tenants(db: Session, tenant_ids: list[uuid.UUID], question: str, limi
 def search_version(db: Session, version: DocumentVersion, question: str, limit: int = 5) -> list[Passage]:
     """One version, active or not: the preview's "test a question"."""
     cfg = embeddings.get_config(db)
+    indexing.check_model(cfg)  # a question embedded with another model would match nothing sensible
     [vector] = embeddings.embed(cfg, [question])
     hits = vector_index.search(version.tenant_id, vector, limit=limit, version_id=version.id)
     # Drop passages with no real similarity, so the admin sees "nothing found" instead of noise.

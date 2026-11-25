@@ -21,7 +21,7 @@ Use the pencil icon to rename a tenant or change its status.
 
 ## LLM
 
-Use the brain icon to choose the AI model that answers for this customer and its fallback (see **AI providers**). The tenant admin can do the same from **LLM**.
+Use the brain icon to choose the AI model that answers for this customer and its fallback (see **AI providers**). The tenant admin can do the same from **LLM**, unless you untick **Tenant admins can choose the LLM of this customer** in the same window: then they only see the model in use.
 
 ## Delete
 
@@ -30,3 +30,4 @@ Use the trash icon and type the exact tenant name to confirm. This removes the t
 ## The General tenant
 
 General is created at setup. It cannot be deleted or disabled and has no tenant admins: super-admins manage its documentation. Every customer's answers include it unless that customer turns it off in its settings; on conflicts, the customer's own procedure wins.
+

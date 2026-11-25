@@ -7,22 +7,27 @@ Log events carry metadata only, never questions or answers.
 
 import uuid
 from datetime import datetime
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import client_ip, current_user
+from app.api.deps import client_ip, require_roles
 from app.core.db import get_db
 from app.models import Chat, ChatMessage, Role, Tenant, User
 from app.models.base import utcnow
+from app.services import access
 from app.services import answer as answering
 from app.services.embeddings import EmbeddingError
 from app.services.llm import LLMError
+from app.services.vector_index import VectorIndexError
 from app.services.logs import log_event
 
 router = APIRouter(prefix="/chats", tags=["chats"])
+# Super-admins manage the platform: no chat, no customer content.
+readers = require_roles(Role.TENANT_ADMIN, Role.ANALYST)
 
 MAX_QUESTION = 4000
 
@@ -67,7 +72,7 @@ class NewMessage(BaseModel):
 
 
 class Rename(BaseModel):
-    title: str = Field(min_length=1, max_length=120)
+    title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
 
 
 class Feedback(BaseModel):
@@ -114,8 +119,8 @@ def _own_chat(db: Session, user: User, chat_id: uuid.UUID) -> Chat:
 
 
 def _check_scope(db: Session, user: User, tenant_id: uuid.UUID | None) -> None:
-    if user.role == Role.TENANT_ADMIN and tenant_id is not None and not user.administers(tenant_id):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Tenant admins can chat only on their own customers.")
+    if tenant_id is not None and not access.sees(db, user, tenant_id):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "This customer is not assigned to you.")
     if tenant_id is not None:
         t = db.get(Tenant, tenant_id)
         if t is None:
@@ -124,11 +129,12 @@ def _check_scope(db: Session, user: User, tenant_id: uuid.UUID | None) -> None:
             raise HTTPException(status.HTTP_409_CONFLICT, "This customer is disabled.")
 
 
-def _scope_usable(db: Session, chat: Chat) -> bool:
+def _scope_usable(db: Session, chat: Chat, user: User) -> bool:
+    """The chat's customer still exists, is not disabled and is still assigned to the user."""
     if chat.scope_tenant_id is None:
         return True
     t = db.get(Tenant, chat.scope_tenant_id)
-    return t is not None and t.status != "disabled"
+    return t is not None and t.status != "disabled" and access.sees(db, user, t.id)
 
 
 def _ask(db: Session, user: User, chat: Chat, question: str, first: bool, request: Request) -> Exchange:
@@ -137,7 +143,7 @@ def _ask(db: Session, user: User, chat: Chat, question: str, first: bool, reques
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Write a question.")
     try:
         result = answering.answer(db, chat, question, first)
-    except (LLMError, EmbeddingError) as e:
+    except (LLMError, EmbeddingError, VectorIndexError) as e:
         result = answering.Answer(status="error", content=f"The answer could not be generated: {e}")
         log_event(db, "chat.error", kind="system", level="error", actor=user, tenant_id=chat.scope_tenant_id,
                   target=str(chat.id), detail={"error": str(e)[:300]}, commit=False)
@@ -167,19 +173,23 @@ def _ask(db: Session, user: User, chat: Chat, question: str, first: bool, reques
 # --- Routes --------------------------------------------------------------------
 
 @router.get("/scopes", response_model=list[ScopeOption])
-def scopes(db: Session = Depends(get_db), user: User = Depends(current_user)) -> list[ScopeOption]:
-    """What the user can pick with @. Tenant admins: their own customers. General is not a scope: it is searched with the customers."""
-    if user.role == Role.TENANT_ADMIN:
-        own = [t for t in user.tenants if t.status != "disabled"]
-        head = [ScopeOption(id=None, name="All my customers", is_general=False)] if len(own) > 1 else []
-        return head + [ScopeOption(id=t.id, name=t.name, is_general=False) for t in own]
-    rows = db.scalars(select(Tenant).where(Tenant.status != "disabled", Tenant.is_global.is_(False)).order_by(Tenant.name)).all()
-    return [ScopeOption(id=None, name="All customers", is_general=False)] + [ScopeOption(id=t.id, name=t.name, is_general=False) for t in rows]
+def scopes(db: Session = Depends(get_db), user: User = Depends(readers)) -> list[ScopeOption]:
+    """What the user can pick with @: its customers, then General alone (to test the shared documentation).
+
+    With a customer, General is searched too (unless that customer turns it off).
+    """
+    visible = [t for t in access.tenants(db, user) if t.status != "disabled"]
+    own = [t for t in visible if not t.is_global]
+    general = [t for t in visible if t.is_global]
+    label = answering.all_label(user)
+    head = [ScopeOption(id=None, name=label, is_general=False)] if len(own) > 1 or user.all_tenants else []
+    return (head + [ScopeOption(id=t.id, name=t.name, is_general=False) for t in own]
+            + [ScopeOption(id=t.id, name=t.name, is_general=True) for t in general])
 
 
 @router.get("", response_model=list[ChatSummary])
 def list_chats(q: str | None = Query(None, max_length=200), limit: int = Query(100, ge=1, le=500),
-               db: Session = Depends(get_db), user: User = Depends(current_user)) -> list[ChatSummary]:
+               db: Session = Depends(get_db), user: User = Depends(readers)) -> list[ChatSummary]:
     stmt = select(Chat).where(Chat.user_id == user.id)
     if q and q.strip():
         like = f"%{q.strip().lower()}%"
@@ -194,10 +204,8 @@ def list_chats(q: str | None = Query(None, max_length=200), limit: int = Query(1
 
 
 @router.post("", response_model=Exchange, status_code=status.HTTP_201_CREATED)
-def new_chat(body: NewChat, request: Request, db: Session = Depends(get_db), user: User = Depends(current_user)) -> Exchange:
+def new_chat(body: NewChat, request: Request, db: Session = Depends(get_db), user: User = Depends(readers)) -> Exchange:
     _check_scope(db, user, body.tenant_id)
-    if body.tenant_id is not None and db.get(Tenant, body.tenant_id).is_global:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "General is searched with every customer; pick a customer or All customers.")
     chat = Chat(user_id=user.id, scope_tenant_id=body.tenant_id)
     db.add(chat)
     db.flush()
@@ -205,25 +213,25 @@ def new_chat(body: NewChat, request: Request, db: Session = Depends(get_db), use
 
 
 @router.get("/{chat_id}", response_model=ChatOut)
-def get_chat(chat_id: uuid.UUID, db: Session = Depends(get_db), user: User = Depends(current_user)) -> ChatOut:
+def get_chat(chat_id: uuid.UUID, db: Session = Depends(get_db), user: User = Depends(readers)) -> ChatOut:
     chat = _own_chat(db, user, chat_id)
     msgs = db.scalars(select(ChatMessage).where(ChatMessage.chat_id == chat.id).order_by(ChatMessage.created_at, ChatMessage.role.desc())).all()
     s = _summary(db, chat)
-    return ChatOut(**s.model_dump(), scope_available=_scope_usable(db, chat), messages=[_msg(m) for m in msgs])
+    return ChatOut(**s.model_dump(), scope_available=_scope_usable(db, chat, user), messages=[_msg(m) for m in msgs])
 
 
 @router.post("/{chat_id}/messages", response_model=Exchange)
-def ask(chat_id: uuid.UUID, body: NewMessage, request: Request, db: Session = Depends(get_db), user: User = Depends(current_user)) -> Exchange:
+def ask(chat_id: uuid.UUID, body: NewMessage, request: Request, db: Session = Depends(get_db), user: User = Depends(readers)) -> Exchange:
     chat = _own_chat(db, user, chat_id)
     # The scope is the chat's own; the request cannot change it.
-    if not _scope_usable(db, chat):
+    if not _scope_usable(db, chat, user):
         raise HTTPException(status.HTTP_409_CONFLICT, "The customer of this chat is no longer available. Start a new chat.")
     _check_scope(db, user, chat.scope_tenant_id)
     return _ask(db, user, chat, body.message, False, request)
 
 
 @router.patch("/{chat_id}", response_model=ChatSummary)
-def rename(chat_id: uuid.UUID, body: Rename, db: Session = Depends(get_db), user: User = Depends(current_user)) -> ChatSummary:
+def rename(chat_id: uuid.UUID, body: Rename, db: Session = Depends(get_db), user: User = Depends(readers)) -> ChatSummary:
     chat = _own_chat(db, user, chat_id)
     title = body.title.strip()
     if not title:
@@ -234,7 +242,7 @@ def rename(chat_id: uuid.UUID, body: Rename, db: Session = Depends(get_db), user
 
 
 @router.delete("/{chat_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_chat(chat_id: uuid.UUID, db: Session = Depends(get_db), user: User = Depends(current_user)) -> None:
+def delete_chat(chat_id: uuid.UUID, db: Session = Depends(get_db), user: User = Depends(readers)) -> None:
     chat = _own_chat(db, user, chat_id)
     db.execute(delete(ChatMessage).where(ChatMessage.chat_id == chat.id))
     db.delete(chat)
@@ -243,7 +251,7 @@ def delete_chat(chat_id: uuid.UUID, db: Session = Depends(get_db), user: User = 
 
 @router.post("/{chat_id}/messages/{message_id}/feedback", response_model=MessageOut)
 def feedback(chat_id: uuid.UUID, message_id: uuid.UUID, body: Feedback, db: Session = Depends(get_db),
-             user: User = Depends(current_user)) -> MessageOut:
+             user: User = Depends(readers)) -> MessageOut:
     chat = _own_chat(db, user, chat_id)
     m = db.get(ChatMessage, message_id)
     if m is None or m.chat_id != chat.id or m.role != "assistant":

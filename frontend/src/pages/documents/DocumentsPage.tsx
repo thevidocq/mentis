@@ -21,6 +21,7 @@ export function DocumentsPage({ tenantId, title, previewBase }: Props) {
   const [open, setOpen] = useState<Record<string, DocVersion[]>>({});
   const [uploads, setUploads] = useState<{ name: string; error?: string; done?: boolean }[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [renaming, setRenaming] = useState<DocSummary | null>(null);
   const [deleting, setDeleting] = useState<DocSummary | null>(null);
@@ -30,6 +31,7 @@ export function DocumentsPage({ tenantId, title, previewBase }: Props) {
     try {
       const list = await api<DocSummary[]>(base);
       setDocs(list);
+      setLoadError(null); // a temporary failure clears itself at the next successful refresh
       // Refresh expanded version lists too.
       const ids = Object.keys(open);
       if (ids.length) {
@@ -37,7 +39,7 @@ export function DocumentsPage({ tenantId, title, previewBase }: Props) {
         setOpen(Object.fromEntries(entries));
       }
     } catch (e) {
-      setError(errorText(e));
+      setLoadError(errorText(e));
     }
   }, [base, open]);
 
@@ -127,7 +129,7 @@ export function DocumentsPage({ tenantId, title, previewBase }: Props) {
             ))}
           </div>
         )}
-        {error && <div className="error" role="alert">{error}</div>}
+        {(error || loadError) && <div className="error" role="alert">{error ?? loadError}</div>}
 
         <div className="table-wrap">
           <table>

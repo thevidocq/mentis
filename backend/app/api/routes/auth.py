@@ -8,11 +8,11 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import client_ip, current_user
 from app.api.schemas import (
+    THEMES,
     EnrollRequest,
     EnrollResponse,
     LoginRequest,
     LoginResponse,
-    THEMES,
     PasswordChangeRequest,
     ProfileUpdate,
     TenantRef,
@@ -28,21 +28,23 @@ from app.core.security import (
     password_problem,
     read_challenge,
     sign_challenge,
+    totp_step,
     totp_uri,
     verify_password,
-    verify_totp,
 )
 from app.models import User
 from app.models.base import utcnow
-from app.services import sessions
+from app.services import access, sessions
 from app.services.logs import log_event
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 def user_out(db: Session, user: User) -> UserOut:
+    # The tenants the user can see now (all of them with all_tenants), General first.
     return UserOut(id=user.id, email=user.email, full_name=user.full_name, role=user.role,
-                   tenants=[TenantRef(id=t.id, name=t.name) for t in user.tenants],
+                   tenants=[TenantRef(id=t.id, name=t.name, is_general=t.is_global) for t in access.tenants(db, user)],
+                   all_tenants=user.all_tenants,
                    totp_enabled=user.totp_enabled, preferences=user.preferences or {})
 
 PURPOSE_MFA = "mfa"
@@ -105,6 +107,9 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)) -
 @router.post("/totp/enroll", response_model=EnrollResponse)
 def totp_enroll(body: EnrollRequest, db: Session = Depends(get_db)) -> EnrollResponse:
     user, _ = _user_from_challenge(db, body.challenge, {PURPOSE_ENROLL})
+    if user.totp_enabled:
+        # An enrollment challenge still valid after enrolling must not replace the authenticator.
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Login step expired. Sign in again.")
     secret = new_totp_secret()
     user.totp_secret_enc = crypto.encrypt(secret)
     db.commit()
@@ -115,13 +120,18 @@ def totp_enroll(body: EnrollRequest, db: Session = Depends(get_db)) -> EnrollRes
 def totp_verify(body: VerifyRequest, request: Request, response: Response, db: Session = Depends(get_db)) -> UserOut:
     ip = client_ip(request)
     user, purpose = _user_from_challenge(db, body.challenge, {PURPOSE_MFA, PURPOSE_ENROLL})
+    if purpose == PURPOSE_ENROLL and user.totp_enabled:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Login step expired. Sign in again.")
     secret = crypto.decrypt(user.totp_secret_enc) if user.totp_secret_enc else None
     if secret is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Set up the authenticator first.")
-    if not verify_totp(secret, body.code):
+    step = totp_step(secret, body.code)
+    replayed = step is not None and user.totp_last_step is not None and step <= user.totp_last_step
+    if step is None or replayed:
         sessions.register_failed_login(db, user)
-        log_event(db, "auth.mfa.failed", level="warning", actor=user, ip=ip)
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid code.")
+        log_event(db, "auth.mfa.failed", level="warning", actor=user, ip=ip, detail={"reason": "replayed" if replayed else "wrong_code"})
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "This code was already used. Wait for the next one." if replayed else "Invalid code.")
+    user.totp_last_step = step
 
     if purpose == PURPOSE_ENROLL:
         user.totp_enabled = True
@@ -152,6 +162,8 @@ def me(db: Session = Depends(get_db), user: User = Depends(current_user)) -> Use
 @router.patch("/me", response_model=UserOut)
 def update_profile(body: ProfileUpdate, db: Session = Depends(get_db), user: User = Depends(current_user)) -> UserOut:
     if body.full_name is not None:
+        if not body.full_name.strip():
+            raise HTTPException(422, "The name cannot be empty.")
         user.full_name = body.full_name.strip()
     if body.theme is not None:
         if body.theme not in THEMES:
@@ -170,6 +182,12 @@ def change_password(
     user: User = Depends(current_user),
 ) -> None:
     if not verify_password(body.current_password, user.password_hash):
+        # Counts like a failed sign-in: a stolen session cannot guess the password without limit.
+        sessions.register_failed_login(db, user)
+        log_event(db, "auth.password.change_failed", level="warning", actor=user, ip=client_ip(request))
+        if sessions.is_locked(user):
+            sessions.revoke_all_sessions(db, user)
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Too many wrong passwords. Sign in again later.")
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Current password is wrong.")
     problem = password_problem(body.new_password)
     if problem:

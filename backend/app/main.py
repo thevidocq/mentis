@@ -6,7 +6,6 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app import __version__
-from app.core.config import get_settings
 from app.api.routes import (
     auth,
     chats,
@@ -21,6 +20,7 @@ from app.api.routes import (
     tenants,
     users,
 )
+from app.core.config import get_settings
 
 # State-changing requests must carry this header. Browsers do not send it cross-site
 # without a CORS preflight, which this API never allows, so it blocks CSRF.

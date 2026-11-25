@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { errorText } from "../../api/client";
 import type { ChatFull, ChatMessage, ChatSummary, ScopeOption } from "../../api/types";
-import { useAuth } from "../../auth/AuthContext";
 import { MobileBar } from "../../layouts/AdminShell";
 import { Icon } from "../../components/Icon";
 import { chatApi } from "./chatApi";
@@ -14,10 +13,10 @@ import "./chat.css";
 export function ChatPage() {
   const { chatId } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [query, setQuery] = useState("");
   const [scopes, setScopes] = useState<ScopeOption[]>([]);
+  const [scopesLoaded, setScopesLoaded] = useState(false);
   const [draftScope, setDraftScope] = useState<ScopeOption | null>(null);
   const [chat, setChat] = useState<ChatFull | null>(null);
   const [pending, setPending] = useState<string | null>(null);
@@ -29,7 +28,7 @@ export function ChatPage() {
   const refreshList = useCallback((q: string) => chatApi.list(q).then(setChats).catch(() => undefined), []);
 
   useEffect(() => {
-    chatApi.scopes().then((s) => { setScopes(s); setDraftScope((d) => d ?? s[0] ?? null); }).catch((e) => setError(errorText(e)));
+    chatApi.scopes().then((s) => { setScopes(s); setScopesLoaded(true); setDraftScope((d) => d ?? s[0] ?? null); }).catch((e) => setError(errorText(e)));
   }, []);
 
   useEffect(() => {
@@ -83,7 +82,7 @@ export function ChatPage() {
   function newChat() {
     setChat(null);
     setError(null);
-    setDraftScope(scopes[0] ?? null); // every new chat starts on All customers
+    setDraftScope(scopes[0] ?? null); // every new chat starts on the first option (all your customers, when you have several)
 
     navigate("/chat");
   }
@@ -122,11 +121,15 @@ export function ChatPage() {
               <div className="chat-empty">
                 <span style={{ color: "var(--accent-text)" }}><Icon name="chat" size={36} /></span>
                 <h2>Ask about a customer's procedures</h2>
-                <p className="muted">
-                  Choose the customer with <strong>@</strong> (or keep <strong>All customers</strong>), then ask. Answers come only from the
-                  documentation in use, with the source of every statement. The customer stays fixed for the whole chat.
-                </p>
-                {user?.role === "tenant_admin" && <p className="muted small">As tenant admin you can test answers on your own customers only.</p>}
+                {!scopesLoaded ? null : scopes.length === 0 ? (
+                  <p className="muted">No customer is assigned to you yet. Ask your tenant admin to give you access to a customer.</p>
+                ) : (
+                  <p className="muted">
+                    {scopes.length > 1 ? <>Choose the customer with <strong>@</strong> (or keep <strong>{scopes[0].name}</strong>), then ask. </> : <>Ask about <strong>{scopes[0].name}</strong>. </>}
+                    Answers come only from the documentation in use, with the source of every statement. The customer stays fixed for the whole chat.
+                  </p>
+                )}
+                <p className="muted small">You see only the customers assigned to you.</p>
               </div>
             )}
             {messages.map((m, i) =>

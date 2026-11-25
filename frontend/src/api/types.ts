@@ -6,7 +6,8 @@ export interface User {
   email: string;
   full_name: string;
   role: Role;
-  tenants: TenantRef[]; // tenant admins: the customers they administer
+  tenants: TenantRef[]; // tenant admins and analysts: the customers they see (General included)
+  all_tenants: boolean; // every customer, also future ones
   totp_enabled: boolean;
   preferences: { theme?: Theme };
 }
@@ -14,6 +15,7 @@ export interface User {
 export interface TenantRef {
   id: string;
   name: string;
+  is_general?: boolean;
 }
 
 export interface AdminUser extends User {
@@ -44,6 +46,7 @@ export interface Invitation {
   full_name: string;
   role: Role;
   tenants: TenantRef[];
+  all_tenants: boolean;
   expires_at: string;
 }
 
@@ -173,6 +176,7 @@ export interface LlmProvider {
   api_key_set: boolean;
   options: { reasoning_effort?: string; max_tokens?: number; price_in?: number; price_out?: number };
   is_default: boolean;
+  // Tenant admins receive only id, name, model and is_default.
 }
 
 export interface LlmPreset {

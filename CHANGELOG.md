@@ -6,6 +6,44 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-25
+
+### Added
+- **Granular access**: tenant admins and analysts see only the customers ticked on their account. **General** (the shared documentation) is ticked by default and can be removed. **All customers, including future ones** gives every customer, also those created later. Chat scopes, retrieval, documents, LLM, usage and logs all follow the same rules (`services/access.py`), checked again on every question.
+- Tenant admins invite and edit **tenant admins and analysts**, only with customers they have themselves (all customers only if they have all). Users they cannot manage are not listed. A tenant admin cannot change its own role or customers. Changing a user's customers signs them out everywhere.
+- **General is managed by tenant admins** who have it, from the usual Documents page; every action is logged with the user.
+- Per customer, the super-admin decides whether its tenant admins may choose the LLM (`admin_can_set_llm`, default on); when off, the LLM page is read-only.
+- Migration 0008: `all_tenants` on users and invitations. Existing analysts get **All customers** (as before); existing tenant admins and their pending invitations also get General.
+
+- **General as a chat scope**: `@` ends with **General**, to ask the shared documentation alone (tenant admins test it; users with only General can chat).
+- **Log out like Equalizer**: the account card at the bottom of every menu has Help (?) and a red Log out button, with the version underneath.
+
+### Changed
+- **The super-admin no longer uses the chat or manages documents**: platform management only. The General documentation page left the platform menu.
+- Tenant admins see AI providers only as name and model (no URL, no prices) and LLM usage without costs.
+
+### Fixed
+- **TOTP codes could be replayed** within their 90-second window (e.g. a code seen over a shoulder): each code now works once (migration 0006). A still-valid enrollment step can no longer replace an authenticator already set up.
+- **Wrong current password** on password change was not counted: it now counts like a failed sign-in (5 lock the account and end the session).
+- **Document versions stuck** in Processing after a worker crash or restart stayed there forever: after the ingestion timeout they become Failed ("Processing was interrupted", use Retry); versions Queued whose job was lost are queued again (migration 0007, checked every 10 minutes by the worker).
+- Expired sign-in sessions and invitations expired for a week were never deleted: removed by the daily purge.
+- When the session expires or is revoked, the app now returns to the sign-in page instead of showing "Not authenticated" errors.
+- Blank names (only spaces) were accepted for users, invitations and chat titles.
+- Document pipeline review:
+  - a reindex with no documents never recorded the new embedding model, so every later upload failed asking for a reindex;
+  - after an embedding model change without reindex, questions failed with a server error: they now get a clear "run Reindex" answer;
+  - Qdrant unreachable or refusing a query gave a server error in the chat and in "test a question": now a readable error answer / 503;
+  - an upload failed with a server error when Redis was down although the file was stored: it now stays Queued and the worker's recovery queues it again;
+  - a single huge table row (a long Excel cell) became one oversized chunk that the embedding service could refuse, failing the whole document: it is now split with the header repeated; the local embedding service also runs with `--auto-truncate`;
+  - index points of a version deleted while processing are removed.
+- Documents: Word content controls (common in corporate templates) and PowerPoint grouped shapes were skipped, so their text never reached the answers; a PDF page with a broken text layer failed the whole document (now read with OCR).
+- Worker: a job process could reuse the database connections of the worker's maintenance thread after the fork (protocol errors under load); each job now opens its own. A failed daily purge is retried at the next hourly check instead of the next day.
+- Chat: after a failed answer the next question sent two user turns in a row to the LLM (some providers refuse it); history is now clean user/assistant pairs. An empty LLM answer is shown as "not found". A document can no longer close its own passage in the prompt.
+- Invitations: a tenant admin could replace another admin's pending invitation for the same email; an invitation whose customers were all deleted created a user without customers.
+- Configuration import: malformed files (wrong types, missing retention values) caused a server error instead of a clear message.
+- Web: "Mentis cannot be reached" instead of "Failed to fetch" when offline; a clear message for files too large for the proxy; a temporary error on the Documents page clears at the next refresh.
+- These fixes (second bugfix round) were listed under 0.2.0 but did not make it into that release.
+
 ## [0.2.0] - 2026-11-25
 
 ### Added

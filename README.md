@@ -12,7 +12,7 @@ Mentis is a multi-tenant AI assistant for SOC analysts. It answers questions fro
 - **One knowledge base per customer**, plus a **General** one shared by all. Tenant isolation is enforced server-side.
 - **Documents**: PDF, Word, Excel, PowerPoint, with OCR for scans and images. Versions, approval before publishing, and a side-by-side preview of what Mentis read.
 - **AI providers**: Claude, OpenAI, Daybreak Blue, gpt-oss (vLLM), Ollama. One LLM per customer with automatic fallback. Embeddings run locally (bge-m3), vectors are in Qdrant.
-- **Security**: mandatory 2FA, three roles (super-admin, tenant admin, analyst), encrypted secrets, metadata-only logs.
+- **Security**: mandatory 2FA, three roles with per-customer access (super-admin for the platform; tenant admins and analysts on the customers ticked for them), encrypted secrets, metadata-only logs.
 - **Operations**: service status, Logs with CSV export and syslog forwarding to a SIEM, retention, LLM usage and cost per customer, backup/restore scripts, configuration export/import.
 - Tenant admins of one or more customers, with a customer selector.
 - Works from a phone: drawer menus, card tables, full-screen chat.
@@ -28,12 +28,14 @@ The screenshots use fictional demo data.
 | ![All customers](docs/screenshots/chat-all-customers.png) All customers: one answer per customer | ![Not found](docs/screenshots/chat-not-found.png) Not covered by the documents: no guessing |
 | ![Light theme](docs/screenshots/chat-light-theme.png) Follow-ups in the Light theme | ![Help](docs/screenshots/help.png) In-app help for each profile |
 | ![Tenants](docs/screenshots/tenants.png) Tenants | ![Users](docs/screenshots/users.png) Users and invitations |
-| ![General documentation](docs/screenshots/general-documentation.png) Documents and versions | ![OCR preview](docs/screenshots/document-preview-ocr.png) Preview: original next to what Mentis read |
+| ![General documentation](docs/screenshots/general-documentation.png) General documentation, managed by a tenant admin | ![OCR preview](docs/screenshots/document-preview-ocr.png) Preview: original next to what Mentis read |
 | ![Slide preview](docs/screenshots/document-preview-slide.png) Slides: tables and text in images | ![AI providers](docs/screenshots/ai-providers.png) AI providers |
 | ![Add provider](docs/screenshots/ai-provider-add.png) Add a provider from a preset | ![Tenant LLM](docs/screenshots/tenant-llm.png) LLM and fallback for each customer |
 | ![LLM usage](docs/screenshots/llm-usage.png) LLM usage and cost per customer | ![Service status](docs/screenshots/service-status.png) Service status |
 | ![Logs](docs/screenshots/logs.png) Logs, metadata only for chats | ![Syslog](docs/screenshots/logs-syslog.png) Syslog forwarding to a SIEM |
 | ![Retention](docs/screenshots/retention.png) Retention | ![Configuration import](docs/screenshots/configuration-import.png) Configuration import with preview |
+| ![Invite with customers](docs/screenshots/users-invite-access.png) Invite: ticked customers, General by default, or all customers | ![Tenant admin invite](docs/screenshots/tenant-admin-invite.png) A tenant admin invites only with its own customers |
+| ![Analyst with one customer](docs/screenshots/analyst-one-customer.png) An analyst sees only its customers | ![LLM chosen by the super-admin](docs/screenshots/tenant-llm-locked.png) LLM locked by the super-admin, no costs for tenant admins |
 | ![Account](docs/screenshots/account.png) Account and themes | |
 
 ### On a phone

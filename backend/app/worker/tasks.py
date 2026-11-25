@@ -24,9 +24,10 @@ def ingest_version(version_id: str) -> None:
     if version is None:
         _log.warning("version %s no longer exists", version_id)
         return
-    version.status, version.error = VersionStatus.PROCESSING, None
+    version.status, version.error, version.status_at = VersionStatus.PROCESSING, None, utcnow()
     db.commit()
     prefix = storage.version_prefix(version.tenant_id, version.id)
+    tenant_id = version.tenant_id
 
     store = storage.get_storage()
     try:
@@ -75,8 +76,12 @@ def ingest_version(version_id: str) -> None:
         db.rollback()
         version = db.get(DocumentVersion, uuid.UUID(version_id))
         if version is None:
-            # Deleted while processing: drop any page images written meanwhile.
+            # Deleted while processing: drop page images and index points written meanwhile.
             storage.get_storage().delete_prefix(prefix)
+            try:
+                vector_index.delete_version(tenant_id, version_id)
+            except Exception:  # noqa: BLE001 - search re-checks the database anyway
+                _log.warning("could not clean index points for deleted version %s", version_id)
             return
         try:
             vector_index.delete_version(version.tenant_id, version.id)
@@ -125,7 +130,11 @@ def reindex_all() -> None:
 
     try:
         cfg = embeddings.get_config(db)
-        cfg.update(indexed_model=None, indexed_dim=None)  # force recording the new model
+        # Probe the model first: it fails fast if the service is down, and records the new model
+        # even when there is nothing to index (otherwise uploads would keep asking for a reindex).
+        [probe] = embeddings.embed(cfg, ["Mentis"])
+        embeddings.record_index(db, cfg["model"], len(probe))
+        cfg.update(indexed_model=cfg["model"], indexed_dim=len(probe))
         ready = db.scalars(select(DocumentVersion).where(DocumentVersion.status == VersionStatus.READY)).all()
         state(status="running", done=0, total=len(ready), error=None)
         for tenant_id in {t for (t,) in db.execute(select(Tenant.id))}:

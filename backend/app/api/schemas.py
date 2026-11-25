@@ -1,13 +1,18 @@
 """Request and response models for the API."""
 
 import uuid
+from typing import Annotated
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, StringConstraints
+
+# A person's name: surrounding spaces removed, never empty.
+Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
 
 
 class TenantRef(BaseModel):
     id: uuid.UUID
     name: str
+    is_general: bool = False
 
 
 class UserOut(BaseModel):
@@ -15,7 +20,8 @@ class UserOut(BaseModel):
     email: str
     full_name: str
     role: str
-    tenants: list[TenantRef] = []  # tenant admins: the customers they administer
+    tenants: list[TenantRef] = []  # tenant admins and analysts: the customers they see
+    all_tenants: bool = False      # every customer, including future ones
     totp_enabled: bool
     preferences: dict = {}
 
@@ -24,7 +30,7 @@ THEMES = ("light", "medium", "dark")
 
 
 class ProfileUpdate(BaseModel):
-    full_name: str | None = Field(default=None, min_length=1, max_length=120)
+    full_name: Name | None = None
     theme: str | None = None
 
 
@@ -35,7 +41,7 @@ class SetupStatus(BaseModel):
 
 class SetupRequest(BaseModel):
     email: EmailStr
-    full_name: str = Field(min_length=1, max_length=120)
+    full_name: Name
     password: str
 
 

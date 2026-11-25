@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, String, Uuid
+from sqlalchemy import JSON, Boolean, DateTime, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, CreatedMixin, IdMixin
@@ -15,8 +15,9 @@ class Invitation(IdMixin, CreatedMixin, Base):
     email: Mapped[str] = mapped_column(String(254), nullable=False, index=True)
     full_name: Mapped[str] = mapped_column(String(120), nullable=False)
     role: Mapped[str] = mapped_column(String(20), nullable=False)
-    # Tenant admins: ids (as strings) of the customers they will administer.
+    # Tenant admins and analysts: ids (as strings) of the customers they will have.
     tenant_ids: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    all_tenants: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     invited_by: Mapped[uuid.UUID | None] = mapped_column(Uuid)

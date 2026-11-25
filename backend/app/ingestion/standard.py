@@ -42,13 +42,17 @@ def parse_pdf(data: bytes, limits: ParseLimits) -> ParseResult:
         with pdfplumber.open(io.BytesIO(data)) as plumb:
             for i in range(min(total, limits.max_pages)):
                 page = ExtractedPage(index=i + 1, kind="page", label=f"Page {i + 1}", text="")
-                pl = plumb.pages[i]
                 table_md = []
-                for t in pl.extract_tables() or []:
-                    md = markdown_table(t)
-                    if md:
-                        table_md.append(md)
-                text = normalize_text(pl.extract_text() or "")
+                try:
+                    pl = plumb.pages[i]
+                    for t in pl.extract_tables() or []:
+                        md = markdown_table(t)
+                        if md:
+                            table_md.append(md)
+                    text = normalize_text(pl.extract_text() or "")
+                except Exception:  # noqa: BLE001 - a malformed page is read with OCR instead
+                    text, table_md = "", []
+                    warnings.append(f"Page {i + 1}: the text layer could not be read, OCR was used.")
                 if len(text) >= MIN_NATIVE_CHARS:
                     page.text = text + ("\n\n" + "\n\n".join(table_md) if table_md else "")
                     page.tables = len(table_md)
@@ -74,8 +78,18 @@ def parse_docx(data: bytes, limits: ParseLimits) -> ParseResult:
     sections: list[tuple[str, list[str], int]] = []  # (label, blocks, tables)
     label, blocks, tables = "Beginning", [], 0
 
-    for child in doc.element.body.iterchildren():
-        tag = child.tag.rsplit("}", 1)[-1]
+    def body_items(parent):
+        # Content controls (<w:sdt>) wrap paragraphs and tables in many corporate templates.
+        for child in parent.iterchildren():
+            tag = child.tag.rsplit("}", 1)[-1]
+            if tag == "sdt":
+                for inner in child.iterchildren():
+                    if inner.tag.rsplit("}", 1)[-1] == "sdtContent":
+                        yield from body_items(inner)
+            else:
+                yield child, tag
+
+    for child, tag in body_items(doc.element.body):
         if tag == "p":
             p = Paragraph(child, doc)
             text = p.text.strip()
@@ -121,7 +135,16 @@ def parse_pptx(data: bytes, limits: ParseLimits) -> ParseResult:
         page = ExtractedPage(index=i + 1, kind="slide", label=f"Slide {i + 1}" + (f": {title[:90]}" if title else ""), text="")
         blocks = [f"# {title}"] if title else []
         confidences = []
-        for shape in slide.shapes:
+
+        def flat(shapes):
+            # Grouped shapes (diagrams, callouts) keep their text inside the group.
+            for sh in shapes:
+                if sh.shape_type == MSO_SHAPE_TYPE.GROUP:
+                    yield from flat(sh.shapes)
+                else:
+                    yield sh
+
+        for shape in flat(slide.shapes):
             if shape == slide.shapes.title:
                 continue
             if shape.has_text_frame and shape.text_frame.text.strip():

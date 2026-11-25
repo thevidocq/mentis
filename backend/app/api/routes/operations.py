@@ -12,7 +12,7 @@ from app.api.deps import client_ip, current_user, require_roles
 from app.core.db import get_db
 from app.models import Role, User
 from app.models.base import utcnow
-from app.services import config_io, retention
+from app.services import access, config_io, retention
 from app.services import usage as usage_svc
 from app.services.logs import log_event
 
@@ -54,8 +54,12 @@ def get_usage(days: int = Query(30, ge=1, le=3650), since: datetime | None = Non
         raise HTTPException(403, "Not allowed for your role.")
     until = until or utcnow()
     since = since or until - timedelta(days=days)
-    own = user.tenant_ids if user.role == Role.TENANT_ADMIN.value else None
+    own = access.tenant_ids(db, user) if user.role == Role.TENANT_ADMIN.value else None
     data = usage_svc.usage(db, since, until, tenant_ids=own)
+    if own is not None:  # prices and costs are the platform's business
+        for r in data["rows"]:
+            r["cost_usd"] = None
+        data["totals"]["cost_usd"] = None
     return {"since": since, "until": until, **data}
 
 

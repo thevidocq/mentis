@@ -1,9 +1,8 @@
 import { ReactNode, useEffect, useState } from "react";
-import { Link, NavLink, useLocation } from "react-router-dom";
-import { ROLE_LABEL } from "../api/types";
-import { useAuth } from "../auth/AuthContext";
+import { NavLink, useLocation } from "react-router-dom";
 import { Icon, IconName } from "../components/Icon";
 import { Brand } from "../components/Logo";
+import { SidebarFooter } from "./SidebarFooter";
 
 export interface NavItem {
   to: string;
@@ -12,14 +11,11 @@ export interface NavItem {
   soon?: boolean;
 }
 
-export function initials(name: string) {
-  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase()).join("") || "?";
-}
+export { initials } from "./SidebarFooter";
 
 export function AdminShell({ eyebrow, title, titleControl, nav, children }: {
   eyebrow: string; title: string; titleControl?: ReactNode; nav: NavItem[]; children: ReactNode;
 }) {
-  const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const location = useLocation();
   useEffect(() => setOpen(false), [location.pathname]); // close the drawer after navigating
@@ -45,16 +41,7 @@ export function AdminShell({ eyebrow, title, titleControl, nav, children }: {
             </NavLink>
           ))}
         </nav>
-        {user && (
-          <Link to="/account" className="user-link">
-            <div className="avatar">{initials(user.full_name)}</div>
-            <div style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0 }}>
-              <span style={{ fontWeight: 600 }}>{user.full_name}</span>
-              <span className="muted small">{ROLE_LABEL[user.role]} · Account</span>
-            </div>
-            <Icon name="chevronRight" />
-          </Link>
-        )}
+        <SidebarFooter />
       </aside>
       <main className="main">{children}</main>
     </div>
@@ -84,7 +71,6 @@ export function PageHead({ title, children }: { title: string; children?: ReactN
 export const PLATFORM_NAV: NavItem[] = [
   { to: "/admin/tenants", label: "Tenants", icon: "tenants" },
   { to: "/admin/users", label: "Users", icon: "users" },
-  { to: "/admin/general", label: "General documentation", icon: "book" },
   { to: "/admin/ai", label: "AI providers", icon: "chip" },
   { to: "/admin/usage", label: "LLM usage", icon: "bars" },
   { to: "/admin/embedding", label: "Embedding and Qdrant", icon: "database" },
@@ -93,8 +79,6 @@ export const PLATFORM_NAV: NavItem[] = [
   { to: "/admin/status", label: "Service status", icon: "pulse" },
   { to: "/admin/logs", label: "Logs", icon: "list" },
   { to: "/admin/configuration", label: "Backup and configuration", icon: "archive" },
-  { to: "/chat", label: "Chat", icon: "chat" },
-  { to: "/help", label: "Help", icon: "help" },
 ];
 
 export const TENANT_NAV: NavItem[] = [
@@ -104,5 +88,4 @@ export const TENANT_NAV: NavItem[] = [
   { to: "/tenant/users", label: "Users", icon: "users" },
   { to: "/tenant/settings", label: "Settings", icon: "sliders" },
   { to: "/chat", label: "Chat", icon: "chat" },
-  { to: "/help", label: "Help", icon: "help" },
 ];

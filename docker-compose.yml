@@ -78,7 +78,8 @@ services:
   embeddings:
     image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.6
     restart: unless-stopped
-    command: ["--model-id", "${MENTIS_EMBEDDING_MODEL:-BAAI/bge-m3}", "--port", "80"]
+    # --auto-truncate: an over-long text is cut to the model limit instead of failing the whole document.
+    command: ["--model-id", "${MENTIS_EMBEDDING_MODEL:-BAAI/bge-m3}", "--port", "80", "--auto-truncate"]
     volumes:
       - embeddings-data:/data
     deploy:

@@ -43,7 +43,10 @@ def merge_settings(current: dict, changes: dict) -> dict:
 
 
 def user_count(db: Session, tenant: Tenant) -> int:
-    return db.scalar(select(func.count()).select_from(user_tenants).where(user_tenants.c.tenant_id == tenant.id)) or 0
+    """Users who see this tenant: ticked on their account, or with all customers."""
+    ticked = select(user_tenants.c.user_id).where(user_tenants.c.tenant_id == tenant.id)
+    return db.scalar(select(func.count()).select_from(User).where(
+        User.role.in_(["tenant_admin", "analyst"]), (User.id.in_(ticked)) | User.all_tenants.is_(True))) or 0
 
 
 def delete_tenant(db: Session, tenant: Tenant) -> None:

@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 from app.api.deps import client_ip, current_user, require_roles
 from app.core.db import get_db
 from app.models import Role, Tenant, User
+from app.models.tenant import PLATFORM_SETTINGS
+from app.services import access
 from app.services import tenants as svc
 from app.services.logs import log_event
 
@@ -58,12 +60,12 @@ def _get(db: Session, tenant_id: uuid.UUID) -> Tenant:
 
 @router.get("", response_model=list[TenantOut])
 def list_tenants(db: Session = Depends(get_db), user: User = Depends(current_user)) -> list[TenantOut]:
-    """Super-admins and analysts see every tenant (analysts need the full customer list for @).
-    Tenant admins see only their own."""
-    q = select(Tenant).order_by(Tenant.is_global.desc(), Tenant.name)
-    if user.role == Role.TENANT_ADMIN.value:
-        q = q.where(Tenant.id.in_(user.tenant_ids))
-    return [_out(db, t) for t in db.scalars(q)]
+    """Super-admins see every tenant (to manage them, not their content); others only theirs."""
+    if user.role == Role.SUPER_ADMIN.value:
+        rows = list(db.scalars(select(Tenant).order_by(Tenant.is_global.desc(), Tenant.name)))
+    else:
+        rows = access.tenants(db, user)
+    return [_out(db, t) for t in rows]
 
 
 @router.post("", response_model=TenantOut, status_code=status.HTTP_201_CREATED)
@@ -82,7 +84,7 @@ def create_tenant(body: TenantCreate, request: Request, db: Session = Depends(ge
 
 @router.get("/{tenant_id}", response_model=TenantOut)
 def get_tenant(tenant_id: uuid.UUID, db: Session = Depends(get_db), user: User = Depends(current_user)) -> TenantOut:
-    if user.role == Role.TENANT_ADMIN.value and not user.administers(tenant_id):
+    if user.role != Role.SUPER_ADMIN.value and not access.sees(db, user, tenant_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found.")
     return _out(db, _get(db, tenant_id))
 
@@ -93,7 +95,7 @@ def update_tenant(
     db: Session = Depends(get_db), user: User = Depends(current_user),
 ) -> TenantOut:
     is_super = user.role == Role.SUPER_ADMIN.value
-    is_own_admin = user.role == Role.TENANT_ADMIN.value and user.administers(tenant_id)
+    is_own_admin = access.administers(db, user, tenant_id)
     if not (is_super or is_own_admin):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Not allowed.")
     tenant = _get(db, tenant_id)
@@ -117,6 +119,8 @@ def update_tenant(
             tenant.status = body.status
 
     if body.settings is not None:
+        if not is_super and PLATFORM_SETTINGS & body.settings.keys():
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Only a super-admin can change this setting.")
         try:
             tenant.settings = svc.merge_settings(tenant.settings or {}, body.settings)
         except ValueError as e:

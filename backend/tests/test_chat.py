@@ -238,8 +238,13 @@ def test_scopes_and_tenant_admin_limits(super_admin, fake_llm):
     _provider(super_admin)
     alfa, beta = _setup(super_admin)
     an = _analyst(super_admin)
-    assert [s["name"] for s in an.get("/api/chats/scopes").json()] == ["All customers", "Alfa", "Beta"]
-    assert an.post("/api/chats", json={"tenant_id": _general(super_admin)["id"], "message": "x"}).status_code == 400
+    scopes = an.get("/api/chats/scopes").json()
+    assert [s["name"] for s in scopes] == ["All customers", "Alfa", "Beta", "General"] and scopes[-1]["is_general"]
+    # General alone: only the shared documentation is searched.
+    g = an.post("/api/chats", json={"tenant_id": _general(super_admin)["id"], "message": "brute force escalation"}).json()
+    assert g["chat"]["scope_name"] == "General" and g["answer"]["status"] == "not_found"
+    g = an.post("/api/chats", json={"tenant_id": _general(super_admin)["id"], "message": "phishing triage checklist"}).json()
+    assert g["answer"]["status"] == "ok" and all(c["is_general"] for c in g["answer"]["citations"])
     _invite_and_accept(super_admin, "ta@example.com", "tenant_admin", alfa["id"])
     ta = new_client(super_admin.app)
     login(ta, "ta@example.com")
@@ -323,7 +328,9 @@ def test_super_admin_changes_tenants_and_deleting_one_keeps_the_admin(super_admi
     r = super_admin.patch(f"/api/users/{ta_id}", json={"tenant_ids": [alfa["id"], beta["id"]]})
     assert r.status_code == 200 and sorted(t["name"] for t in r.json()["tenants"]) == ["Alfa", "Beta"]
     assert super_admin.patch(f"/api/users/{ta_id}", json={"tenant_ids": []}).status_code == 422
-    assert super_admin.patch(f"/api/users/{ta_id}", json={"role": "analyst"}).json()["tenants"] == []
+    # Analysts keep their customers; super-admins have none.
+    assert [t["name"] for t in super_admin.patch(f"/api/users/{ta_id}", json={"role": "analyst"}).json()["tenants"]] == ["Alfa", "Beta"]
+    assert super_admin.patch(f"/api/users/{ta_id}", json={"role": "super_admin"}).json()["tenants"] == []
     super_admin.patch(f"/api/users/{ta_id}", json={"role": "tenant_admin", "tenant_ids": [alfa["id"], beta["id"]]})
     # A pending invitation on Alfa and Beta loses Alfa; one only on Alfa disappears.
     super_admin.post("/api/invitations", json={"email": "p1@example.com", "full_name": "P1", "role": "tenant_admin", "tenant_ids": [alfa["id"], beta["id"]]})

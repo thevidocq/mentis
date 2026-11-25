@@ -205,7 +205,7 @@ def test_tenant_admin_cannot_reach_other_tenant(super_admin):
 
 def test_analyst_has_no_document_access(super_admin):
     t = _tenant(super_admin)
-    r = super_admin.post("/api/invitations", json={"email": "an@example.com", "full_name": "An", "role": "analyst"})
+    r = super_admin.post("/api/invitations", json={"email": "an@example.com", "full_name": "An", "role": "analyst", "all_tenants": True})
     token = r.json()["invite_url"].rsplit("/", 1)[1]
     new_client(super_admin.app).post(f"/api/invitations/accept/{token}", json={"password": PASSWORD})
     an = new_client(super_admin.app)
@@ -275,3 +275,49 @@ def test_storage_failure_does_not_leave_a_version(super_admin, monkeypatch):
     from app.models import Document
     assert _db().scalars(select(Document)).first() is None
     assert super_admin.queued == []
+
+
+def test_stuck_versions_are_recovered(super_admin, monkeypatch):
+    from datetime import timedelta
+
+    from app.core import db as db_module
+    from app.models import DocumentVersion
+    from app.models.base import utcnow
+    from app.services import jobs, recovery
+
+    t = super_admin.post("/api/tenants", json={"name": "Alfa"}).json()
+    a = _upload(super_admin, t["id"], "A.docx", samples.docx()).json()
+    b = _upload(super_admin, t["id"], "B.docx", samples.docx()).json()
+    super_admin.queued.clear()
+    db = next(db_module.get_db())
+    va, vb = db.get(DocumentVersion, uuid.UUID(a["id"])), db.get(DocumentVersion, uuid.UUID(b["id"]))
+    va.status, va.status_at = "processing", utcnow() - timedelta(hours=3)  # the worker died mid-job
+    vb.status, vb.status_at = "queued", utcnow() - timedelta(hours=2)      # Redis lost the job
+    db.commit()
+    monkeypatch.setattr(jobs, "ingest_job_pending", lambda vid: False)
+    assert recovery.recover_stuck_versions(next(db_module.get_db())) == {"failed": 1, "requeued": 1}
+    assert super_admin.get(f"/api/tenants/{t['id']}/documents/versions/{a['id']}").json()["error"].startswith("Processing was interrupted")
+    assert super_admin.queued == [("ingest", b["id"])]
+    # Nothing left to do on a second pass.
+    assert recovery.recover_stuck_versions(next(db_module.get_db())) == {"failed": 0, "requeued": 0}
+
+
+def test_purge_removes_expired_sessions_and_old_invitations(super_admin):
+    from datetime import timedelta
+
+    from app.core import db as db_module
+    from app.models import AuthSession, Invitation
+    from app.models.base import utcnow
+
+    super_admin.post("/api/invitations", json={"email": "old@example.com", "full_name": "Old", "role": "analyst"})
+    db = next(db_module.get_db())
+    for s in db.query(AuthSession):
+        s.expires_at = utcnow() - timedelta(hours=1)
+    for i in db.query(Invitation):
+        i.expires_at = utcnow() - timedelta(days=8)
+    db.commit()
+    from app.services import retention
+
+    retention.purge(db)
+    db = next(db_module.get_db())
+    assert db.query(AuthSession).count() == 0 and db.query(Invitation).count() == 0
