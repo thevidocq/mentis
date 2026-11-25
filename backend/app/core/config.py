@@ -49,6 +49,18 @@ class Settings(BaseSettings):
     max_pages: int = 1000
     ingest_timeout_seconds: int = 1800
 
+    # Vector database.
+    qdrant_url: str = "http://qdrant:6333"
+    qdrant_api_key: str | None = None
+
+    # Embeddings: any OpenAI-compatible /embeddings endpoint (TEI, Ollama, vLLM, OpenAI).
+    # These are the defaults; the super-admin can change them in the panel.
+    embedding_url: str = "http://embeddings/v1"
+    embedding_model: str = "BAAI/bge-m3"
+    embedding_api_key: str | None = None
+    embedding_batch_size: int = 32
+    embedding_timeout_seconds: int = 120
+
     # Base URL users open in the browser; used to build invitation links.
     public_url: str = "http://localhost"
     invitation_ttl_hours: int = 72

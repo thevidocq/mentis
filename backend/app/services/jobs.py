@@ -38,6 +38,17 @@ def enqueue_ingest(version_id: str) -> None:
     )
 
 
+def enqueue_reindex() -> None:
+    if _runner is not None:
+        _runner("reindex", "")
+        return
+    from rq import Queue
+
+    Queue(QUEUE, connection=redis_connection()).enqueue(
+        "app.worker.tasks.reindex_all", job_timeout=6 * 3600, result_ttl=3600, failure_ttl=7 * 24 * 3600,
+    )
+
+
 def queue_health() -> dict:
     """Redis reachability, workers listening and queue length, for the status page."""
     try:

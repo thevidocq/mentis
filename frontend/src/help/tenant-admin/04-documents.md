@@ -1,6 +1,6 @@
 # Documents
 
-Upload your customer's procedures, escalation matrices, runbooks and playbooks. Mentis reads them and, from the next release, answers analysts from them.
+Upload your customer's procedures, escalation matrices, runbooks and playbooks. Mentis reads them, indexes them and finds the passages that answer analysts' questions.
 
 ## Upload
 
@@ -20,12 +20,12 @@ Uploading a file with the **same name** as an existing document adds a new versi
 
 | State | Meaning |
 | --- | --- |
-| Queued / Processing | Mentis is reading the file |
+| Queued / Processing | Mentis is reading and indexing the file |
 | Active | The version answers use |
 | Waiting approval | Read, waiting for you to approve it |
 | Archived | An older version, not in use |
 | Rejected | You rejected it in the preview |
-| Failed | Could not be read; the error is shown. Use **Retry** after fixing the cause |
+| Failed | Could not be read or indexed; the error is shown. Use **Retry** after fixing the cause |
 
 A failed or rejected version never replaces the one in use. Uploading a file identical to the active version is refused.
 
@@ -47,6 +47,14 @@ Pages with a warning icon need a look:
 - **Truncated**: only the first part was read (very large sheets or documents)
 
 Text inside images in slides (screenshots, diagrams) is read with OCR and shown as "Text in image".
+
+## Test a question
+
+At the top of the preview, type a question an analyst would ask (for example "who is the on-call contact for high severity?") and select **Find passages**. Mentis shows the passages of **this version** it would use, with the page and how well they match. Select the page button to jump to it.
+
+- Use it before approving a new version, to check that the important answers are found.
+- If nothing relevant comes back, the text may be poorly read (check the warnings) or the answer is not in the document.
+- It works on pending versions too; analysts only ever get answers from the version in use.
 
 ## Approval before publishing
 

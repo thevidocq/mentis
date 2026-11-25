@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, errorText } from "../../api/client";
 import type { DocPage, DocVersion } from "../../api/types";
@@ -6,6 +6,8 @@ import { Icon } from "../../components/Icon";
 import { Markdown } from "../../components/Markdown";
 import { PageHead } from "../../layouts/AdminShell";
 import { unitText, versionState } from "./status";
+
+interface Passage { score: number; page_index: number; page_label: string; heading: string | null; text: string }
 
 const FLAG_LABEL: Record<string, string> = {
   empty: "No text",
@@ -22,6 +24,24 @@ export function PreviewPage({ tenantId, backTo }: { tenantId: string; backTo: st
   const [pages, setPages] = useState<DocPage[]>([]);
   const [current, setCurrent] = useState(1);
   const [error, setError] = useState<string | null>(null);
+  const [question, setQuestion] = useState("");
+  const [passages, setPassages] = useState<Passage[] | null>(null);
+  const [asking, setAsking] = useState(false);
+  const [askError, setAskError] = useState<string | null>(null);
+
+  async function ask(e: FormEvent) {
+    e.preventDefault();
+    setAsking(true);
+    setAskError(null);
+    try {
+      setPassages(await api<Passage[]>(`${base}/search`, { method: "POST", body: { question } }));
+    } catch (err) {
+      setAskError(errorText(err));
+      setPassages(null);
+    } finally {
+      setAsking(false);
+    }
+  }
 
   const load = () => {
     api<DocVersion>(base).then(setVersion).catch((e) => setError(errorText(e)));
@@ -65,6 +85,33 @@ export function PreviewPage({ tenantId, backTo }: { tenantId: string; backTo: st
             <span style={{ color: flagged ? "var(--warn)" : undefined }}>{flagged} to check</span>
             {(s.warnings ?? []).map((w) => <span key={w} style={{ color: "var(--warn)" }}>{w}</span>)}
           </div>
+        )}
+        {version?.status === "ready" && (
+          <section className="card">
+            <form className="card-head row" onSubmit={ask} style={{ gap: 10 }}>
+              <h2>Test a question</h2>
+              <input className="input" style={{ flex: 1, minWidth: 240 }} value={question} onChange={(e) => setQuestion(e.target.value)}
+                placeholder="e.g. Who is the on-call contact for high severity?" aria-label="Question to test" />
+              <button className="btn btn-primary" disabled={asking || question.trim().length < 2}>Find passages</button>
+            </form>
+            {(passages || askError) && (
+              <div className="card-body stack" style={{ gap: 10 }}>
+                {askError && <div className="error" role="alert">{askError}</div>}
+                {passages && passages.length === 0 && <span className="muted">No passage of this version matches. Answers would say "not found".</span>}
+                {passages?.map((p, i) => (
+                  <div key={i} className="notice stack" style={{ gap: 6 }}>
+                    <div className="row small" style={{ gap: 8 }}>
+                      <button className="btn btn-sm" onClick={() => setCurrent(p.page_index)}>{p.page_label}</button>
+                      {p.heading && <strong>{p.heading}</strong>}
+                      <span className="spacer muted">match {Math.round(p.score * 100)}%</span>
+                    </div>
+                    <Markdown source={p.text} breaks />
+                  </div>
+                ))}
+                {passages && passages.length > 0 && <span className="muted small">These are the passages Mentis would use to answer. The chat will turn them into an answer with citations.</span>}
+              </div>
+            )}
+          </section>
         )}
         <div className="preview">
           <nav className="preview-pages" aria-label="Pages">

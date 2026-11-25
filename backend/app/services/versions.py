@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Approval, Chunk, Document, DocumentVersion, Tenant, VersionPage, VersionStatus
 from app.models.base import utcnow
-from app.services import storage
+from app.services import storage, vector_index
 
 
 class VersionError(ValueError):
@@ -21,8 +21,11 @@ class VersionError(ValueError):
 
 
 def activate(db: Session, version: DocumentVersion) -> None:
+    """Make `version` the only active one. The caller commits; the index is updated first so a
+    failure there raises before the database changes are committed."""
     if version.status != VersionStatus.READY:
         raise VersionError("Only a processed version can be made active.")
+    vector_index.sync_active(version.tenant_id, version.document_id, version.id)
     db.execute(
         update(DocumentVersion)
         .where(DocumentVersion.document_id == version.document_id, DocumentVersion.id != version.id)
@@ -55,6 +58,7 @@ def reject(db: Session, version: DocumentVersion, reviewer_id) -> None:
     version.approval = Approval.REJECTED
     version.reviewed_by, version.reviewed_at = reviewer_id, utcnow()
     version.is_active = False
+    # A pending version is never active, so the index already marks it inactive; nothing else changes.
 
 
 def restore(db: Session, version: DocumentVersion) -> None:
@@ -78,6 +82,7 @@ def _delete_version_rows(db: Session, version_ids: list) -> None:
 
 def delete_document(db: Session, document: Document) -> None:
     versions = db.scalars(select(DocumentVersion).where(DocumentVersion.document_id == document.id)).all()
+    vector_index.delete_document(document.tenant_id, document.id)
     store = storage.get_storage()
     for v in versions:
         store.delete_prefix(storage.version_prefix(v.tenant_id, v.id))
@@ -91,4 +96,5 @@ def delete_tenant_documents(db: Session, tenant_id) -> None:
     version_ids = db.scalars(select(DocumentVersion.id).where(DocumentVersion.tenant_id == tenant_id)).all()
     _delete_version_rows(db, list(version_ids))
     db.execute(delete(Document).where(Document.tenant_id == tenant_id))
+    vector_index.delete_tenant(tenant_id)
     storage.get_storage().delete_prefix(storage.tenant_prefix(tenant_id))

@@ -11,6 +11,7 @@ import { GeneralDocuments, TenantDocuments, GeneralPreview, TenantPreview } from
 import { Login } from "./pages/Login";
 import { Placeholder } from "./pages/Placeholder";
 import { Setup } from "./pages/Setup";
+import { EmbeddingSettings } from "./pages/platform/EmbeddingSettings";
 import { ServiceStatus } from "./pages/platform/ServiceStatus";
 import { SmtpSettings } from "./pages/platform/SmtpSettings";
 import { Tenants } from "./pages/platform/Tenants";
@@ -38,7 +39,7 @@ function PlatformArea() {
         <Route path="general" element={<GeneralDocuments />} />
         <Route path="general/preview/:versionId" element={<GeneralPreview />} />
         <Route path="ai" element={soon("AI providers", "LLM provider configuration")} />
-        <Route path="embedding" element={soon("Embedding and Qdrant", "Embedding configuration")} />
+        <Route path="embedding" element={<EmbeddingSettings />} />
         <Route path="retention" element={soon("Retention", "Retention settings")} />
         <Route path="logs" element={soon("Logs", "The Logs section")} />
         <Route path="*" element={<Navigate to="tenants" replace />} />
