@@ -43,17 +43,25 @@ def build(kind: str, base_url: str, model: str, api_key: str | None, options: di
     raise LLMError(f"Unknown provider type: {kind}", retryable=False)
 
 
+def _text(value) -> str:
+    if not isinstance(value, str):
+        raise TypeError(f"text is {type(value).__name__}, not a string")
+    return value
+
+
 def parse(kind: str, data: dict) -> LLMReply:
     try:
         if kind == "anthropic":
             text = "".join(b.get("text", "") for b in data["content"] if b.get("type") == "text")
             u = data.get("usage") or {}
-            return LLMReply(text, u.get("input_tokens"), u.get("output_tokens"))
+            return LLMReply(_text(text), u.get("input_tokens"), u.get("output_tokens"))
 
         if kind == "openai_chat":
             text = data["choices"][0]["message"]["content"] or ""
+            if isinstance(text, list):  # some compatible servers send content as a list of parts
+                text = "".join(c.get("text") or "" for c in text if isinstance(c, dict) and c.get("type") in ("text", "output_text"))
             u = data.get("usage") or {}
-            return LLMReply(text, u.get("prompt_tokens"), u.get("completion_tokens"))
+            return LLMReply(_text(text), u.get("prompt_tokens"), u.get("completion_tokens"))
 
         if kind == "openai_responses":
             text = data.get("output_text") or ""
@@ -64,7 +72,7 @@ def parse(kind: str, data: dict) -> LLMReply:
                         parts += [c.get("text", "") for c in item.get("content", []) if c.get("type") in ("output_text", "text")]
                 text = "".join(parts)
             u = data.get("usage") or {}
-            return LLMReply(text, u.get("input_tokens"), u.get("output_tokens"))
-    except (KeyError, IndexError, TypeError) as e:
+            return LLMReply(_text(text), u.get("input_tokens"), u.get("output_tokens"))
+    except (KeyError, IndexError, TypeError, AttributeError) as e:  # not the expected JSON shape (e.g. a list, a proxy page)
         raise LLMError(f"Unexpected answer format: {e}") from None
     raise LLMError(f"Unknown provider type: {kind}", retryable=False)

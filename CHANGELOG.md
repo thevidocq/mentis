@@ -12,6 +12,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 - 2FA: a code with non-ASCII digits or a challenge with non-ASCII characters is refused (401) instead of causing a server error.
 - Login: disabled and locked accounts take as long to answer as others, so response time no longer reveals them.
 - Invitations: an expired pending invitation from another admin no longer blocks inviting the same email again.
+- PDFs that only restrict printing or copying (no password to open) were refused as password-protected; they are now read. A PDF that needs a password fails in the worker with "The file is password-protected".
+- Excel cells formatted but never filled (often whole rows up to column XFD) turned a sheet into thousands of empty table columns, flooding chunks and answers; empty columns are now dropped.
+- A version processed late (queued again after a Redis outage, or retried) replaced a newer version already in use; it now stays inactive and can be restored.
+- Reindex requested while Redis was down gave a server error and left the state "queued", blocking every later reindex; it now answers 503 and can be requested again.
+- LLM answers with raw line breaks inside the JSON (common with local models) were shown to analysts as raw JSON; follow-ups sent as a string became one chip per letter; an answer cut by the token limit is now shown as text.
+- An LLM reply with an unexpected shape (not a JSON object, content as a list of parts) gave a server error in the chat; it is now read or reported as a provider error.
+- An API key echoed back by an LLM or embedding endpoint in an error body reached the chat, logs and status page; it is now redacted.
 
 ## [0.3.0] - 2026-11-25
 

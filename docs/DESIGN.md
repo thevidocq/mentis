@@ -87,7 +87,7 @@ Uploads run as background jobs; a new version reaches answers only once indexed 
 
 **Pipeline**
 
-1. Upload (PDF, DOCX, PPTX, XLSX, up to 50 MB) → validated (extension matches content, no macros, not encrypted, zip-bomb guard) → original stored in MinIO under a generated key.
+1. Upload (PDF, DOCX, PPTX, XLSX, up to 50 MB) → validated (extension matches content, no macros, no encrypted Office files, zip-bomb guard; a PDF that needs a password to open fails in the worker, one that only restricts printing or copying is read) → original stored in MinIO under a generated key.
 2. The ingestion worker (separate container, RQ on Redis, CPU/RAM limits, 30-minute timeout) parses the file into pages:
     - PDF: one page per page; native text and tables via pdfplumber; pages with almost no text are rendered (pypdfium2) and read with Tesseract OCR (English + Italian) with a confidence score; every page is rendered as an image for the preview.
     - DOCX: split into sections at top-level headings; headings and tables preserved.

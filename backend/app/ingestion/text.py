@@ -18,6 +18,11 @@ def markdown_table(rows: list[list]) -> str:
         return ""
     width = max(len(r) for r in rows)
     rows = [r + [""] * (width - len(r)) for r in rows]
+    # Columns empty in every row carry nothing (Excel cells formatted but never filled, often up
+    # to column XFD): without this a sheet becomes thousands of "|  |" columns per row.
+    keep = [i for i in range(width) if any(r[i] for r in rows)]
+    rows = [[r[i] for i in keep] for r in rows]
+    width = len(keep)
     head, body = rows[0], rows[1:]
     lines = ["| " + " | ".join(head) + " |", "| " + " | ".join(["---"] * width) + " |"]
     lines += ["| " + " | ".join(r) + " |" for r in body]

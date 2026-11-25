@@ -54,7 +54,7 @@ def call_provider(cfg: dict, system: str, turns: list[Turn], timeout: float = 12
     except httpx.HTTPError as e:
         raise LLMError(f"{cfg['name']} not reachable: {e.__class__.__name__}") from None
     if r.status_code != 200:
-        raise status_error(cfg["name"], r.status_code, r.text)
+        raise status_error(cfg["name"], r.status_code, r.text, cfg["api_key"])
     try:
         data = r.json()
     except ValueError:
@@ -119,7 +119,7 @@ def ping(cfg: dict, timeout: float = 5) -> tuple[bool, str]:
         return False, f"not reachable: {e.__class__.__name__}"
     if r.status_code == 200:
         return True, cfg["model"]
-    return False, str(status_error(cfg["name"], r.status_code, r.text))
+    return False, str(status_error(cfg["name"], r.status_code, r.text, cfg["api_key"]))
 
 
 def call_with_failover(primary: dict | None, fallback: dict | None, system: str, turns: list[Turn]) -> tuple[LLMReply, dict, int]:
