@@ -21,11 +21,11 @@ from app.models.base import Base, CreatedMixin, IdMixin
 
 class Role(enum.StrEnum):
     SUPER_ADMIN = "super_admin"    # platform administration
-    TENANT_ADMIN = "tenant_admin"  # administers one or more customer tenants
-    ANALYST = "analyst"            # chat consultation across all customers
+    TENANT_ADMIN = "tenant_admin"  # administers the customers assigned to it
+    ANALYST = "analyst"            # chat consultation on the customers assigned to it
 
 
-# Customers a tenant admin administers (one or more). Other roles have none.
+# Customers assigned to a tenant admin or an analyst. Super-admins have none: they see no content.
 user_tenants = Table(
     "user_tenants",
     Base.metadata,
@@ -41,8 +41,10 @@ class User(IdMixin, CreatedMixin, Base):
     full_name: Mapped[str] = mapped_column(String(120), nullable=False)
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
     role: Mapped[str] = mapped_column(String(20), nullable=False)
-    # Tenant admins only: the customers they administer.
+    # Tenant admins and analysts: the customers assigned (General included by default).
     tenants: Mapped[list["Tenant"]] = relationship(secondary=user_tenants, lazy="selectin", order_by="Tenant.name")  # noqa: F821
+    # "All customers, including future ones": every tenant, now and later, without ticking them.
+    all_tenants: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # TOTP secret, encrypted with app.core.crypto. 2FA is mandatory: enabled at first login.
@@ -61,10 +63,5 @@ class User(IdMixin, CreatedMixin, Base):
 
     @property
     def tenant_ids(self) -> set[uuid.UUID]:
+        """The tenants ticked for this user (not expanded for all_tenants: see access.tenant_ids)."""
         return {t.id for t in self.tenants}
-
-    def administers(self, tenant_id: uuid.UUID | None) -> bool:
-        """Super-admins administer every tenant; tenant admins only their own."""
-        if self.role == Role.SUPER_ADMIN.value:
-            return True
-        return self.role == Role.TENANT_ADMIN.value and tenant_id is not None and tenant_id in self.tenant_ids

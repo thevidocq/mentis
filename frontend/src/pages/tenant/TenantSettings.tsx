@@ -36,7 +36,8 @@ export function TenantSettings() {
       <PageHead title="Settings" />
       <div className="page-body" style={{ maxWidth: 760 }}>
         {error && <div className="error">{error}</div>}
-        {tenant && (
+        {current?.is_general && <div className="notice">General is the shared documentation. These settings apply to customers, so there is nothing to set here.</div>}
+        {tenant && !current?.is_general && (
           <div className="card">
             <div className="card-head"><h2>{tenant.name}</h2></div>
             <div className="card-body stack">

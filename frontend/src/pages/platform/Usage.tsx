@@ -27,11 +27,11 @@ export function useUsage(days: number) {
   return { data, error };
 }
 
-export function UsageTable({ rows, showCustomer = true }: { rows: UsageRow[]; showCustomer?: boolean }) {
+export function UsageTable({ rows, showCustomer = true, showCost = true }: { rows: UsageRow[]; showCustomer?: boolean; showCost?: boolean }) {
   return (
     <div className="table-wrap">
       <table>
-        <thead><tr>{showCustomer && <th>Customer</th>}<th>LLM</th><th>Questions</th><th>Answered</th><th>Not found</th><th>Errors</th><th>Tokens in</th><th>Tokens out</th><th>Avg time</th><th>Est. cost</th></tr></thead>
+        <thead><tr>{showCustomer && <th>Customer</th>}<th>LLM</th><th>Questions</th><th>Answered</th><th>Not found</th><th>Errors</th><th>Tokens in</th><th>Tokens out</th><th>Avg time</th>{showCost && <th>Est. cost</th>}</tr></thead>
         <tbody>
           {rows.length === 0 && <tr><td colSpan={showCustomer ? 10 : 9} className="muted">No questions in this period.</td></tr>}
           {rows.map((r) => (
@@ -42,7 +42,7 @@ export function UsageTable({ rows, showCustomer = true }: { rows: UsageRow[]; sh
               <td>{r.errors ? <span className="pill danger">{r.errors}</span> : 0}</td>
               <td>{n(r.input_tokens)}</td><td>{n(r.output_tokens)}</td>
               <td>{r.avg_latency_ms != null ? `${(r.avg_latency_ms / 1000).toFixed(1)} s` : "—"}</td>
-              <td>{usd(r.cost_usd)}</td>
+              {showCost && <td>{usd(r.cost_usd)}</td>}
             </tr>
           ))}
         </tbody>

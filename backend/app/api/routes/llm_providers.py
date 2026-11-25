@@ -12,7 +12,7 @@ from app.api.deps import client_ip, current_user, require_roles
 from app.core import crypto
 from app.core.db import get_db
 from app.models import LlmProvider, Role, Tenant, User
-from app.services import llm
+from app.services import access, llm
 from app.services.logs import log_event
 
 router = APIRouter(tags=["llm"])
@@ -32,11 +32,11 @@ class ProviderIn(BaseModel):
 class ProviderOut(BaseModel):
     id: uuid.UUID
     name: str
-    kind: str
-    base_url: str
+    kind: str | None = None        # the fields below are for super-admins only
+    base_url: str | None = None
     model: str
-    api_key_set: bool
-    options: dict
+    api_key_set: bool | None = None
+    options: dict | None = None
     is_default: bool
 
 
@@ -85,7 +85,11 @@ def list_providers(db: Session = Depends(get_db), user: User = Depends(current_u
     # Tenant admins see the list to choose from; only super-admins manage it.
     if user.role == Role.ANALYST.value:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Not allowed for your role.")
-    return [_out(p) for p in db.scalars(select(LlmProvider).order_by(LlmProvider.name))]
+    rows = db.scalars(select(LlmProvider).order_by(LlmProvider.name))
+    if user.role == Role.SUPER_ADMIN.value:
+        return [_out(p) for p in rows]
+    # Tenant admins only need to recognise a model: no addresses, keys or prices.
+    return [ProviderOut(id=p.id, name=p.name, model=p.model, is_default=p.is_default) for p in rows]
 
 
 @router.post("/llm/providers", response_model=ProviderOut, status_code=201)
@@ -162,22 +166,30 @@ def test_provider(provider_id: uuid.UUID, db: Session = Depends(get_db), _: User
 
 def _tenant_for(db: Session, user: User, tenant_id: uuid.UUID) -> Tenant:
     t = db.get(Tenant, tenant_id)
-    ok = t is not None and user.administers(tenant_id)
+    ok = t is not None and (user.role == Role.SUPER_ADMIN.value or access.administers(db, user, tenant_id))
     if not ok:
         raise HTTPException(404, "Tenant not found.")
     return t
+
+
+def _editable(user: User, t: Tenant) -> bool:
+    """Super-admins always; tenant admins when the super-admin allows it for this tenant."""
+    return user.role == Role.SUPER_ADMIN.value or bool((t.settings or {}).get("admin_can_set_llm", True))
 
 
 @router.get("/tenants/{tenant_id}/llm")
 def get_tenant_llm(tenant_id: uuid.UUID, db: Session = Depends(get_db), user: User = Depends(current_user)) -> dict:
     t = _tenant_for(db, user, tenant_id)
     s = t.settings or {}
-    return {"provider_id": s.get("llm_provider_id"), "fallback_id": s.get("llm_fallback_id")}
+    return {"provider_id": s.get("llm_provider_id"), "fallback_id": s.get("llm_fallback_id"), "editable": _editable(user, t),
+            "admin_can_set_llm": bool(s.get("admin_can_set_llm", True))}
 
 
 @router.put("/tenants/{tenant_id}/llm")
 def put_tenant_llm(tenant_id: uuid.UUID, body: TenantLlmIn, request: Request, db: Session = Depends(get_db), user: User = Depends(current_user)) -> dict:
     t = _tenant_for(db, user, tenant_id)
+    if not _editable(user, t):
+        raise HTTPException(403, "The super-admin chooses the LLM of this customer.")
     for pid in (body.provider_id, body.fallback_id):
         if pid is not None and db.get(LlmProvider, pid) is None:
             raise HTTPException(422, "Unknown provider.")
@@ -186,4 +198,4 @@ def put_tenant_llm(tenant_id: uuid.UUID, body: TenantLlmIn, request: Request, db
     db.commit()
     log_event(db, "tenant.llm_updated", actor=user, tenant_id=t.id, target=t.name, ip=client_ip(request),
               detail={"provider_id": t.settings["llm_provider_id"], "fallback_id": t.settings["llm_fallback_id"]})
-    return {"provider_id": t.settings["llm_provider_id"], "fallback_id": t.settings["llm_fallback_id"]}
+    return get_tenant_llm(tenant_id, db, user)

@@ -20,9 +20,11 @@ def _create_tenant(c, name="Cliente Alfa"):
     return r.json()
 
 
-def _invite_and_accept(c, email, role, tenant_id=None, name="User", tenant_ids=None):
+def _invite_and_accept(c, email, role, tenant_id=None, name="User", tenant_ids=None, all_tenants=None):
     ids = tenant_ids if tenant_ids is not None else ([tenant_id] if tenant_id else [])
-    r = c.post("/api/invitations", json={"email": email, "full_name": name, "role": role, "tenant_ids": ids})
+    if all_tenants is None:  # an analyst without customers given sees them all, as before 0.3.0
+        all_tenants = role == "analyst" and not ids
+    r = c.post("/api/invitations", json={"email": email, "full_name": name, "role": role, "tenant_ids": ids, "all_tenants": all_tenants})
     assert r.status_code == 201, r.text
     body = r.json()
     assert body["email_sent"] is False and body["invite_url"]  # no SMTP configured in tests
@@ -92,17 +94,22 @@ def test_tenant_admin_scope(super_admin):
     ok = ta.post("/api/invitations", json={"email": "ta2@example.com", "full_name": "B", "role": "tenant_admin", "tenant_ids": [alfa["id"]]})
     assert ok.status_code == 201
     assert ta.post("/api/invitations", json={"email": "x@example.com", "full_name": "X", "role": "tenant_admin", "tenant_ids": [beta["id"]]}).status_code == 403
-    assert ta.post("/api/invitations", json={"email": "y@example.com", "full_name": "Y", "role": "analyst"}).status_code == 403
-    # Sees only users of its tenant.
+    # It can invite analysts too, on its own customers only, and never for all customers.
+    assert ta.post("/api/invitations", json={"email": "y@example.com", "full_name": "Y", "role": "analyst", "tenant_ids": [alfa["id"]]}).status_code == 201
+    assert ta.post("/api/invitations", json={"email": "z@example.com", "full_name": "Z", "role": "analyst", "all_tenants": True}).status_code == 403
+    assert ta.post("/api/invitations", json={"email": "w@example.com", "full_name": "W", "role": "super_admin"}).status_code == 403
+    # Sees only the users it can manage (itself included): not the super-admin nor the content admin of all customers.
     assert {u["email"] for u in ta.get("/api/users").json()} == {"ta@example.com"}
 
 
-def test_analyst_sees_all_tenants_but_cannot_admin(super_admin):
-    _create_tenant(super_admin, "Alfa")
-    _invite_and_accept(super_admin, "an@example.com", "analyst")
+def test_analyst_sees_its_tenants_but_cannot_admin(super_admin):
+    alfa = _create_tenant(super_admin, "Alfa")
+    _create_tenant(super_admin, "Beta")
+    g = _general(super_admin)
+    _invite_and_accept(super_admin, "an@example.com", "analyst", tenant_ids=[alfa["id"], g["id"]])
     an = new_client(super_admin.app)
     login(an, "an@example.com")
-    assert {t["name"] for t in an.get("/api/tenants").json()} == {"General", "Alfa"}
+    assert [t["name"] for t in an.get("/api/tenants").json()] == ["General", "Alfa"]
     assert an.get("/api/users").status_code == 403
     assert an.post("/api/invitations", json={"email": "z@example.com", "full_name": "Z", "role": "analyst"}).status_code == 403
 
@@ -110,21 +117,23 @@ def test_analyst_sees_all_tenants_but_cannot_admin(super_admin):
 def test_invitation_validation(super_admin):
     g = _general(super_admin)
     bad = [
-        {"email": "a@example.com", "full_name": "A", "role": "tenant_admin"},                    # no tenant
-        {"email": "a@example.com", "full_name": "A", "role": "tenant_admin", "tenant_ids": [g["id"]]},  # General
-        {"email": "a@example.com", "full_name": "A", "role": "analyst", "tenant_ids": [g["id"]]},       # analyst with tenant
+        {"email": "a@example.com", "full_name": "A", "role": "tenant_admin"},                           # no customer
+        {"email": "a@example.com", "full_name": "A", "role": "analyst"},                                # no customer
+        {"email": "a@example.com", "full_name": "A", "role": "super_admin", "tenant_ids": [g["id"]]},  # super-admin with customers
         {"email": "a@example.com", "full_name": "A", "role": "wizard"},
     ]
     for body in bad:
         assert super_admin.post("/api/invitations", json=body).status_code == 422, body
-    assert super_admin.post("/api/invitations", json={"email": "admin@example.com", "full_name": "A", "role": "analyst"}).status_code == 409
+    assert super_admin.post("/api/invitations", json={"email": "admin@example.com", "full_name": "A", "role": "analyst", "all_tenants": True}).status_code == 409
+    # General alone is a valid customer for a tenant admin (it manages the shared documentation).
+    assert super_admin.post("/api/invitations", json={"email": "g@example.com", "full_name": "G", "role": "tenant_admin", "tenant_ids": [g["id"]]}).status_code == 201
 
 
 def test_invitation_token_single_use_and_revocable(super_admin):
     token = _invite_and_accept(super_admin, "an@example.com", "analyst")
     anon = new_client(super_admin.app)
     assert anon.get(f"/api/invitations/accept/{token}").status_code == 404
-    r = super_admin.post("/api/invitations", json={"email": "other@example.com", "full_name": "O", "role": "analyst"})
+    r = super_admin.post("/api/invitations", json={"email": "other@example.com", "full_name": "O", "role": "analyst", "all_tenants": True})
     inv_id = r.json()["id"]
     assert super_admin.delete(f"/api/invitations/{inv_id}").status_code == 204
     assert super_admin.get("/api/invitations").json() == []
@@ -135,7 +144,7 @@ def test_invitation_sent_by_smtp(super_admin, monkeypatch):
     monkeypatch.setattr(inv_svc.mail, "send_mail", lambda cfg, to, subject, body: sent.append((to, body)))
     super_admin.put("/api/platform/smtp", json={"host": "smtp.example.com", "port": 587, "security": "starttls",
                                                  "username": "u", "password": "p", "from_address": "mentis@example.com"})
-    r = super_admin.post("/api/invitations", json={"email": "an@example.com", "full_name": "An", "role": "analyst"})
+    r = super_admin.post("/api/invitations", json={"email": "an@example.com", "full_name": "An", "role": "analyst", "all_tenants": True})
     assert r.json()["email_sent"] is True and r.json()["invite_url"] is None
     assert sent and sent[0][0] == "an@example.com" and "/invite/" in sent[0][1]
 
@@ -145,7 +154,7 @@ def test_invitation_sent_by_smtp(super_admin, monkeypatch):
 def test_last_super_admin_protected(super_admin):
     me = super_admin.get("/api/auth/me").json()
     assert super_admin.patch(f"/api/users/{me['id']}", json={"is_active": False}).status_code == 400
-    assert super_admin.patch(f"/api/users/{me['id']}", json={"role": "analyst"}).status_code == 400
+    assert super_admin.patch(f"/api/users/{me['id']}", json={"role": "analyst", "all_tenants": True}).status_code == 400
     assert super_admin.delete(f"/api/users/{me['id']}").status_code == 400
 
 

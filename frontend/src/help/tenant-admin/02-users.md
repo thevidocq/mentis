@@ -1,17 +1,21 @@
 # Users of your customers
 
-## Invite another admin
+## Invite a user
 
 1. Open **Users** and select **Invite user**.
-2. Enter name and email, tick the customers the new admin will administer (only yours are listed), then select **Send invitation**.
+2. Enter name and email and choose the role: **Analyst** (chat only) or **Tenant admin** (manages the customers).
+3. Tick the customers: only yours are listed. **General** is ticked by default; untick it if the user must not see the shared documentation. If you have **All customers**, you can also tick **All customers, including future ones**.
+4. Select **Send invitation**.
 
-The new user becomes a tenant admin of those customers. If email is not configured, Mentis shows the link to send yourself. Links work once and expire after 72 hours.
+If email is not configured, Mentis shows the link to send yourself. Links work once and expire after 72 hours.
 
 ## Manage
 
-- Pencil icon: change the name or turn the account off.
+**Users** lists only the users you can manage: those whose customers are all yours.
+
+- Pencil icon: change name, role, customers, or turn the account off. Changing the customers signs the user out everywhere.
 - Trash icon: delete the user.
 
-Admins who also administer customers that are not yours are listed with *other customers*: only a super-admin can change them.
+You cannot change your own role or customers: ask another tenant admin or a super-admin. Every change is recorded in the logs.
 
-Analysts and super-admins are managed by the platform super-admin. For a lost phone (2FA reset), contact a super-admin.
+Super-admins are managed by the platform super-admin. For a lost phone (2FA reset), contact a super-admin.

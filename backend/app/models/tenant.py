@@ -7,7 +7,11 @@ DEFAULT_TENANT_SETTINGS = {
     "include_general": True,       # General documentation included in retrieval
     "require_approval": False,     # new document versions go live only after admin approval
     "suggested_followups": True,   # 2-3 follow-up questions under each answer
+    "admin_can_set_llm": True,     # tenant admins may choose the tenant's LLM (set by super-admins)
 }
+
+# Settings only super-admins may change.
+PLATFORM_SETTINGS = {"admin_can_set_llm"}
 
 
 class Tenant(IdMixin, CreatedMixin, Base):

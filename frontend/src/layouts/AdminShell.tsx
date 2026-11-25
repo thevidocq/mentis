@@ -84,7 +84,6 @@ export function PageHead({ title, children }: { title: string; children?: ReactN
 export const PLATFORM_NAV: NavItem[] = [
   { to: "/admin/tenants", label: "Tenants", icon: "tenants" },
   { to: "/admin/users", label: "Users", icon: "users" },
-  { to: "/admin/general", label: "General documentation", icon: "book" },
   { to: "/admin/ai", label: "AI providers", icon: "chip" },
   { to: "/admin/usage", label: "LLM usage", icon: "bars" },
   { to: "/admin/embedding", label: "Embedding and Qdrant", icon: "database" },
@@ -93,7 +92,6 @@ export const PLATFORM_NAV: NavItem[] = [
   { to: "/admin/status", label: "Service status", icon: "pulse" },
   { to: "/admin/logs", label: "Logs", icon: "list" },
   { to: "/admin/configuration", label: "Backup and configuration", icon: "archive" },
-  { to: "/chat", label: "Chat", icon: "chat" },
   { to: "/help", label: "Help", icon: "help" },
 ];
 

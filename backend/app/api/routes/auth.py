@@ -34,15 +34,17 @@ from app.core.security import (
 )
 from app.models import User
 from app.models.base import utcnow
-from app.services import sessions
+from app.services import access, sessions
 from app.services.logs import log_event
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 def user_out(db: Session, user: User) -> UserOut:
+    # The tenants the user can see now (all of them with all_tenants), General first.
     return UserOut(id=user.id, email=user.email, full_name=user.full_name, role=user.role,
-                   tenants=[TenantRef(id=t.id, name=t.name) for t in user.tenants],
+                   tenants=[TenantRef(id=t.id, name=t.name, is_general=t.is_global) for t in access.tenants(db, user)],
+                   all_tenants=user.all_tenants,
                    totp_enabled=user.totp_enabled, preferences=user.preferences or {})
 
 PURPOSE_MFA = "mfa"

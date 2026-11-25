@@ -26,7 +26,7 @@ def invite_url(token: str) -> str:
     return f"{get_settings().public_url.rstrip('/')}/invite/{token}"
 
 
-def create(db: Session, *, email: str, full_name: str, role: str, tenant_ids: list[str], invited_by) -> tuple[Invitation, str]:
+def create(db: Session, *, email: str, full_name: str, role: str, tenant_ids: list[str], all_tenants: bool = False, invited_by) -> tuple[Invitation, str]:
     # A new invitation replaces any pending one for the same email.
     db.execute(delete(Invitation).where(Invitation.email == email, Invitation.accepted_at.is_(None)))
     token = new_session_token()
@@ -35,6 +35,7 @@ def create(db: Session, *, email: str, full_name: str, role: str, tenant_ids: li
         full_name=full_name,
         role=role,
         tenant_ids=tenant_ids,
+        all_tenants=all_tenants,
         token_hash=hash_token(token),
         expires_at=utcnow() + timedelta(hours=get_settings().invitation_ttl_hours),
         invited_by=invited_by,
@@ -50,7 +51,7 @@ def send(db: Session, inv: Invitation, token: str) -> bool:
     if not mail.is_configured(cfg):
         return False
     names = _tenant_names(db, inv)
-    scope = f" for {', '.join(names)}" if names else ""
+    scope = " for all customers" if inv.all_tenants else (f" for {', '.join(names)}" if names else "")
     body = (
         f"Hello {inv.full_name},\n\n"
         f"you have been invited to Mentis as {ROLE_LABELS.get(inv.role, inv.role)}{scope}.\n\n"
@@ -92,6 +93,7 @@ def accept(db: Session, inv: Invitation, password: str) -> User:
     )
     # Tenants deleted since the invitation are simply skipped.
     user.tenants = _tenants(db, inv)
+    user.all_tenants = inv.all_tenants
     db.add(user)
     inv.accepted_at = utcnow()
     db.commit()

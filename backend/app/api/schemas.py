@@ -12,6 +12,7 @@ Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max
 class TenantRef(BaseModel):
     id: uuid.UUID
     name: str
+    is_general: bool = False
 
 
 class UserOut(BaseModel):
@@ -19,7 +20,8 @@ class UserOut(BaseModel):
     email: str
     full_name: str
     role: str
-    tenants: list[TenantRef] = []  # tenant admins: the customers they administer
+    tenants: list[TenantRef] = []  # tenant admins and analysts: the customers they see
+    all_tenants: bool = False      # every customer, including future ones
     totp_enabled: bool
     preferences: dict = {}
 

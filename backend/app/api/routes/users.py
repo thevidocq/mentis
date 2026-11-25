@@ -1,4 +1,8 @@
-"""User management (super-admin: everyone; tenant admin: admins whose tenants are all its own)."""
+"""User management.
+
+Super-admins manage everyone. A tenant admin manages the tenant admins and analysts whose
+customers it has all; it does not even see the others (customers must not learn about each other).
+"""
 
 import uuid
 
@@ -30,21 +34,22 @@ class UserUpdate(BaseModel):
     full_name: Name | None = None
     role: str | None = None
     tenant_ids: list[uuid.UUID] | None = None
+    all_tenants: bool | None = None
     is_active: bool | None = None
 
 
-def _out(u: User, actor: User | None = None) -> UserAdminOut:
+def _out(u: User) -> UserAdminOut:
     return UserAdminOut(
         id=u.id, email=u.email, full_name=u.full_name, role=u.role,
-        tenants=[TenantRef(id=t.id, name=t.name) for t in u.tenants],
+        tenants=[TenantRef(id=t.id, name=t.name, is_general=t.is_global) for t in u.tenants], all_tenants=u.all_tenants,
         totp_enabled=u.totp_enabled, preferences=u.preferences or {}, is_active=u.is_active,
-        locked=sessions.is_locked(u), manageable=rules.can_manage(actor, u) if actor else True,
+        locked=sessions.is_locked(u), manageable=True,
     )
 
 
 def _target(db: Session, actor: User, user_id: uuid.UUID) -> User:
     target = db.get(User, user_id)
-    if target is None or not rules.can_manage(actor, target):
+    if target is None or not rules.can_manage(db, actor, target):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found.")
     return target
 
@@ -52,13 +57,12 @@ def _target(db: Session, actor: User, user_id: uuid.UUID) -> User:
 @router.get("", response_model=list[UserAdminOut])
 def list_users(tenant_id: uuid.UUID | None = None, db: Session = Depends(get_db), actor: User = Depends(admins)) -> list[UserAdminOut]:
     q = select(User).order_by(User.full_name)
+    if tenant_id is not None:
+        q = q.where(User.id.in_(select(user_tenants.c.user_id).where(user_tenants.c.tenant_id == tenant_id)) | User.all_tenants.is_(True))
+    users = list(db.scalars(q))
     if actor.role == Role.TENANT_ADMIN.value:
-        # Admins sharing at least one tenant; only those entirely inside the actor's tenants are manageable.
-        ids = actor.tenant_ids if tenant_id is None else ({tenant_id} & actor.tenant_ids)
-        q = q.where(User.id.in_(select(user_tenants.c.user_id).where(user_tenants.c.tenant_id.in_(ids))))
-    elif tenant_id is not None:
-        q = q.where(User.id.in_(select(user_tenants.c.user_id).where(user_tenants.c.tenant_id == tenant_id)))
-    return [_out(u, actor) for u in db.scalars(q)]
+        users = [u for u in users if rules.can_manage(db, actor, u)]
+    return [_out(u) for u in users]
 
 
 @router.patch("/{user_id}", response_model=UserAdminOut)
@@ -66,16 +70,15 @@ def update_user(user_id: uuid.UUID, body: UserUpdate, request: Request, db: Sess
     target = _target(db, actor, user_id)
     changes: dict = {}
 
-    if body.role is not None or body.tenant_ids is not None:
+    if body.role is not None or body.tenant_ids is not None or body.all_tenants is not None:
         new_role = body.role or target.role
-        if body.tenant_ids is not None:
-            new_ids = body.tenant_ids
-        else:
-            new_ids = list(target.tenant_ids) if new_role == Role.TENANT_ADMIN.value else []
-        if actor.role != Role.SUPER_ADMIN.value:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Only a super-admin can change roles or tenants.")
+        content = new_role in rules.CONTENT_ROLES
+        new_all = (body.all_tenants if body.all_tenants is not None else target.all_tenants) if content else False
+        new_ids = (body.tenant_ids if body.tenant_ids is not None else list(target.tenant_ids)) if content else []
+        if target.id == actor.id and actor.role != Role.SUPER_ADMIN.value:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "You cannot change your own role or customers.")
         try:
-            tenants = rules.check_role_assignment(db, actor, new_role, new_ids)
+            tenants = rules.check_role_assignment(db, actor, new_role, new_ids, new_all)
         except rules.RuleError as e:
             raise HTTPException(e.status, e.message) from None
         if new_role != target.role and rules.is_last_super_admin(db, target):
@@ -85,7 +88,9 @@ def update_user(user_id: uuid.UUID, body: UserUpdate, request: Request, db: Sess
         old_names, new_names = sorted(t.name for t in target.tenants), sorted(t.name for t in tenants)
         if old_names != new_names:
             changes["tenants"] = [old_names, new_names]
-        target.role, target.tenants = new_role, tenants
+        if new_all != target.all_tenants:
+            changes["all_tenants"] = [target.all_tenants, new_all]
+        target.role, target.tenants, target.all_tenants = new_role, tenants, new_all
 
     if body.full_name is not None:
         changes["full_name"] = [target.full_name, body.full_name.strip()]
@@ -100,10 +105,10 @@ def update_user(user_id: uuid.UUID, body: UserUpdate, request: Request, db: Sess
         changes["is_active"] = body.is_active
 
     db.commit()
-    if changes.get("is_active") is False or "role" in changes or "tenants" in changes:
+    if changes.get("is_active") is False or {"role", "tenants", "all_tenants"} & changes.keys():
         sessions.revoke_all_sessions(db, target)
     log_event(db, "user.updated", actor=actor, tenant_id=rules.single_tenant(target), target=target.email, ip=client_ip(request), detail=changes)
-    return _out(target, actor)
+    return _out(target)
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)

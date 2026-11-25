@@ -7,7 +7,7 @@ import { Icon } from "../components/Icon";
 import { Modal } from "../components/Modal";
 import { PageHead } from "../layouts/AdminShell";
 
-// Shared by the platform admin (all users) and the tenant admin (admins of its own tenants).
+// Shared by the platform admin (all users) and the tenant admin (the users it can manage).
 export function Users() {
   const { user: me } = useAuth();
   const isSuper = me?.role === "super_admin";
@@ -28,8 +28,10 @@ export function Users() {
   useEffect(load, [load]);
 
   const { current } = useCurrentTenant();
-  const scope = (role: Role, list: TenantRef[]) =>
-    role === "super_admin" ? "Platform" : role === "analyst" ? "All customers" : list.map((t) => t.name).join(", ") || "—";
+  const canGiveAll = isSuper || !!me?.all_tenants;
+  const scope = (role: Role, list: TenantRef[], all: boolean) =>
+    role === "super_admin" ? "Platform" : all ? "All customers (also future)"
+      : [...list].sort((a, b) => Number(!!b.is_general) - Number(!!a.is_general)).map((t) => t.name).join(", ") || "—";
 
   async function resetTwoFactor(u: AdminUser) {
     try {
@@ -60,7 +62,7 @@ export function Users() {
                 <tr key={u.id}>
                   <td><strong>{u.full_name}</strong><div className="muted small">{u.email}</div></td>
                   <td>{ROLE_LABEL[u.role]}</td>
-                  <td>{scope(u.role, u.tenants)}</td>
+                  <td>{scope(u.role, u.tenants, u.all_tenants)}</td>
                   <td>
                     {!u.is_active ? <span className="pill danger">Disabled</span>
                       : u.locked ? <span className="pill warn">Locked</span>
@@ -69,10 +71,9 @@ export function Users() {
                   </td>
                   <td>
                     <div className="actions">
-                      {!u.manageable && <span className="muted small" title="This admin also manages customers that are not yours">other customers</span>}
-                      <button className="icon-btn" aria-label={`Edit ${u.email}`} disabled={!u.manageable} onClick={() => setEditing(u)}><Icon name="pencil" /></button>
+                      <button className="icon-btn" aria-label={`Edit ${u.email}`} onClick={() => setEditing(u)}><Icon name="pencil" /></button>
                       {isSuper && <button className="icon-btn" aria-label={`Reset 2FA for ${u.email}`} title="Reset 2FA" onClick={() => resetTwoFactor(u)}><Icon name="key" /></button>}
-                      <button className="icon-btn danger" aria-label={`Delete ${u.email}`} disabled={u.id === me?.id || !u.manageable} onClick={() => setDeleting(u)}><Icon name="trash" /></button>
+                      <button className="icon-btn danger" aria-label={`Delete ${u.email}`} disabled={u.id === me?.id} onClick={() => setDeleting(u)}><Icon name="trash" /></button>
                     </div>
                   </td>
                 </tr>
@@ -90,7 +91,7 @@ export function Users() {
                   <tr key={i.id}>
                     <td><strong>{i.full_name}</strong><div className="muted small">{i.email}</div></td>
                     <td>{ROLE_LABEL[i.role]}</td>
-                    <td>{scope(i.role, i.tenants)}</td>
+                    <td>{scope(i.role, i.tenants, i.all_tenants)}</td>
                     <td className="muted">{new Date(i.expires_at).toLocaleString()}</td>
                     <td><div className="actions"><button className="icon-btn danger" aria-label={`Revoke invitation for ${i.email}`} onClick={() => revokeInvite(i)}><Icon name="trash" /></button></div></td>
                   </tr>
@@ -101,8 +102,8 @@ export function Users() {
         )}
       </div>
 
-      {inviting && <InviteForm isSuper={isSuper} tenants={tenants} myTenant={current?.id ?? null} onClose={() => setInviting(false)} onDone={() => load()} />}
-      {editing && <EditUser user={editing} isSuper={isSuper} isSelf={editing.id === me?.id} tenants={tenants} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />}
+      {inviting && <InviteForm isSuper={isSuper} canGiveAll={canGiveAll} tenants={tenants} myTenant={current?.id ?? null} onClose={() => setInviting(false)} onDone={() => load()} />}
+      {editing && <EditUser user={editing} isSuper={isSuper} canGiveAll={canGiveAll} isSelf={editing.id === me?.id} tenants={tenants} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />}
       {deleting && (
         <Modal danger title={`Delete ${deleting.full_name}?`} onClose={() => setDeleting(null)}
           footer={<><button className="btn" onClick={() => setDeleting(null)}>Cancel</button>
@@ -117,44 +118,64 @@ export function Users() {
   );
 }
 
-function TenantPicker({ tenants, selected, onChange }: { tenants: Tenant[]; selected: string[]; onChange: (ids: string[]) => void }) {
-  const customers = tenants.filter((t) => !t.is_global);
-  const toggle = (id: string) => onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
+interface Access { tenantIds: string[]; all: boolean }
+
+/** Customers of a tenant admin or an analyst: ticks, General first and on by default, or all customers. */
+function AccessPicker({ tenants, value, onChange, canGiveAll }: {
+  tenants: Tenant[]; value: Access; onChange: (a: Access) => void; canGiveAll: boolean;
+}) {
+  const ordered = [...tenants].sort((a, b) => Number(b.is_global) - Number(a.is_global) || a.name.localeCompare(b.name));
+  const toggle = (id: string) => onChange({ ...value, tenantIds: value.tenantIds.includes(id) ? value.tenantIds.filter((x) => x !== id) : [...value.tenantIds, id] });
   return (
     <fieldset className="field tenant-picker">
-      <legend>Customers ({selected.length} selected)</legend>
-      {customers.length === 0 && <span className="muted small">No customer tenant yet.</span>}
-      {customers.map((t) => (
-        <label key={t.id} className="check"><input type="checkbox" checked={selected.includes(t.id)} onChange={() => toggle(t.id)} />{t.name}</label>
+      <legend>Customers {value.all ? "(all)" : `(${value.tenantIds.length} selected)`}</legend>
+      {canGiveAll && (
+        <label className="check all-customers">
+          <input type="checkbox" checked={value.all} onChange={(e) => onChange({ ...value, all: e.target.checked })} />
+          <span><strong>All customers, including future ones</strong><br /><span className="muted small">New customers are added automatically.</span></span>
+        </label>
+      )}
+      {!value.all && ordered.map((t) => (
+        <label key={t.id} className="check">
+          <input type="checkbox" checked={value.tenantIds.includes(t.id)} onChange={() => toggle(t.id)} />
+          {t.name}{t.is_global && <span className="muted small"> · shared documentation</span>}
+        </label>
       ))}
     </fieldset>
   );
 }
 
-function RoleAndTenants({ role, setRole, tenantIds, setTenantIds, tenants }: {
-  role: Role; setRole: (r: Role) => void; tenantIds: string[]; setTenantIds: (t: string[]) => void; tenants: Tenant[];
+const ROLE_HELP: Record<Role, string> = {
+  analyst: "Analyst (chat on the chosen customers)",
+  tenant_admin: "Tenant admin (manages the chosen customers)",
+  super_admin: "Super-admin (platform only, no customer content)",
+};
+
+function RoleAndAccess({ role, setRole, access, setAccess, tenants, isSuper, canGiveAll }: {
+  role: Role; setRole: (r: Role) => void; access: Access; setAccess: (a: Access) => void; tenants: Tenant[]; isSuper: boolean; canGiveAll: boolean;
 }) {
+  const roles: Role[] = isSuper ? ["analyst", "tenant_admin", "super_admin"] : ["analyst", "tenant_admin"];
   return (
     <>
       <label className="field">Role
         <select className="input" value={role} onChange={(e) => setRole(e.target.value as Role)}>
-          <option value="analyst">Analyst (chat, all customers)</option>
-          <option value="tenant_admin">Tenant admin (chosen customers)</option>
-          <option value="super_admin">Super-admin (platform)</option>
+          {roles.map((r) => <option key={r} value={r}>{ROLE_HELP[r]}</option>)}
         </select>
       </label>
-      {role === "tenant_admin" && <TenantPicker tenants={tenants} selected={tenantIds} onChange={setTenantIds} />}
+      {role !== "super_admin" && <AccessPicker tenants={tenants} value={access} onChange={setAccess} canGiveAll={canGiveAll} />}
     </>
   );
 }
 
-function InviteForm({ isSuper, tenants, myTenant, onClose, onDone }: {
-  isSuper: boolean; tenants: Tenant[]; myTenant: string | null; onClose: () => void; onDone: () => void;
+function InviteForm({ isSuper, canGiveAll, tenants, myTenant, onClose, onDone }: {
+  isSuper: boolean; canGiveAll: boolean; tenants: Tenant[]; myTenant: string | null; onClose: () => void; onDone: () => void;
 }) {
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
-  const [role, setRole] = useState<Role>(isSuper ? "analyst" : "tenant_admin");
-  const [tenantIds, setTenantIds] = useState<string[]>(myTenant ? [myTenant] : []);
+  const [role, setRole] = useState<Role>("analyst");
+  // General is on by default, plus the customer the tenant admin is working on.
+  const general = tenants.find((t) => t.is_global)?.id;
+  const [access, setAccess] = useState<Access>({ tenantIds: [general, myTenant].filter((x): x is string => !!x && x !== undefined).filter((x, i, a) => a.indexOf(x) === i), all: false });
   const [result, setResult] = useState<InvitationCreated | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -166,7 +187,8 @@ function InviteForm({ isSuper, tenants, myTenant, onClose, onDone }: {
     try {
       const r = await api<InvitationCreated>("/invitations", {
         method: "POST",
-        body: { email, full_name: fullName, role, tenant_ids: role === "tenant_admin" ? tenantIds : [] },
+        body: role === "super_admin" ? { email, full_name: fullName, role }
+          : { email, full_name: fullName, role, tenant_ids: access.all ? [] : access.tenantIds, all_tenants: access.all },
       });
       setResult(r);
       onDone();
@@ -199,24 +221,20 @@ function InviteForm({ isSuper, tenants, myTenant, onClose, onDone }: {
       <form id="invite-form" className="stack" onSubmit={submit}>
         <label className="field">Full name<input className="input" value={fullName} onChange={(e) => setFullName(e.target.value)} required autoFocus /></label>
         <label className="field">Email<input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
-        {isSuper
-          ? <RoleAndTenants role={role} setRole={setRole} tenantIds={tenantIds} setTenantIds={setTenantIds} tenants={tenants} />
-          : <>
-              <span className="muted small">The new user will be a tenant admin. Choose which of your customers.</span>
-              <TenantPicker tenants={tenants} selected={tenantIds} onChange={setTenantIds} />
-            </>}
+        <RoleAndAccess role={role} setRole={setRole} access={access} setAccess={setAccess} tenants={tenants} isSuper={isSuper} canGiveAll={canGiveAll} />
+        {!isSuper && <span className="muted small">You can give only the customers you have yourself.</span>}
         {error && <div className="error" role="alert">{error}</div>}
       </form>
     </Modal>
   );
 }
 
-function EditUser({ user, isSuper, isSelf, tenants, onClose, onSaved }: {
-  user: AdminUser; isSuper: boolean; isSelf: boolean; tenants: Tenant[]; onClose: () => void; onSaved: () => void;
+function EditUser({ user, isSuper, canGiveAll, isSelf, tenants, onClose, onSaved }: {
+  user: AdminUser; isSuper: boolean; canGiveAll: boolean; isSelf: boolean; tenants: Tenant[]; onClose: () => void; onSaved: () => void;
 }) {
   const [fullName, setFullName] = useState(user.full_name);
   const [role, setRole] = useState<Role>(user.role);
-  const [tenantIds, setTenantIds] = useState<string[]>(user.tenants.map((t) => t.id));
+  const [access, setAccess] = useState<Access>({ tenantIds: user.tenants.map((t) => t.id), all: user.all_tenants });
   const [active, setActive] = useState(user.is_active);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -229,9 +247,12 @@ function EditUser({ user, isSuper, isSelf, tenants, onClose, onSaved }: {
     if (fullName !== user.full_name) body.full_name = fullName;
     if (active !== user.is_active) body.is_active = active;
     const before = user.tenants.map((t) => t.id).sort().join();
-    if (isSuper && (role !== user.role || (role === "tenant_admin" && tenantIds.slice().sort().join() !== before))) {
+    if (!isSelf && (role !== user.role || access.all !== user.all_tenants || access.tenantIds.slice().sort().join() !== before)) {
       body.role = role;
-      body.tenant_ids = role === "tenant_admin" ? tenantIds : [];
+      if (role !== "super_admin") {
+        body.tenant_ids = access.all ? [] : access.tenantIds;
+        body.all_tenants = access.all;
+      }
     }
     try {
       await api(`/users/${user.id}`, { method: "PATCH", body });
@@ -249,7 +270,7 @@ function EditUser({ user, isSuper, isSelf, tenants, onClose, onSaved }: {
       <form id="edit-user" className="stack" onSubmit={submit}>
         <div className="muted small">{user.email}</div>
         <label className="field">Full name<input className="input" value={fullName} onChange={(e) => setFullName(e.target.value)} required /></label>
-        {isSuper && <RoleAndTenants role={role} setRole={setRole} tenantIds={tenantIds} setTenantIds={setTenantIds} tenants={tenants} />}
+        {!isSelf && <RoleAndAccess role={role} setRole={setRole} access={access} setAccess={setAccess} tenants={tenants} isSuper={isSuper} canGiveAll={canGiveAll} />}
         {!isSelf && (
           <label className="check"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> Account active</label>
         )}

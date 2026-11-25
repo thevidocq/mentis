@@ -3,12 +3,12 @@
 ## Ask a question
 
 1. Click **New chat**.
-2. Choose the customer: type `@` and pick it from the list (arrows and Enter work), or click the customer button under the box. **All customers** is the default.
+2. Choose the customer: type `@` and pick it from the list (arrows and Enter work), or click the customer button under the box. When you have several customers, **All my customers** (or **All customers**) is the default.
 3. Write the question and press **Enter**. **Shift+Enter** starts a new line.
 
 > The customer is fixed with the first message. After that, typing `@` shows the list in grey: start a new chat to ask about another customer. This keeps answers about different customers from mixing.
 
-With a customer selected, Mentis searches that customer's documentation plus the **General** documentation shared by all customers (unless the customer turned it off). With **All customers** it searches every active customer.
+With a customer selected, Mentis searches that customer's documentation plus the **General** documentation shared by all customers (unless the customer turned it off). With **All my customers** it searches every active customer assigned to you. General is used only if it is assigned to you.
 
 ## Read the answer
 

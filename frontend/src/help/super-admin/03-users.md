@@ -4,10 +4,13 @@
 
 1. Open **Users** and select **Invite user**.
 2. Enter name and email, then choose the role:
-    - **Analyst**: chat across all customers
-    - **Tenant admin**: tick the customers they administer (one or more)
-    - **Super-admin**: full platform access
-3. Select **Send invitation**.
+    - **Analyst**: chat on the ticked customers
+    - **Tenant admin**: manages the ticked customers (documents, settings, users) and chats on them
+    - **Super-admin**: platform management only (no chat, no documents)
+3. For analysts and tenant admins, choose the customers:
+    - tick one or more customers. **General** (the shared documentation) is ticked by default: untick it if the user must not see it. A tenant admin with General manages the General documents.
+    - or tick **All customers, including future ones**: the user sees every customer, also those created later.
+4. Select **Send invitation**.
 
 If SMTP is configured, the user receives an email. Otherwise Mentis shows the link: copy it and send it yourself. Links work once and expire after 72 hours. Inviting the same email again replaces the pending invitation.
 
@@ -20,17 +23,21 @@ If SMTP is configured, the user receives an email. Otherwise Mentis shows the li
 
 ## Edit, disable, delete
 
-- Pencil icon: change name, role, the customers of a tenant admin, or turn the account off. Disabling, changing the role or the customers signs the user out everywhere.
+- Pencil icon: change name, role, customers, or turn the account off. Disabling, changing the role or the customers signs the user out everywhere.
 - Key icon: **reset 2FA** when a user lost their phone.
 - Trash icon: delete the user.
 
 The last active super-admin cannot be disabled, demoted or deleted, and nobody can delete themselves.
 
-## Tenant admins of several customers
+## Who manages whom
 
-A tenant admin can administer several customers. In the tenant area a **customer selector** at the top of the menu chooses which one the pages show. In the chat, `@` lists only their customers, plus **All my customers**.
+Tenant admins also invite and edit tenant admins and analysts, but only with customers they have themselves. A tenant admin with **All customers** can give all customers. Tenant admins never see or change super-admins, nor users who have customers they do not have. Everything is recorded in **Logs**.
 
-When a customer is deleted, its admins lose it; an admin left with no customer is deleted.
+## Users with several customers
+
+In the tenant area a **customer selector** at the top of the menu chooses which customer the pages show. In the chat, `@` lists only the user's customers, plus **All my customers**.
+
+When a customer is deleted, its users lose it; a tenant admin left with no customer is deleted.
 
 ## Pending invitations
 

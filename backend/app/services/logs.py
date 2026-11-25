@@ -12,9 +12,9 @@ _log = logging.getLogger("mentis")
 
 
 def _only_tenant(actor: User | None) -> uuid.UUID | None:
-    if actor is None or actor.role != "tenant_admin":
+    if actor is None or actor.role == "super_admin" or actor.all_tenants:
         return None
-    ids = actor.tenant_ids
+    ids = {t.id for t in actor.tenants if not t.is_global}
     return next(iter(ids)) if len(ids) == 1 else None
 
 

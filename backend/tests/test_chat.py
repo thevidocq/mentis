@@ -323,7 +323,9 @@ def test_super_admin_changes_tenants_and_deleting_one_keeps_the_admin(super_admi
     r = super_admin.patch(f"/api/users/{ta_id}", json={"tenant_ids": [alfa["id"], beta["id"]]})
     assert r.status_code == 200 and sorted(t["name"] for t in r.json()["tenants"]) == ["Alfa", "Beta"]
     assert super_admin.patch(f"/api/users/{ta_id}", json={"tenant_ids": []}).status_code == 422
-    assert super_admin.patch(f"/api/users/{ta_id}", json={"role": "analyst"}).json()["tenants"] == []
+    # Analysts keep their customers; super-admins have none.
+    assert [t["name"] for t in super_admin.patch(f"/api/users/{ta_id}", json={"role": "analyst"}).json()["tenants"]] == ["Alfa", "Beta"]
+    assert super_admin.patch(f"/api/users/{ta_id}", json={"role": "super_admin"}).json()["tenants"] == []
     super_admin.patch(f"/api/users/{ta_id}", json={"role": "tenant_admin", "tenant_ids": [alfa["id"], beta["id"]]})
     # A pending invitation on Alfa and Beta loses Alfa; one only on Alfa disappears.
     super_admin.post("/api/invitations", json={"email": "p1@example.com", "full_name": "P1", "role": "tenant_admin", "tenant_ids": [alfa["id"], beta["id"]]})

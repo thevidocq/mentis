@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models import Chat, ChatMessage, Role, Tenant, User
-from app.services import llm, prompts, retrieval
+from app.services import access, llm, prompts, retrieval
 from app.services.llm_config import providers_for
 
 HISTORY_TURNS = 6
@@ -32,27 +32,28 @@ class Answer:
 
 
 def all_label(user: User | None) -> str:
-    return "All my customers" if user is not None and user.role == Role.TENANT_ADMIN.value else "All customers"
+    return "All customers" if user is not None and user.all_tenants else "All my customers"
 
 
 def scope_tenants(db: Session, chat: Chat) -> tuple[list[Tenant], str, Tenant | None]:
-    """Tenants searched for this chat, the scope label, and the scope tenant (None = all customers)."""
-    general = db.scalar(select(Tenant).where(Tenant.is_global.is_(True)))
+    """Tenants searched for this chat, the scope label, and the scope tenant (None = all the user's customers).
+
+    Access is checked again on every question: a customer removed from the user is not searched.
+    General is searched when the user has it and the customer includes it.
+    """
+    owner = db.get(User, chat.user_id)
+    if owner is None:
+        return [], "Unknown customer", None
+    visible = [t for t in access.tenants(db, owner) if t.status != "disabled"]
+    general = next((t for t in visible if t.is_global), None)
     if chat.scope_tenant_id is None:
-        owner = db.get(User, chat.user_id)
-        if owner is not None and owner.role == Role.TENANT_ADMIN.value:
-            # A tenant admin's "all customers" means all of its own customers (as they are now), plus General.
-            tenants = [t for t in owner.tenants if t.status != "disabled"]
-            if general is not None and tenants:
-                tenants.append(general)
-            return tenants, all_label(owner), None
-        tenants = list(db.scalars(select(Tenant).where(Tenant.status != "disabled")))
-        return tenants, "All customers", None
-    tenant = db.get(Tenant, chat.scope_tenant_id)
+        customers = [t for t in visible if not t.is_global]
+        return customers + ([general] if general and customers else []), all_label(owner), None
+    tenant = next((t for t in visible if t.id == chat.scope_tenant_id), None)
     if tenant is None:
         return [], "Unknown customer", None
     tenants = [tenant]
-    if general is not None and general.id != tenant.id and (tenant.settings or {}).get("include_general", True):
+    if general is not None and (tenant.settings or {}).get("include_general", True):
         tenants.append(general)
     return tenants, tenant.name, tenant
 

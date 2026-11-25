@@ -41,7 +41,7 @@ export function Tenants() {
                 <tr key={t.id}>
                   <td><strong>{t.name}</strong><div className="muted small">{t.slug}</div></td>
                   <td>{t.is_global ? <span className="pill accent">Cross-customer</span> : "Customer"}</td>
-                  <td>{t.is_global ? "—" : t.users}</td>
+                  <td>{t.users}</td>
                   <td><span className={`pill ${statusPill(t.status)}`}>{t.status}</span></td>
                   <td>
                     <div className="actions">

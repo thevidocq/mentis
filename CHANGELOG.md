@@ -6,6 +6,28 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-25
+
+### Added
+- **Granular access**: tenant admins and analysts see only the customers ticked on their account. **General** (the shared documentation) is ticked by default and can be removed. **All customers, including future ones** gives every customer, also those created later. Chat scopes, retrieval, documents, LLM, usage and logs all follow the same rules (`services/access.py`), checked again on every question.
+- Tenant admins invite and edit **tenant admins and analysts**, only with customers they have themselves (all customers only if they have all). Users they cannot manage are not listed. A tenant admin cannot change its own role or customers. Changing a user's customers signs them out everywhere.
+- **General is managed by tenant admins** who have it, from the usual Documents page; every action is logged with the user.
+- Per customer, the super-admin decides whether its tenant admins may choose the LLM (`admin_can_set_llm`, default on); when off, the LLM page is read-only.
+- Migration 0008: `all_tenants` on users and invitations. Existing analysts get **All customers** (as before); existing tenant admins and their pending invitations also get General.
+
+### Changed
+- **The super-admin no longer uses the chat or manages documents**: platform management only. The General documentation page left the platform menu.
+- Tenant admins see AI providers only as name and model (no URL, no prices) and LLM usage without costs.
+
+### Fixed
+- **TOTP codes could be replayed** within their 90-second window (e.g. a code seen over a shoulder): each code now works once (migration 0006). A still-valid enrollment step can no longer replace an authenticator already set up.
+- **Wrong current password** on password change was not counted: it now counts like a failed sign-in (5 lock the account and end the session).
+- **Document versions stuck** in Processing after a worker crash or restart stayed there forever: after the ingestion timeout they become Failed ("Processing was interrupted", use Retry); versions Queued whose job was lost are queued again (migration 0007, checked every 10 minutes by the worker).
+- Expired sign-in sessions and invitations expired for a week were never deleted: removed by the daily purge.
+- When the session expires or is revoked, the app now returns to the sign-in page instead of showing "Not authenticated" errors.
+- Blank names (only spaces) were accepted for users, invitations and chat titles.
+- These fixes (second bugfix round) were listed under 0.2.0 but did not make it into that release.
+
 ## [0.2.0] - 2026-11-25
 
 ### Added
@@ -26,12 +48,6 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 - Interactive API docs (`/api/docs`, `/api/openapi.json`) were public; now off unless `MENTIS_API_DOCS=true`.
 - Syslog forwarding could lose events raised inside ingestion jobs (forked processes); they are now sent synchronously there.
 - Stray files removed from the repository (a shellcheck wheel).
-- **TOTP codes could be replayed** within their 90-second window (e.g. a code seen over a shoulder): each code now works once (migration 0006). A still-valid enrollment step can no longer replace an authenticator already set up.
-- **Wrong current password** on password change was not counted: it now counts like a failed sign-in (5 lock the account and end the session).
-- **Document versions stuck** in Processing after a worker crash or restart stayed there forever: after the ingestion timeout they become Failed ("Processing was interrupted", use Retry); versions Queued whose job was lost are queued again (migration 0007, checked every 10 minutes by the worker).
-- Expired sign-in sessions and invitations expired for a week were never deleted: removed by the daily purge.
-- When the session expires or is revoked, the app now returns to the sign-in page instead of showing "Not authenticated" errors.
-- Blank names (only spaces) were accepted for users, invitations and chat titles.
 
 ## [0.1.1] - 2026-11-25
 

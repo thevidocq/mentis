@@ -205,7 +205,7 @@ def test_tenant_admin_cannot_reach_other_tenant(super_admin):
 
 def test_analyst_has_no_document_access(super_admin):
     t = _tenant(super_admin)
-    r = super_admin.post("/api/invitations", json={"email": "an@example.com", "full_name": "An", "role": "analyst"})
+    r = super_admin.post("/api/invitations", json={"email": "an@example.com", "full_name": "An", "role": "analyst", "all_tenants": True})
     token = r.json()["invite_url"].rsplit("/", 1)[1]
     new_client(super_admin.app).post(f"/api/invitations/accept/{token}", json={"password": PASSWORD})
     an = new_client(super_admin.app)

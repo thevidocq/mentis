@@ -15,4 +15,4 @@ The cost uses the prices you set on each provider in **AI providers** (**Price i
 
 ## Where the numbers come from
 
-They are computed from the chat events in **Logs**, so they go back as far as the log retention period. Tenant admins see the figures of their own customer on their **LLM** page.
+They are computed from the chat events in **Logs**, so they go back as far as the log retention period. Tenant admins see the figures of their own customers on their **LLM** page, without costs.

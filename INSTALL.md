@@ -44,7 +44,7 @@ Next steps in the interface:
 1. **Email (SMTP)**: so invitations are emailed. Without it, the invitation link is shown to you to share. `MENTIS_PUBLIC_URL` must be the address users open.
 2. **Tenants**: onboard each customer.
 3. **AI providers**: add the LLM that writes the answers (preset **Claude Haiku**: paste the Anthropic API key) and click **Test**.
-4. **Users**: invite tenant admins (one or more customers each) and analysts (all customers).
+4. **Users**: invite tenant admins and analysts, ticking their customers (or **All customers, including future ones**). Give **General** to at least one tenant admin: General documents are managed by tenant admins, not by the super-admin.
 
 ## Publish it with HTTPS
 

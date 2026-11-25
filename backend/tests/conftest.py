@@ -1,4 +1,5 @@
 import os
+import re
 
 os.environ["MENTIS_SECRET_KEY"] = "test-secret-key-0123456789"
 os.environ["MENTIS_COOKIE_SECURE"] = "false"
@@ -80,10 +81,37 @@ def new_client(app):
     return c
 
 
+CONTENT_PATHS = re.compile(r"^/api/(chats\b|tenants/[^/]+/documents\b)")
+
+
 @pytest.fixture
 def super_admin(client, admin_setup):
-    """`client` logged in as the super-admin."""
+    """`client` logged in as the super-admin.
+
+    Super-admins see no customer content, so for convenience the requests to documents and
+    chats made through this client go to `client.content`: a tenant admin of all customers.
+    Use `client.direct(method, url, ...)` to send them as the super-admin itself.
+    """
+    from app.core.security import hash_password
+    from app.models import User
+
     login(client, "admin@example.com")
+    db = next(db_module.get_db())
+    db.add(User(email="content@example.com", full_name="Content Admin", password_hash=hash_password(PASSWORD),
+                role="tenant_admin", all_tenants=True))
+    db.commit()
+    db.close()
+    content = new_client(client.app)
+    login(content, "content@example.com")
+    client.content = content
+    original = client.request
+    client.direct = original
+
+    def routed(method, url, *args, **kwargs):
+        target = content.request if CONTENT_PATHS.match(str(url).split("?")[0]) else original
+        return target(method, url, *args, **kwargs)
+
+    client.request = routed
     return client
 
 

@@ -8,7 +8,7 @@ import { Account } from "./pages/Account";
 import { AcceptInvite } from "./pages/AcceptInvite";
 import { ChatPage } from "./pages/chat/ChatPage";
 import { Help } from "./pages/Help";
-import { GeneralDocuments, TenantDocuments, GeneralPreview, TenantPreview } from "./pages/documents/routes";
+import { TenantDocuments, TenantPreview } from "./pages/documents/routes";
 import { Login } from "./pages/Login";
 import { Placeholder } from "./pages/Placeholder";
 import { Setup } from "./pages/Setup";
@@ -43,8 +43,6 @@ function PlatformArea() {
         <Route path="users" element={<Users />} />
         <Route path="smtp" element={<SmtpSettings />} />
         <Route path="status" element={<ServiceStatus />} />
-        <Route path="general" element={<GeneralDocuments />} />
-        <Route path="general/preview/:versionId" element={<GeneralPreview />} />
         <Route path="ai" element={<AiProviders />} />
         <Route path="embedding" element={<EmbeddingSettings />} />
         <Route path="usage" element={<Usage />} />
@@ -99,8 +97,8 @@ export function App() {
       <Route path="/help" element={<RequireRole><Help /></RequireRole>} />
       <Route path="/admin/*" element={<RequireRole roles={["super_admin"]}><PlatformArea /></RequireRole>} />
       <Route path="/tenant/*" element={<RequireRole roles={["tenant_admin"]}><TenantArea /></RequireRole>} />
-      <Route path="/chat" element={<RequireRole><ChatPage /></RequireRole>} />
-      <Route path="/chat/:chatId" element={<RequireRole><ChatPage /></RequireRole>} />
+      <Route path="/chat" element={<RequireRole roles={["tenant_admin", "analyst"]}><ChatPage /></RequireRole>} />
+      <Route path="/chat/:chatId" element={<RequireRole roles={["tenant_admin", "analyst"]}><ChatPage /></RequireRole>} />
       <Route path="*" element={user ? <Navigate to={homePath(user)} replace /> : <Navigate to="/login" replace />} />
     </Routes>
   );

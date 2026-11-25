@@ -36,7 +36,7 @@ from app.models import (
     VersionStatus,
 )
 from app.models.base import utcnow
-from app.services import jobs, retrieval, storage, versions
+from app.services import access, jobs, retrieval, storage, versions
 from app.services.embeddings import EmbeddingError
 from app.services.logs import log_event
 from app.services.uploads import UploadError, check_upload, safe_filename
@@ -118,7 +118,7 @@ class Rename(BaseModel):
 def _tenant(db: Session, user: User, tenant_id: uuid.UUID) -> Tenant:
     tenant = db.get(Tenant, tenant_id)
     allowed = tenant is not None and (
-        user.administers(tenant_id)
+        access.administers(db, user, tenant_id)
     )
     if not allowed:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found.")
