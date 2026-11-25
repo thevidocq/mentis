@@ -88,6 +88,8 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)) -
         log_event(db, "auth.login.failed", level="warning", actor_email=email, ip=ip, detail={"reason": "unknown_user"})
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, INVALID)
     if not user.is_active or sessions.is_locked(user):
+        # Same work as a real check, so the response time does not reveal disabled or locked accounts.
+        verify_password(body.password, _DUMMY_HASH)
         log_event(db, "auth.login.blocked", level="warning", actor=user, ip=ip)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, INVALID)
     if not verify_password(body.password, user.password_hash):
@@ -126,12 +128,11 @@ def totp_verify(body: VerifyRequest, request: Request, response: Response, db: S
     if secret is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Set up the authenticator first.")
     step = totp_step(secret, body.code)
-    replayed = step is not None and user.totp_last_step is not None and step <= user.totp_last_step
+    replayed = step is not None and not sessions.claim_totp_step(db, user, step)
     if step is None or replayed:
         sessions.register_failed_login(db, user)
         log_event(db, "auth.mfa.failed", level="warning", actor=user, ip=ip, detail={"reason": "replayed" if replayed else "wrong_code"})
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "This code was already used. Wait for the next one." if replayed else "Invalid code.")
-    user.totp_last_step = step
 
     if purpose == PURPOSE_ENROLL:
         user.totp_enabled = True

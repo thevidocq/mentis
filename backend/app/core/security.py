@@ -71,7 +71,7 @@ def totp_step(secret: str, code: str, now: float | None = None) -> int | None:
     import time
 
     code = code.strip().replace(" ", "")
-    if not code.isdigit():
+    if not (code.isascii() and code.isdigit()):  # compare_digest refuses non-ASCII strings
         return None
     totp = pyotp.TOTP(secret)
     now = time.time() if now is None else now
@@ -108,7 +108,7 @@ def read_challenge(secret_key: str, token: str) -> dict | None:
     try:
         body, sig = token.split(".", 1)
         expected = _b64(hmac.new(secret_key.encode(), body.encode(), hashlib.sha256).digest())
-        if not hmac.compare_digest(sig, expected):
+        if not hmac.compare_digest(sig.encode(), expected.encode()):
             return None
         payload = json.loads(_unb64(body))
     except (ValueError, json.JSONDecodeError):

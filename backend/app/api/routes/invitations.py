@@ -85,7 +85,8 @@ def create_invitation(body: InviteCreate, request: Request, db: Session = Depend
         raise HTTPException(status.HTTP_409_CONFLICT, "A user with this email already exists.")
     # A new invitation replaces the pending one: only if the actor could revoke that one too.
     pending = db.scalar(select(Invitation).where(Invitation.email == email, Invitation.accepted_at.is_(None)))
-    if pending is not None and not _manageable(db, actor, pending):
+    # An expired invitation no longer counts: anyone may invite the person again.
+    if pending is not None and not svc.is_expired(pending) and not _manageable(db, actor, pending):
         raise HTTPException(status.HTTP_409_CONFLICT, "This email already has a pending invitation from another admin.")
 
     inv, token = svc.create(db, email=email, full_name=body.full_name.strip(), role=body.role,
