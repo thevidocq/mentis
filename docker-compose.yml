@@ -1,7 +1,21 @@
-# Mentis – Docker Compose (draft)
-# Infrastructure services only. API, worker, embeddings and frontend are added in the 0.1.0 work.
+# Mentis – Docker Compose
+# Worker, embeddings and frontend are added later in the 0.1.0 work.
 
 services:
+  api:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      MENTIS_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      MENTIS_SECRET_KEY: ${MENTIS_SECRET_KEY}
+      MENTIS_COOKIE_SECURE: ${MENTIS_COOKIE_SECURE:-true}
+      MENTIS_TRUSTED_PROXIES: ${MENTIS_TRUSTED_PROXIES:-*}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8000:8000"
+
   postgres:
     image: postgres:16
     restart: unless-stopped

@@ -1,3 +1,37 @@
 # Backend
 
-FastAPI API, ingestion worker and core services. Implementation starts with the 0.1.0 work; see `docs/DESIGN.md`.
+FastAPI API and core services. See `docs/DESIGN.md` for scope.
+
+## Layout
+
+```
+app/
+  core/       settings, database, password/TOTP/session security, secret encryption
+  models/     SQLAlchemy models (tenants, users, auth sessions, log events)
+  services/   business logic (sessions and lockout, log events)
+  api/        dependencies, schemas, routes (health, setup, auth)
+  cli.py      operator commands (reset-2fa, unlock)
+migrations/   Alembic migrations (run automatically at container start)
+tests/        pytest suite (SQLite in memory)
+```
+
+## Development
+
+```bash
+cd backend
+pip install -e ".[dev]"
+pytest
+MENTIS_COOKIE_SECURE=false uvicorn app.main:app --reload   # SQLite file by default
+```
+
+New migration after changing models:
+
+```bash
+alembic revision --autogenerate -m "describe change"
+```
+
+## API conventions
+
+- Every state-changing request (`POST`, `PUT`, `PATCH`, `DELETE`) must send the header `X-Mentis-Request: 1` (CSRF protection).
+- Sessions are server-side; the browser holds an `HttpOnly`, `SameSite=Strict` cookie.
+- Login is two steps: `POST /api/auth/login` returns a short-lived challenge, then `POST /api/auth/totp/verify` (after `/totp/enroll` on first login) opens the session.
