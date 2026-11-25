@@ -7,9 +7,9 @@ FastAPI API and core services. See `docs/DESIGN.md` for scope.
 ```
 app/
   core/       settings, database, password/TOTP/session security, secret encryption
-  models/     SQLAlchemy models (tenants, users, auth sessions, log events)
-  services/   business logic (sessions and lockout, log events)
-  api/        dependencies, schemas, routes (health, setup, auth)
+  models/     SQLAlchemy models (tenants, users, auth sessions, log events, invitations, platform settings)
+  services/   business logic (sessions, logs, tenants, users rules, invitations, mail)
+  api/        dependencies, schemas, routes (health, setup, auth, tenants, users, invitations, platform)
   cli.py      operator commands (reset-2fa, unlock)
 migrations/   Alembic migrations (run automatically at container start)
 tests/        pytest suite (SQLite in memory)

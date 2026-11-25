@@ -12,7 +12,9 @@ from app.api.schemas import (
     EnrollResponse,
     LoginRequest,
     LoginResponse,
+    THEMES,
     PasswordChangeRequest,
+    ProfileUpdate,
     UserOut,
     VerifyRequest,
 )
@@ -137,6 +139,18 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db), 
 
 @router.get("/me", response_model=UserOut)
 def me(user: User = Depends(current_user)) -> UserOut:
+    return UserOut.model_validate(user, from_attributes=True)
+
+
+@router.patch("/me", response_model=UserOut)
+def update_profile(body: ProfileUpdate, db: Session = Depends(get_db), user: User = Depends(current_user)) -> UserOut:
+    if body.full_name is not None:
+        user.full_name = body.full_name.strip()
+    if body.theme is not None:
+        if body.theme not in THEMES:
+            raise HTTPException(422, f"Theme must be one of: {', '.join(THEMES)}.")
+        user.preferences = {**(user.preferences or {}), "theme": body.theme}
+    db.commit()
     return UserOut.model_validate(user, from_attributes=True)
 
 
