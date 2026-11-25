@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
-import { ROLE_LABEL, type ChatSummary } from "../../api/types";
+import { type ChatSummary } from "../../api/types";
 import { homePath, useAuth } from "../../auth/AuthContext";
 import { Icon } from "../../components/Icon";
 import { Brand } from "../../components/Logo";
 import { Modal } from "../../components/Modal";
-import { initials } from "../../layouts/AdminShell";
+import { SidebarFooter } from "../../layouts/SidebarFooter";
 import { groupByDay } from "./chatApi";
 
 interface Props {
@@ -59,15 +59,7 @@ export function ChatSidebar({ chats, query, onQuery, onNew, onRename, onDelete, 
       {user.role !== "analyst" && (
         <Link to={homePath(user)} className="user-link" style={{ padding: "10px 16px" }}><Icon name="sliders" />Administration</Link>
       )}
-      <Link to="/help" className="user-link" style={{ padding: "10px 16px" }}><Icon name="help" />Help</Link>
-      <Link to="/account" className="user-link">
-        <div className="avatar">{initials(user.full_name)}</div>
-        <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
-          <span style={{ fontWeight: 600 }}>{user.full_name}</span>
-          <span className="muted small">{ROLE_LABEL[user.role]} · Account</span>
-        </div>
-        <Icon name="chevronRight" />
-      </Link>
+      <SidebarFooter />
 
       {renaming && (
         <Modal title="Rename chat" onClose={() => setRenaming(null)}

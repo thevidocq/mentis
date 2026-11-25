@@ -49,7 +49,7 @@ One chat = one customer scope, locked at the first message; integrations are cho
 
 **`@` customer scope**
 
-- `@` opens the user's customer list: "All my customers" / "All customers" (default, when there is more than one) plus each assigned active customer.
+- `@` opens the user's customer list: "All my customers" / "All customers" (default, when there is more than one), each assigned active customer, then "General" (the shared documentation alone) when assigned.
 - The scope is fixed by the first message. Afterwards `@` shows the list greyed out with "Customer locked for this chat" and a link to start a new chat.
 - A chat started on "All customers" stays on "All customers".
 - The backend uses only the tenant stored on the chat, whatever the frontend sends.

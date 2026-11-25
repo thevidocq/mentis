@@ -39,9 +39,9 @@ def _world(sa):
 def test_super_admin_sees_no_content(super_admin, fake_llm):
     alfa, _, g = _world(super_admin)
     sa = super_admin.direct
-    assert sa("GET", f"/api/tenants/{alfa['id']}/documents").status_code == 404
-    assert sa("GET", f"/api/tenants/{g['id']}/documents").status_code == 404
-    assert sa("POST", f"/api/tenants/{g['id']}/documents", files={"file": ("x.docx", samples.docx())}).status_code == 404
+    assert sa("GET", f"/api/tenants/{alfa['id']}/documents").status_code == 403
+    assert sa("GET", f"/api/tenants/{g['id']}/documents").status_code == 403
+    assert sa("POST", f"/api/tenants/{g['id']}/documents", files={"file": ("x.docx", samples.docx())}).status_code == 403
     assert sa("GET", "/api/chats").status_code == 403
     assert sa("GET", "/api/chats/scopes").status_code == 403
     assert sa("POST", "/api/chats", json={"tenant_id": None, "message": "x"}).status_code == 403
@@ -55,7 +55,7 @@ def test_analyst_sees_only_its_customers(super_admin, fake_llm):
     _provider(super_admin)
     alfa, beta, g = _world(super_admin)
     an = _user(super_admin, "an@example.com", "analyst", tenant_ids=[alfa["id"], g["id"]])
-    assert [s["name"] for s in an.get("/api/chats/scopes").json()] == ["Alfa"]
+    assert [s["name"] for s in an.get("/api/chats/scopes").json()] == ["Alfa", "General"]
     assert an.post("/api/chats", json={"tenant_id": beta["id"], "message": "x"}).status_code == 403
     an.post("/api/chats", json={"tenant_id": None, "message": "brute force attacks escalate"})
     sent = fake_llm.requests[-1]["body"]["messages"][-1]["content"]
@@ -70,7 +70,7 @@ def test_all_customers_includes_future_ones(super_admin, fake_llm):
     _provider(super_admin)
     _world(super_admin)
     an = _user(super_admin, "an@example.com", "analyst", all_tenants=True)
-    assert [s["name"] for s in an.get("/api/chats/scopes").json()] == ["All customers", "Alfa", "Beta"]
+    assert [s["name"] for s in an.get("/api/chats/scopes").json()] == ["All customers", "Alfa", "Beta", "General"]
     _tenant(super_admin, "Gamma")
     assert "Gamma" in [s["name"] for s in an.get("/api/chats/scopes").json()]
     # A ticked analyst does not get the new customer.

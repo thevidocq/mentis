@@ -15,6 +15,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 - Per customer, the super-admin decides whether its tenant admins may choose the LLM (`admin_can_set_llm`, default on); when off, the LLM page is read-only.
 - Migration 0008: `all_tenants` on users and invitations. Existing analysts get **All customers** (as before); existing tenant admins and their pending invitations also get General.
 
+- **General as a chat scope**: `@` ends with **General**, to ask the shared documentation alone (tenant admins test it; users with only General can chat).
+- **Log out like Equalizer**: the account card at the bottom of every menu has Help (?) and a red Log out button, with the version underneath.
+
 ### Changed
 - **The super-admin no longer uses the chat or manages documents**: platform management only. The General documentation page left the platform menu.
 - Tenant admins see AI providers only as name and model (no URL, no prices) and LLM usage without costs.
@@ -26,6 +29,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 - Expired sign-in sessions and invitations expired for a week were never deleted: removed by the daily purge.
 - When the session expires or is revoked, the app now returns to the sign-in page instead of showing "Not authenticated" errors.
 - Blank names (only spaces) were accepted for users, invitations and chat titles.
+- Document pipeline review:
+  - a reindex with no documents never recorded the new embedding model, so every later upload failed asking for a reindex;
+  - after an embedding model change without reindex, questions failed with a server error: they now get a clear "run Reindex" answer;
+  - Qdrant unreachable or refusing a query gave a server error in the chat and in "test a question": now a readable error answer / 503;
+  - an upload failed with a server error when Redis was down although the file was stored: it now stays Queued and the worker's recovery queues it again;
+  - a single huge table row (a long Excel cell) became one oversized chunk that the embedding service could refuse, failing the whole document: it is now split with the header repeated; the local embedding service also runs with `--auto-truncate`;
+  - index points of a version deleted while processing are removed.
 - These fixes (second bugfix round) were listed under 0.2.0 but did not make it into that release.
 
 ## [0.2.0] - 2026-11-25

@@ -238,8 +238,13 @@ def test_scopes_and_tenant_admin_limits(super_admin, fake_llm):
     _provider(super_admin)
     alfa, beta = _setup(super_admin)
     an = _analyst(super_admin)
-    assert [s["name"] for s in an.get("/api/chats/scopes").json()] == ["All customers", "Alfa", "Beta"]
-    assert an.post("/api/chats", json={"tenant_id": _general(super_admin)["id"], "message": "x"}).status_code == 400
+    scopes = an.get("/api/chats/scopes").json()
+    assert [s["name"] for s in scopes] == ["All customers", "Alfa", "Beta", "General"] and scopes[-1]["is_general"]
+    # General alone: only the shared documentation is searched.
+    g = an.post("/api/chats", json={"tenant_id": _general(super_admin)["id"], "message": "brute force escalation"}).json()
+    assert g["chat"]["scope_name"] == "General" and g["answer"]["status"] == "not_found"
+    g = an.post("/api/chats", json={"tenant_id": _general(super_admin)["id"], "message": "phishing triage checklist"}).json()
+    assert g["answer"]["status"] == "ok" and all(c["is_general"] for c in g["answer"]["citations"])
     _invite_and_accept(super_admin, "ta@example.com", "tenant_admin", alfa["id"])
     ta = new_client(super_admin.app)
     login(ta, "ta@example.com")

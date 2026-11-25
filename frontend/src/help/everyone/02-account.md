@@ -18,4 +18,4 @@ If your session expires or is ended elsewhere, the next action takes you back to
 
 ## Sign out
 
-Use **Sign out** at the top of the Account page.
+At the bottom of the menu, next to your name: the **?** opens Help and the red arrow (**Log out**) signs you out. On a phone, open the menu with ☰. **Sign out** is also at the top of the Account page.

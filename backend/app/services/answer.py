@@ -53,7 +53,7 @@ def scope_tenants(db: Session, chat: Chat) -> tuple[list[Tenant], str, Tenant | 
     if tenant is None:
         return [], "Unknown customer", None
     tenants = [tenant]
-    if general is not None and (tenant.settings or {}).get("include_general", True):
+    if general is not None and not tenant.is_global and (tenant.settings or {}).get("include_general", True):
         tenants.append(general)
     return tenants, tenant.name, tenant
 

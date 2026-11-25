@@ -22,6 +22,7 @@ from app.services import access
 from app.services import answer as answering
 from app.services.embeddings import EmbeddingError
 from app.services.llm import LLMError
+from app.services.vector_index import VectorIndexError
 from app.services.logs import log_event
 
 router = APIRouter(prefix="/chats", tags=["chats"])
@@ -142,7 +143,7 @@ def _ask(db: Session, user: User, chat: Chat, question: str, first: bool, reques
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Write a question.")
     try:
         result = answering.answer(db, chat, question, first)
-    except (LLMError, EmbeddingError) as e:
+    except (LLMError, EmbeddingError, VectorIndexError) as e:
         result = answering.Answer(status="error", content=f"The answer could not be generated: {e}")
         log_event(db, "chat.error", kind="system", level="error", actor=user, tenant_id=chat.scope_tenant_id,
                   target=str(chat.id), detail={"error": str(e)[:300]}, commit=False)
@@ -173,11 +174,17 @@ def _ask(db: Session, user: User, chat: Chat, question: str, first: bool, reques
 
 @router.get("/scopes", response_model=list[ScopeOption])
 def scopes(db: Session = Depends(get_db), user: User = Depends(readers)) -> list[ScopeOption]:
-    """What the user can pick with @: its customers. General is not a scope: it is searched with them."""
-    own = [t for t in access.tenants(db, user) if t.status != "disabled" and not t.is_global]
+    """What the user can pick with @: its customers, then General alone (to test the shared documentation).
+
+    With a customer, General is searched too (unless that customer turns it off).
+    """
+    visible = [t for t in access.tenants(db, user) if t.status != "disabled"]
+    own = [t for t in visible if not t.is_global]
+    general = [t for t in visible if t.is_global]
     label = answering.all_label(user)
     head = [ScopeOption(id=None, name=label, is_general=False)] if len(own) > 1 or user.all_tenants else []
-    return head + [ScopeOption(id=t.id, name=t.name, is_general=False) for t in own]
+    return (head + [ScopeOption(id=t.id, name=t.name, is_general=False) for t in own]
+            + [ScopeOption(id=t.id, name=t.name, is_general=True) for t in general])
 
 
 @router.get("", response_model=list[ChatSummary])
@@ -199,8 +206,6 @@ def list_chats(q: str | None = Query(None, max_length=200), limit: int = Query(1
 @router.post("", response_model=Exchange, status_code=status.HTTP_201_CREATED)
 def new_chat(body: NewChat, request: Request, db: Session = Depends(get_db), user: User = Depends(readers)) -> Exchange:
     _check_scope(db, user, body.tenant_id)
-    if body.tenant_id is not None and db.get(Tenant, body.tenant_id).is_global:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "General is searched with every customer; pick a customer or All customers.")
     chat = Chat(user_id=user.id, scope_tenant_id=body.tenant_id)
     db.add(chat)
     db.flush()

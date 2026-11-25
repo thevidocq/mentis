@@ -99,7 +99,7 @@ export function TenantLlm() {
       <PageHead title="LLM" />
       <div className="page-body" style={{ maxWidth: 760 }}>
         <p className="muted" style={{ margin: 0 }}>Which AI model writes the answers about this customer. Analysts see the model's name under each answer.</p>
-        {current?.is_general && <div className="notice">General is the shared documentation. Its answers use the LLM of the customer being asked about, so there is nothing to set here.</div>}
+        {current?.is_general && <div className="notice">General is the shared documentation. With a customer, answers use that customer's LLM; questions on General alone use the platform default.</div>}
         {current && !current.is_general && <div className="card"><div className="card-body"><TenantLlmForm key={current.id} tenantId={current.id} /></div></div>}
         <TenantUsage />
       </div>

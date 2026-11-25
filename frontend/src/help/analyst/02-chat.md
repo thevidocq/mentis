@@ -8,7 +8,7 @@
 
 > The customer is fixed with the first message. After that, typing `@` shows the list in grey: start a new chat to ask about another customer. This keeps answers about different customers from mixing.
 
-With a customer selected, Mentis searches that customer's documentation plus the **General** documentation shared by all customers (unless the customer turned it off). With **All my customers** it searches every active customer assigned to you. General is used only if it is assigned to you.
+With a customer selected, Mentis searches that customer's documentation plus the **General** documentation shared by all customers (unless the customer turned it off). With **All my customers** it searches every active customer assigned to you. General is used only if it is assigned to you; **General** at the end of the `@` list asks the shared documentation alone.
 
 ## Read the answer
 

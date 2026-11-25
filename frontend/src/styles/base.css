@@ -215,3 +215,16 @@ tr.clickable:hover td { background: var(--raised); }
 .tenant-picker { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 0; gap: 8px; max-height: 240px; overflow-y: auto; }
 .tenant-picker legend { padding: 0 4px; }
 .tenant-switch { width: 100%; margin-top: 6px; }
+
+/* Sidebar footer: account card with Help and Log out (same pattern as Equalizer) */
+.sidebar-footer { margin-top: auto; border-top: 1px solid var(--border); padding: 10px 12px 8px; }
+.account-card { display: flex; align-items: center; gap: 4px; }
+.account-who { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; padding: 4px; border-radius: 8px; color: var(--text); text-decoration: none; }
+.account-who:hover .account-name { text-decoration: underline; }
+.account-names { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.account-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-action { border: 0; width: 32px; height: 32px; flex-shrink: 0; color: var(--muted); }
+.account-action.active { background: var(--raised); color: var(--text); }
+.account-action.danger { color: var(--danger); }
+.account-action.danger:hover { background: color-mix(in srgb, var(--danger) 14%, transparent); }
+.release-line { font-size: 11px; padding: 6px 6px 0; }

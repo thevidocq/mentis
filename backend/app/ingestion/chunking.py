@@ -34,7 +34,14 @@ def _split_table(block: str) -> list[str]:
     lines = block.splitlines()
     head, rows = lines[:2], lines[2:]
     parts, current = [], []
+    budget = MAX_CHARS - len("\n".join(head)) - 1
     for row in rows:
+        if len(row) > budget:  # one huge row (a long Excel cell): split its text, keep the header
+            if current:
+                parts.append("\n".join(head + current))
+                current = []
+            parts.extend("\n".join(head + [piece]) for piece in _split_long(row, max(budget, 200)))
+            continue
         if current and len("\n".join(head + current + [row])) > MAX_CHARS:
             parts.append("\n".join(head + current))
             current = []
@@ -44,14 +51,15 @@ def _split_table(block: str) -> list[str]:
     return parts
 
 
-def _split_long(block: str) -> list[str]:
+def _split_long(block: str, limit: int = MAX_CHARS) -> list[str]:
     sentences = re.split(r"(?<=[.!?])\s+", block)
+    target = min(TARGET_CHARS, limit)
     parts, current = [], ""
     for s in sentences:
-        while len(s) > MAX_CHARS:  # a single huge "sentence": hard cut
-            parts.append(s[:MAX_CHARS])
-            s = s[MAX_CHARS:]
-        if current and len(current) + len(s) + 1 > TARGET_CHARS:
+        while len(s) > limit:  # a single huge "sentence": hard cut
+            parts.append(s[:limit])
+            s = s[limit:]
+        if current and len(current) + len(s) + 1 > target:
             parts.append(current)
             current = s
         else:
