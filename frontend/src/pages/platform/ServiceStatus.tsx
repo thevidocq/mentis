@@ -1,26 +1,28 @@
 import { useCallback, useEffect, useState } from "react";
+import { api, errorText } from "../../api/client";
 import { Icon } from "../../components/Icon";
 import { PageHead } from "../../layouts/AdminShell";
 
-interface Health { status: string; version: string; database: string }
+interface Service { name: string; category: string; state: "ok" | "degraded" | "down"; latency_ms: number | null; detail: string }
 
-// First version: API and database. Workers, Qdrant, MinIO, embeddings, LLMs and integrations join as they ship.
+const STATE = {
+  ok: { label: "Operational", color: "var(--ok)", icon: "check" as const },
+  degraded: { label: "Degraded", color: "var(--warn)", icon: "alert" as const },
+  down: { label: "Down", color: "var(--danger)", icon: "alert" as const },
+};
+
 export function ServiceStatus() {
-  const [health, setHealth] = useState<Health | null>(null);
-  const [ms, setMs] = useState<number | null>(null);
+  const [services, setServices] = useState<Service[]>([]);
   const [at, setAt] = useState<Date | null>(null);
-  const [failed, setFailed] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const check = useCallback(async () => {
-    const t0 = performance.now();
     try {
-      const r = await fetch("/api/health");
-      setHealth(await r.json());
-      setFailed(false);
-    } catch {
-      setFailed(true);
+      setServices((await api<{ services: Service[] }>("/platform/status")).services);
+      setError(null);
+    } catch (e) {
+      setError(errorText(e));
     }
-    setMs(Math.round(performance.now() - t0));
     setAt(new Date());
   }, []);
 
@@ -30,10 +32,7 @@ export function ServiceStatus() {
     return () => clearInterval(id);
   }, [check]);
 
-  const rows = [
-    { name: "API backend", ok: !failed && !!health, detail: health ? `v${health.version}` : "unreachable", latency: ms },
-    { name: "PostgreSQL", ok: health?.database === "ok", detail: health?.database ?? "—", latency: null },
-  ];
+  const count = (s: Service["state"]) => services.filter((x) => x.state === s).length;
 
   return (
     <>
@@ -42,26 +41,32 @@ export function ServiceStatus() {
         <button className="btn spacer" onClick={check}><Icon name="refresh" />Check now</button>
       </PageHead>
       <div className="page-body">
+        {error && <div className="error" role="alert">API not reachable: {error}</div>}
+        <div className="row" style={{ gap: 12 }}>
+          {(["ok", "degraded", "down"] as const).map((s) => (
+            <div key={s} className="card" style={{ flex: 1, minWidth: 160, padding: "12px 16px", borderTop: `3px solid ${STATE[s].color}` }}>
+              <div className="muted small">{STATE[s].label}</div>
+              <strong style={{ fontSize: 22 }}>{count(s)}</strong>
+            </div>
+          ))}
+        </div>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>Service</th><th>Status</th><th>Latency</th><th>Detail</th></tr></thead>
+            <thead><tr><th>Service</th><th>Category</th><th>Status</th><th>Latency</th><th>Detail</th></tr></thead>
             <tbody>
-              {rows.map((r) => (
-                <tr key={r.name}>
-                  <td><strong>{r.name}</strong></td>
-                  <td>
-                    <span className="row" style={{ gap: 6, color: r.ok ? "var(--ok)" : "var(--danger)" }}>
-                      <Icon name={r.ok ? "check" : "alert"} />{r.ok ? "Operational" : "Down"}
-                    </span>
-                  </td>
-                  <td>{r.latency != null ? `${r.latency} ms` : "—"}</td>
-                  <td className="muted">{r.detail}</td>
+              {services.map((s) => (
+                <tr key={s.name}>
+                  <td><strong>{s.name}</strong></td>
+                  <td className="muted">{s.category}</td>
+                  <td><span className="row" style={{ gap: 6, color: STATE[s.state].color }}><Icon name={STATE[s.state].icon} />{STATE[s.state].label}</span></td>
+                  <td>{s.latency_ms != null ? `${s.latency_ms} ms` : "—"}</td>
+                  <td className="muted">{s.detail || "—"}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <span className="muted small">Qdrant, MinIO, workers, embeddings, LLM providers and integrations appear here as they are added.</span>
+        <span className="muted small">Embeddings, Qdrant, LLM providers and integrations appear here as they are added.</span>
       </div>
     </>
   );

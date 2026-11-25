@@ -126,3 +126,16 @@ tr:last-child td { border-bottom: 0; }
 .prose pre { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; overflow-x: auto; margin: 0 0 12px; }
 .prose pre code { background: none; border: 0; padding: 0; }
 .prose .notice, .prose .table-wrap { margin: 0 0 14px; }
+
+/* Documents */
+.dropzone { border: 1.5px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 16px 20px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; color: var(--accent-text); }
+.dropzone span { color: var(--muted); }
+.dropzone[data-active="true"] { border-style: solid; filter: brightness(1.1); }
+.preview { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.preview-pages { flex: 0 0 220px; display: flex; flex-direction: column; gap: 2px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 6px; max-height: 75vh; overflow-y: auto; }
+.preview-pages button { display: flex; justify-content: space-between; align-items: center; gap: 8px; text-align: left; border: 0; background: transparent; color: var(--text); font: inherit; font-size: 13px; padding: 8px 10px; border-radius: 6px; cursor: pointer; }
+.preview-pages button:hover { background: var(--raised); }
+.preview-pages button.active { background: var(--raised); font-weight: 600; box-shadow: inset 3px 0 0 var(--accent); }
+.preview-body { flex: 1 1 640px; min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.preview-pane .card-body { max-height: 75vh; overflow: auto; }
+@media (max-width: 1100px) { .preview-body { grid-template-columns: minmax(0, 1fr); } }

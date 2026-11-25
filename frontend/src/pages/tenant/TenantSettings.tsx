@@ -21,9 +21,12 @@ export function TenantSettings() {
 
   async function toggle(key: keyof Settings, value: boolean) {
     if (!tenant) return;
+    const before = tenant;
+    setTenant({ ...tenant, settings: { ...tenant.settings, [key]: value } }); // optimistic
     try {
       setTenant(await api<Tenant>(`/tenants/${tenant.id}`, { method: "PATCH", body: { settings: { [key]: value } } }));
     } catch (e) {
+      setTenant(before);
       setError(errorText(e));
     }
   }

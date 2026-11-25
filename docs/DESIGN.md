@@ -80,27 +80,31 @@ Uploads run as background jobs; a new version reaches answers only once indexed 
 
 **Pipeline**
 
-1. Upload (PDF, DOCX, PPTX, XLSX) → original stored in MinIO.
-2. Parse with Docling: headings, order and tables preserved. Scanned pages go through OCR (Tesseract).
-3. Excel handled as tables (sheet, header, rows), not flattened text.
-4. Optional vision LLM (per tenant) describes images and diagrams.
-5. Chunk with metadata: `tenant_id`, `doc_id`, `version`, `active`, page/sheet/slide.
-6. Embed and write to the tenant's Qdrant collection.
+1. Upload (PDF, DOCX, PPTX, XLSX, up to 50 MB) → validated (extension matches content, no macros, not encrypted, zip-bomb guard) → original stored in MinIO under a generated key.
+2. The ingestion worker (separate container, RQ on Redis, CPU/RAM limits, 30-minute timeout) parses the file into pages:
+    - PDF: one page per page; native text and tables via pdfplumber; pages with almost no text are rendered (pypdfium2) and read with Tesseract OCR (English + Italian) with a confidence score; every page is rendered as an image for the preview.
+    - DOCX: split into sections at top-level headings; headings and tables preserved.
+    - PPTX: one page per slide; title, text, tables, speaker notes, and OCR of pictures (screenshots, diagrams).
+    - XLSX: one page per sheet as a Markdown table (values, not formulas); merged title rows become captions.
+3. Quality flags per page: OCR + confidence, low confidence (< 60%), empty, merged cells, truncated.
+4. Chunks are built per page (never across pages, so citations stay exact), around 1,500 characters, tables kept whole or split by rows with the header repeated, each with its nearest heading.
+5. Embedding and indexing into the tenant's Qdrant collection: next block (0.1.0 part 3b).
 
-Apache Tika is set aside for now.
+**Parser choice (decided):** the default parser is the "standard" stack above, fully tested. Docling is available as an option (`MENTIS_PARSER=docling`, image built with the `docling` extra) but is not verified yet: it needs PyTorch and HuggingFace models that the development environment cannot reach. It becomes the default only after a lab test on real customer documents. Apache Tika stays set aside.
 
 **Known weak spots** (why preview exists): poor-quality scans, diagrams without vision, Excel with merged cells or several tables per sheet, multi-column or shape-heavy slides.
 
 **Preview and approval**
 
-- Side-by-side view: original page on the left, extracted text on the right.
+- Side-by-side view: original page on the left (PDF page image; for DOCX/PPTX/XLSX a link to the original), extracted text on the right.
 - Per-page quality flags: native text vs OCR, OCR confidence, tables found, empty or unreadable pages.
-- "Test a question" box scoped to that document before publishing.
+- "Test a question" box scoped to that document before publishing (with indexing, block 3b).
 - Optional per-tenant approval: the new version stays inactive until the admin approves it.
 
 **Versioning**
 
-- Same file name = new version. Only the active version is searchable; older ones stay viewable and can be restored.
+- Same file name (case-insensitive) = new version; renaming keeps the extension. Only the active version is searchable; older ones stay viewable and can be made active again.
+- A failed or rejected version never replaces the active one. An upload identical (SHA-256) to the active version is refused.
 - Each version records date, uploader and an optional note.
 - Documents can be renamed and deleted (with confirmation).
 

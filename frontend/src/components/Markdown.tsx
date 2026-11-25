@@ -36,7 +36,8 @@ function list(lines: string[], key: number): ReactNode {
   return ordered ? <ol key={key}>{body}</ol> : <ul key={key}>{body}</ul>;
 }
 
-export function Markdown({ source }: { source: string }) {
+// `breaks`: keep single line breaks inside paragraphs (extracted document text, OCR lines).
+export function Markdown({ source, breaks = false }: { source: string; breaks?: boolean }) {
   const lines = source.replace(/\r/g, "").split("\n");
   const blocks: ReactNode[] = [];
   let i = 0;
@@ -90,7 +91,11 @@ export function Markdown({ source }: { source: string }) {
     }
     const para: string[] = [];
     while (i < lines.length && lines[i].trim() && !/^(#|>|```|\s*\||\s*(-|\d+\.)\s)/.test(lines[i])) para.push(lines[i++]);
-    blocks.push(<p key={i}>{inline(para.join(" "))}</p>);
+    blocks.push(
+      <p key={i}>
+        {breaks ? para.flatMap((l, j) => (j ? [<br key={`b${j}`} />, ...inline(l)] : inline(l))) : inline(para.join(" "))}
+      </p>,
+    );
   }
   return <div className="prose">{blocks}</div>;
 }

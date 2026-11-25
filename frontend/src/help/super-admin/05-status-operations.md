@@ -2,7 +2,7 @@
 
 ## Service status
 
-Shows each service with its state, latency and detail, refreshed every 60 seconds. Right now it covers the API and the database; Qdrant, MinIO, workers, embeddings, LLM providers and integrations are added as they ship.
+Shows each service with its state, latency and detail, refreshed every 60 seconds: API, PostgreSQL, MinIO (stored documents), Redis (job queue, with the number of waiting jobs) and the ingestion worker. If the worker is **Down**, uploads stay **Queued** until it is back. Embeddings, Qdrant, LLM providers and integrations are added as they ship.
 
 ## Commands on the server
 
@@ -31,3 +31,9 @@ docker compose up -d --build
 ```
 
 Database changes are applied automatically when the API starts.
+
+Follow the ingestion worker (document processing) live:
+
+```
+docker compose logs -f worker
+```

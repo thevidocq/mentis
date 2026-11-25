@@ -7,7 +7,8 @@ The super-admin runs the platform: customers (tenants), users, email and service
 1. **Email (SMTP)**: configure the mail server and send a test email, so invitations are delivered automatically.
 2. **Tenants**: onboard each customer.
 3. **Users**: invite a tenant admin for each customer, and the analysts.
-4. **Service status**: check that everything is operational.
+4. **General documentation**: upload the documents that apply to every customer.
+5. **Service status**: check that everything is operational, including the ingestion worker.
 
 ## The three roles
 

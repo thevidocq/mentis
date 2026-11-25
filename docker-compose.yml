@@ -1,6 +1,6 @@
 # Mentis – Docker Compose
 # Open the app at http://127.0.0.1:8080 (put your own nginx/HTTPS in front for remote access).
-# Worker and embeddings are added later in the 0.1.0 work.
+# Embeddings and the vector index (Qdrant) are wired in the next block.
 
 services:
   web:
@@ -12,19 +12,50 @@ services:
       - "127.0.0.1:8080:8080"
 
   api:
-    build: ./backend
+    build:
+      context: ./backend
+      target: api
     restart: unless-stopped
-    environment:
+    environment: &backend-env
       MENTIS_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       MENTIS_SECRET_KEY: ${MENTIS_SECRET_KEY}
       MENTIS_COOKIE_SECURE: ${MENTIS_COOKIE_SECURE:-true}
       MENTIS_TRUSTED_PROXIES: ${MENTIS_TRUSTED_PROXIES:-*}
       MENTIS_PUBLIC_URL: ${MENTIS_PUBLIC_URL:-http://localhost}
+      MENTIS_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      MENTIS_MINIO_ENDPOINT: minio:9000
+      MENTIS_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MENTIS_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MENTIS_MAX_UPLOAD_MB: ${MENTIS_MAX_UPLOAD_MB:-50}
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
     ports:
       - "127.0.0.1:8000:8000"
+
+  worker:
+    build:
+      context: ./backend
+      target: worker
+      args:
+        PARSER_EXTRAS: ${MENTIS_PARSER_EXTRAS:-worker}
+    restart: unless-stopped
+    environment:
+      <<: *backend-env
+      MENTIS_PARSER: ${MENTIS_PARSER:-standard}
+    depends_on:
+      api:
+        condition: service_healthy
+    # Parsing and OCR are CPU/RAM heavy: keep them from starving the API.
+    deploy:
+      resources:
+        limits:
+          cpus: "${MENTIS_WORKER_CPUS:-2}"
+          memory: ${MENTIS_WORKER_MEMORY:-3g}
 
   postgres:
     image: postgres:16

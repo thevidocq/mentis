@@ -11,7 +11,7 @@ bad()  { printf '  \033[31mFAIL\033[0m  %s\n' "$1"; fail=1; }
 echo "Mentis check"
 echo
 echo "Containers:"
-for svc in web api postgres qdrant minio redis; do
+for svc in web api worker postgres qdrant minio redis; do
   id=$(docker compose ps -q "$svc" 2>/dev/null)
   if [ -z "$id" ]; then bad "$svc: not running"; continue; fi
   state=$(docker inspect -f '{{.State.Status}}' "$id")

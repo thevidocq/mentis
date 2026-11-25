@@ -31,4 +31,16 @@ export async function api<T = unknown>(path: string, options: { method?: string;
   return data as T;
 }
 
-export const errorText = (e: unknown) => (e instanceof Error ? e.message : "Something went wrong.");
+export async function apiUpload<T = unknown>(path: string, form: FormData): Promise<T> {
+  const res = await fetch(`/api${path}`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "X-Mentis-Request": "1" },
+    body: form,
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new ApiError(res.status, detailMessage(data, `Upload failed (${res.status}).`));
+  return data as T;
+}
+
+export const errorText =(e: unknown) => (e instanceof Error ? e.message : "Something went wrong.");
