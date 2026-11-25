@@ -2,7 +2,7 @@
 
 ## Service status
 
-Shows each service with its state, latency and detail, refreshed every 60 seconds: API, PostgreSQL, MinIO (stored documents), Redis (job queue, with the number of waiting jobs), the ingestion worker, Qdrant (vector index) and the embedding service. If the worker is **Down**, uploads stay **Queued** until it is back. If embeddings are **Down**, new versions fail with "Indexing failed" and can be retried. Each AI provider has its own line (**LLM: name**): the check lists the provider's models, so it verifies address and API key without spending tokens. **AI provider: Down** means none is configured. Integrations are added as they ship.
+Shows each service with its state, latency and detail, refreshed every 60 seconds: API, PostgreSQL, MinIO (stored documents), Redis (job queue, with the number of waiting jobs), the ingestion worker, Qdrant (vector index) and the embedding service. If the worker is **Down**, uploads stay **Queued** until it is back. If embeddings are **Down**, new versions fail with "Indexing failed" and can be retried. Each AI provider has its own line (**LLM: name**): the check lists the provider's models, so it verifies address and API key without spending tokens. **AI provider: Down** means none is configured. When syslog forwarding is on, a **Syslog forwarding** line shows events sent and dropped and the last error. Integrations are added as they ship.
 
 ## Commands on the server
 
@@ -21,9 +21,10 @@ docker compose exec api python -m app.cli reset-2fa user@example.com
 docker compose exec api python -m app.cli unlock user@example.com
 ```
 
-Upgrade to a new version:
+Upgrade to a new version (take a backup first):
 
 ```
+./backup.sh
 git fetch --tags
 git checkout <version-tag>
 docker compose up -d --build
@@ -31,6 +32,8 @@ docker compose up -d --build
 ```
 
 Database changes are applied automatically when the API starts.
+
+Back up and restore: see **Backup and configuration**.
 
 Follow the ingestion worker (document processing) live:
 

@@ -12,6 +12,10 @@ import { Login } from "./pages/Login";
 import { Placeholder } from "./pages/Placeholder";
 import { Setup } from "./pages/Setup";
 import { AiProviders } from "./pages/platform/AiProviders";
+import { Configuration } from "./pages/platform/Configuration";
+import { Logs } from "./pages/platform/Logs";
+import { RetentionSettings } from "./pages/platform/Retention";
+import { Usage } from "./pages/platform/Usage";
 import { EmbeddingSettings } from "./pages/platform/EmbeddingSettings";
 import { ServiceStatus } from "./pages/platform/ServiceStatus";
 import { SmtpSettings } from "./pages/platform/SmtpSettings";
@@ -28,7 +32,7 @@ function RequireRole({ roles, children }: { roles?: Role[]; children: ReactNode 
   return <>{children}</>;
 }
 
-const soon = (title: string, what: string) => <Placeholder title={title} text={`${what} arrives in a later 0.1.0 block.`} />;
+const soon = (title: string, what: string) => <Placeholder title={title} text={`${what} arrives in a later release.`} />;
 
 function PlatformArea() {
   return (
@@ -42,8 +46,10 @@ function PlatformArea() {
         <Route path="general/preview/:versionId" element={<GeneralPreview />} />
         <Route path="ai" element={<AiProviders />} />
         <Route path="embedding" element={<EmbeddingSettings />} />
-        <Route path="retention" element={soon("Retention", "Retention settings")} />
-        <Route path="logs" element={soon("Logs", "The Logs section")} />
+        <Route path="usage" element={<Usage />} />
+        <Route path="retention" element={<RetentionSettings />} />
+        <Route path="logs" element={<Logs />} />
+        <Route path="configuration" element={<Configuration />} />
         <Route path="*" element={<Navigate to="tenants" replace />} />
       </Routes>
     </AdminShell>

@@ -10,6 +10,8 @@ The super-admin runs the platform: customers (tenants), users, email and service
 4. **AI providers**: add at least one LLM (for example Claude Haiku) and test it. Without it the chat cannot answer.
 5. **General documentation**: upload the documents that apply to every customer.
 6. **Service status**: check that everything is operational, including the ingestion worker.
+7. **Retention** and **Logs → Syslog forwarding**: set how long data is kept and, if you have a SIEM, forward the events.
+8. On the server, schedule `./backup.sh` (see **Backup and configuration**).
 
 ## The three roles
 

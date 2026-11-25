@@ -14,6 +14,10 @@ In the app: **Help** in the left menu. Each profile sees its own guide plus the 
 - [General documentation](../frontend/src/help/super-admin/06-general-documentation.md)
 - [Embedding and Qdrant](../frontend/src/help/super-admin/07-embedding-qdrant.md)
 - [AI providers](../frontend/src/help/super-admin/08-ai-providers.md)
+- [Logs](../frontend/src/help/super-admin/09-logs.md)
+- [Retention](../frontend/src/help/super-admin/10-retention.md)
+- [LLM usage](../frontend/src/help/super-admin/11-llm-usage.md)
+- [Backup and configuration](../frontend/src/help/super-admin/12-backup-configuration.md)
 
 ## Tenant admin
 

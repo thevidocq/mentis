@@ -1,6 +1,6 @@
 # Installing Mentis
 
-> Work in progress. Available now: web interface with first-run setup, login (password + mandatory TOTP 2FA), tenants, users and invitations, SMTP, account settings, three themes, in-app Help, document upload with versions, OCR and preview, and indexing (local embeddings + Qdrant) with "test a question". The chat comes next.
+> Version 0.1.0. Release notes and upgrade commands: [docs/releases/](docs/releases/).
 
 ## Requirements
 
@@ -13,6 +13,7 @@
 ```bash
 git clone https://github.com/thevidocq/mentis.git
 cd mentis
+git checkout v0.1.0        # a release; main is the development version
 cp .env.example .env
 # Set every CHANGE_ME. For MENTIS_SECRET_KEY:  openssl rand -hex 32
 nano .env
@@ -76,10 +77,21 @@ The `api` container calls the LLM providers configured in **AI providers**. It n
 
 Retrieval tuning in `.env`: `MENTIS_CHAT_PASSAGES` (default 8) and `MENTIS_CHAT_MIN_SCORE` (default 0.3), then `docker compose up -d api`.
 
+## Backup
+
+```bash
+./backup.sh                                   # backups/mentis-<date>/ (database, documents, index, .env)
+./restore.sh backups/mentis-<date>            # same server
+./restore.sh backups/mentis-<date> --with-env # new server
+```
+
+Backups contain `.env` with every secret: keep them encrypted and off the server. Nightly cron example and details: [Backup and configuration](frontend/src/help/super-admin/12-backup-configuration.md).
+
 ## Upgrade
 
 ```bash
 cd mentis
+./backup.sh
 git fetch --tags
 git checkout <version-tag>
 docker compose up -d --build

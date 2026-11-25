@@ -14,7 +14,7 @@
 | OpenAI Chat Completions | OpenAI, Ollama, vLLM, any compatible server | `<base>/chat/completions` |
 | OpenAI Responses | gpt-oss on vLLM, Daybreak Blue | `<base>/responses` |
 
-**Reasoning effort** applies to the Responses API. **Max answer tokens** limits the answer length (default 1500).
+**Reasoning effort** applies to the Responses API. **Max answer tokens** limits the answer length (default 1500). **Price input/output** (USD per million tokens, optional) feed the cost estimate in **LLM usage**.
 
 API keys are stored encrypted and never shown again; leave the field empty to keep the stored key.
 

@@ -166,7 +166,7 @@ export interface LlmProvider {
   base_url: string;
   model: string;
   api_key_set: boolean;
-  options: { reasoning_effort?: string; max_tokens?: number };
+  options: { reasoning_effort?: string; max_tokens?: number; price_in?: number; price_out?: number };
   is_default: boolean;
 }
 

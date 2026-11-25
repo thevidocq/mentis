@@ -220,9 +220,11 @@ PostgreSQL (users, tenants, chats, audit) | Qdrant (one collection per tenant) |
 3. Ingestion pipeline with versioning, preview and approval.
 4. Chat with `@` lock, citations, history, titles, suggested follow-ups, answer feedback (thumbs up/down).
 5. AI providers (Anthropic default, OpenAI Chat/Responses, Ollama), local embeddings, LLM usage per tenant (tokens, estimated cost).
-6. Service status page, single Logs section, retention.
-7. Backup and restore script (PostgreSQL, Qdrant, MinIO).
-8. Import/export of platform and tenant configuration.
+6. Service status page, single Logs section (filters, CSV export, syslog RFC 5424 over UDP/TCP/TLS), retention with a daily purge.
+7. Backup and restore scripts (PostgreSQL, Qdrant, MinIO, `.env`).
+8. Import/export of platform and tenant configuration (JSON, no secrets, dry run before applying).
+
+All eight are in 0.1.0.
 
 **Next**
 

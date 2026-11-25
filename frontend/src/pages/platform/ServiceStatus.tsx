@@ -66,7 +66,7 @@ export function ServiceStatus() {
             </tbody>
           </table>
         </div>
-        <span className="muted small">LLM providers and integrations appear here as they are added.</span>
+        <span className="muted small">Integrations appear here as they are added.</span>
       </div>
     </>
   );

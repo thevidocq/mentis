@@ -103,6 +103,13 @@ def platform_status(db: Session = Depends(get_db), _: User = Depends(super_admin
          "detail": cfg["model"] if em_ok else f"not reachable at {cfg['url']}"},
     ]
     services.extend(_llm_status(db))
+    from app.services import syslog
+
+    sc = syslog.get_config(db)
+    if sc["enabled"]:
+        f = syslog.forwarder
+        services.append({"name": "Syslog forwarding", "category": "Logs", "state": "degraded" if f.last_error else "ok",
+                         "latency_ms": None, "detail": f.last_error or f"{sc['protocol'].upper()} {sc['host']}:{sc['port']} · {f.sent} sent, {f.dropped} dropped"})
     return {"services": services}
 
 
