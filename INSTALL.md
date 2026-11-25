@@ -1,11 +1,11 @@
 # Installing Mentis
 
-> Work in progress. Available now: web interface with first-run setup, login (password + mandatory TOTP 2FA), tenants, users and invitations, SMTP, account settings, three themes, in-app Help, and document upload with versions, OCR and preview. Indexing (embeddings + Qdrant) and chat come next.
+> Work in progress. Available now: web interface with first-run setup, login (password + mandatory TOTP 2FA), tenants, users and invitations, SMTP, account settings, three themes, in-app Help, document upload with versions, OCR and preview, and indexing (local embeddings + Qdrant) with "test a question". The chat comes next.
 
 ## Requirements
 
 - Linux host with Docker Engine and the Docker Compose plugin.
-- At least 4 vCPU and 8 GB RAM; 16 GB recommended once documents are ingested (OCR and local embeddings are CPU- and RAM-heavy).
+- At least 4 vCPU and 12 GB RAM (the embedding model alone uses about 3 GB); 16 GB recommended. About 10 GB of free disk for images and the model.
 - The `worker` container (document processing) is limited to 2 CPUs and 3 GB RAM by default; change `MENTIS_WORKER_CPUS` / `MENTIS_WORKER_MEMORY` in `.env`.
 
 ## Install
@@ -62,6 +62,10 @@ Uploaded documents are processed by the `worker` container. If uploads stay **Qu
 docker compose ps worker
 docker compose logs -f worker
 ```
+
+Embeddings: the `embeddings` container runs BAAI/bge-m3 (Hugging Face TEI, CPU). **On first start it downloads the model (about 2.3 GB)**; until then the Embeddings line on Service status is Down and uploads fail with "Indexing failed" (use Retry afterwards). Follow it with `docker compose logs -f embeddings`. Limits: `MENTIS_EMBEDDINGS_CPUS` / `MENTIS_EMBEDDINGS_MEMORY`.
+
+More workers in parallel: `MENTIS_WORKER_REPLICAS=3` in `.env`, then `docker compose up -d`.
 
 Parser: `MENTIS_PARSER=standard` (default). To try Docling in the lab, set `MENTIS_PARSER=docling` and `MENTIS_PARSER_EXTRAS=worker,docling` in `.env`, then `docker compose up -d --build worker` (large download: PyTorch and models).
 

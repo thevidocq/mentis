@@ -1,6 +1,5 @@
 # Mentis – Docker Compose
 # Open the app at http://127.0.0.1:8080 (put your own nginx/HTTPS in front for remote access).
-# Embeddings and the vector index (Qdrant) are wired in the next block.
 
 services:
   web:
@@ -27,12 +26,18 @@ services:
       MENTIS_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MENTIS_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       MENTIS_MAX_UPLOAD_MB: ${MENTIS_MAX_UPLOAD_MB:-50}
+      MENTIS_QDRANT_URL: http://qdrant:6333
+      MENTIS_QDRANT_API_KEY: ${QDRANT_API_KEY}
+      MENTIS_EMBEDDING_URL: ${MENTIS_EMBEDDING_URL:-http://embeddings/v1}
+      MENTIS_EMBEDDING_MODEL: ${MENTIS_EMBEDDING_MODEL:-BAAI/bge-m3}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_started
       minio:
+        condition: service_started
+      qdrant:
         condition: service_started
     ports:
       - "127.0.0.1:8000:8000"
@@ -51,11 +56,29 @@ services:
       api:
         condition: service_healthy
     # Parsing and OCR are CPU/RAM heavy: keep them from starving the API.
+    # More workers process more documents in parallel (limits apply to each one).
     deploy:
+      replicas: ${MENTIS_WORKER_REPLICAS:-1}
       resources:
         limits:
           cpus: "${MENTIS_WORKER_CPUS:-2}"
           memory: ${MENTIS_WORKER_MEMORY:-3g}
+
+  # Local embeddings: Hugging Face Text Embeddings Inference (CPU) with bge-m3.
+  # The model (~2.3 GB) is downloaded on first start into the embeddings-data volume.
+  # To use another OpenAI-compatible service instead (Ollama, vLLM), set MENTIS_EMBEDDING_URL
+  # and stop this one; the model can also be changed later in Embedding and Qdrant.
+  embeddings:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.6
+    restart: unless-stopped
+    command: ["--model-id", "${MENTIS_EMBEDDING_MODEL:-BAAI/bge-m3}", "--port", "80"]
+    volumes:
+      - embeddings-data:/data
+    deploy:
+      resources:
+        limits:
+          cpus: "${MENTIS_EMBEDDINGS_CPUS:-2}"
+          memory: ${MENTIS_EMBEDDINGS_MEMORY:-4g}
 
   postgres:
     image: postgres:16
@@ -106,6 +129,7 @@ services:
       - "127.0.0.1:6379:6379"
 
 volumes:
+  embeddings-data:
   postgres-data:
   qdrant-data:
   minio-data:

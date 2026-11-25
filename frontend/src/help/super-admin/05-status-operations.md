@@ -2,7 +2,7 @@
 
 ## Service status
 
-Shows each service with its state, latency and detail, refreshed every 60 seconds: API, PostgreSQL, MinIO (stored documents), Redis (job queue, with the number of waiting jobs) and the ingestion worker. If the worker is **Down**, uploads stay **Queued** until it is back. Embeddings, Qdrant, LLM providers and integrations are added as they ship.
+Shows each service with its state, latency and detail, refreshed every 60 seconds: API, PostgreSQL, MinIO (stored documents), Redis (job queue, with the number of waiting jobs), the ingestion worker, Qdrant (vector index) and the embedding service. If the worker is **Down**, uploads stay **Queued** until it is back. If embeddings are **Down**, new versions fail with "Indexing failed" and can be retried. LLM providers and integrations are added as they ship.
 
 ## Commands on the server
 
@@ -36,4 +36,18 @@ Follow the ingestion worker (document processing) live:
 
 ```
 docker compose logs -f worker
+```
+
+## Scaling document processing
+
+In `.env` on the server:
+
+- **More documents in parallel**: `MENTIS_WORKER_REPLICAS=3` (each worker processes one document at a time)
+- **Faster on large documents**: `MENTIS_WORKER_CPUS=4` and `MENTIS_WORKER_MEMORY=6g` (limits apply to each worker)
+
+Then apply:
+
+```
+docker compose up -d
+./check.sh
 ```

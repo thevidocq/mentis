@@ -24,6 +24,13 @@ class SmtpIn(BaseModel):
     from_address: EmailStr | None = None
 
 
+class EmbeddingIn(BaseModel):
+    url: str | None = Field(default=None, max_length=500)
+    model: str | None = Field(default=None, max_length=200)
+    # Write-only. Omit to keep, "" to clear.
+    api_key: str | None = None
+
+
 class SmtpTest(BaseModel):
     to: EmailStr
 
@@ -75,9 +82,14 @@ def platform_status(db: Session = Depends(get_db), _: User = Depends(super_admin
             ok = False
         return ok, round((time.perf_counter() - t0) * 1000)
 
+    from app.services import embeddings, vector_index
+
     db_ok, db_ms = timed(lambda: db.execute(text("SELECT 1")) is not None)
     st_ok, st_ms = timed(lambda: storage.get_storage().ping())
     q = jobs.queue_health()
+    vx_ok, vx_ms = timed(lambda: vector_index.client().get_collections() is not None)
+    cfg = embeddings.get_config(db)
+    em_ok, em_ms = timed(lambda: len(embeddings.embed(cfg, ["health check"])[0]) > 0)
     services = [
         {"name": "API backend", "category": "Core", "state": "ok", "latency_ms": None, "detail": f"v{__version__}"},
         {"name": "PostgreSQL", "category": "Data", "state": "ok" if db_ok else "down", "latency_ms": db_ms, "detail": ""},
@@ -86,5 +98,69 @@ def platform_status(db: Session = Depends(get_db), _: User = Depends(super_admin
          "detail": f"{q['queued']} jobs waiting" if q["redis"] else ""},
         {"name": "Ingestion worker", "category": "Core", "state": "ok" if q["workers"] else "down", "latency_ms": None,
          "detail": f"{q['workers']} running" if q["workers"] else "no worker listening"},
+        {"name": "Qdrant (vector index)", "category": "AI", "state": "ok" if vx_ok else "down", "latency_ms": vx_ms, "detail": ""},
+        {"name": "Embeddings", "category": "AI", "state": "ok" if em_ok else "down", "latency_ms": em_ms,
+         "detail": cfg["model"] if em_ok else f"not reachable at {cfg['url']}"},
     ]
     return {"services": services}
+
+
+# --- Embedding and Qdrant ------------------------------------------------------
+
+@router.get("/embedding")
+def get_embedding(db: Session = Depends(get_db), _: User = Depends(super_admin)) -> dict:
+    from app.models import PlatformSetting
+    from app.services import embeddings, vector_index
+    from app.worker.tasks import REINDEX_STATE
+
+    out = embeddings.public_config(embeddings.get_config(db))
+    row = db.get(PlatformSetting, REINDEX_STATE)
+    out["reindex"] = row.value if row else None
+    try:
+        out["index"] = vector_index.stats()
+    except Exception:  # noqa: BLE001 - shown as unavailable
+        out["index"] = None
+    return out
+
+
+@router.put("/embedding")
+def put_embedding(body: EmbeddingIn, request: Request, db: Session = Depends(get_db), admin: User = Depends(super_admin)) -> dict:
+    from app.services import embeddings
+
+    if body.url is not None and not body.url.startswith(("http://", "https://")):
+        raise HTTPException(422, "The URL must start with http:// or https://.")
+    cfg = embeddings.save_config(db, body.url, body.model, body.api_key)
+    log_event(db, "platform.embedding_updated", actor=admin, ip=client_ip(request),
+              detail={"url": cfg["url"], "model": cfg["model"], "api_key_changed": body.api_key is not None})
+    return embeddings.public_config(cfg)
+
+
+@router.post("/embedding/test")
+def test_embedding(db: Session = Depends(get_db), _: User = Depends(super_admin)) -> dict:
+    from app.services import embeddings
+
+    cfg = embeddings.get_config(db)
+    try:
+        vec = embeddings.embed(cfg, ["Mentis embedding test"])[0]
+    except embeddings.EmbeddingError as e:
+        return {"ok": False, "error": str(e)}
+    return {"ok": True, "dimensions": len(vec), "model": cfg["model"]}
+
+
+@router.post("/embedding/reindex", status_code=202)
+def reindex(request: Request, db: Session = Depends(get_db), admin: User = Depends(super_admin)) -> dict:
+    from app.models import PlatformSetting
+    from app.services import jobs
+    from app.worker.tasks import REINDEX_STATE
+
+    row = db.get(PlatformSetting, REINDEX_STATE)
+    if row and row.value.get("status") in ("queued", "running"):
+        raise HTTPException(409, "A reindex is already running.")
+    if row is None:
+        db.add(PlatformSetting(key=REINDEX_STATE, value={"status": "queued"}))
+    else:
+        row.value = {"status": "queued"}
+    db.commit()
+    log_event(db, "index.reindex_requested", actor=admin, ip=client_ip(request))
+    jobs.enqueue_reindex()
+    return {"status": "queued"}

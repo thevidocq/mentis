@@ -18,7 +18,10 @@ PASSWORD = "Correct-Horse-42"
 
 @pytest.fixture
 def client():
-    from app.services import jobs, storage
+    from qdrant_client import QdrantClient
+
+    from app.services import embeddings, jobs, storage, vector_index
+    from tests import fake_embeddings
 
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
@@ -28,8 +31,11 @@ def client():
     # In-memory object storage and inline job execution (no MinIO/Redis in tests).
     store = storage.MemoryStorage()
     storage.set_storage(store)
-    queued: list[str] = []
-    jobs.set_runner(lambda name, vid: queued.append(vid))
+    queued: list[tuple[str, str]] = []
+    jobs.set_runner(lambda name, vid: queued.append((name, vid)))
+    # In-memory Qdrant and deterministic embeddings (no services needed).
+    vector_index.set_client(QdrantClient(":memory:"))
+    embeddings.set_embedder(fake_embeddings.embed)
     with TestClient(create_app()) as c:
         c.headers.update(HEADERS)
         c.storage = store
@@ -37,15 +43,18 @@ def client():
         yield c
     storage.set_storage(None)
     jobs.set_runner(None)
+    vector_index.set_client(None)
+    embeddings.set_embedder(None)
     engine.dispose()
 
 
 def run_jobs(c):
     """Process every queued ingestion job, like the worker would."""
-    from app.worker.tasks import ingest_version
+    from app.worker.tasks import ingest_version, reindex_all
 
     while c.queued:
-        ingest_version(c.queued.pop(0))
+        name, vid = c.queued.pop(0)
+        ingest_version(vid) if name == "ingest" else reindex_all()
 
 
 def login(c, email, password=PASSWORD):

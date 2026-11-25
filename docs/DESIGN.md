@@ -88,7 +88,9 @@ Uploads run as background jobs; a new version reaches answers only once indexed 
     - XLSX: one page per sheet as a Markdown table (values, not formulas); merged title rows become captions.
 3. Quality flags per page: OCR + confidence, low confidence (< 60%), empty, merged cells, truncated.
 4. Chunks are built per page (never across pages, so citations stay exact), around 1,500 characters, tables kept whole or split by rows with the header repeated, each with its nearest heading.
-5. Embedding and indexing into the tenant's Qdrant collection: next block (0.1.0 part 3b).
+5. Embedding (OpenAI-compatible endpoint; default local TEI container with bge-m3) and upsert into the tenant's Qdrant collection (`mentis_<tenant>`), payload: tenant, document, version, chunk, active. Indexing is the last step: if it fails, the version fails and the active one stays.
+6. Activation, approval and restore update the `active` flag in Qdrant. PostgreSQL is the source of truth: every search hit is re-checked against the database (chunk, tenant, version ready and active), so a stale index can never surface a version not in use.
+7. Changing the embedding model requires a full reindex (rebuilt from stored chunks, no re-parsing); uploads are refused until it is done.
 
 **Parser choice (decided):** the default parser is the "standard" stack above, fully tested. Docling is available as an option (`MENTIS_PARSER=docling`, image built with the `docling` extra) but is not verified yet: it needs PyTorch and HuggingFace models that the development environment cannot reach. It becomes the default only after a lab test on real customer documents. Apache Tika stays set aside.
 
@@ -98,7 +100,7 @@ Uploads run as background jobs; a new version reaches answers only once indexed 
 
 - Side-by-side view: original page on the left (PDF page image; for DOCX/PPTX/XLSX a link to the original), extracted text on the right.
 - Per-page quality flags: native text vs OCR, OCR confidence, tables found, empty or unreadable pages.
-- "Test a question" box scoped to that document before publishing (with indexing, block 3b).
+- "Test a question" box scoped to that version (works on pending versions too), showing the passages Mentis would use and their match score.
 - Optional per-tenant approval: the new version stays inactive until the admin approves it.
 
 **Versioning**

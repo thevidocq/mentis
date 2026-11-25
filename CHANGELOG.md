@@ -7,6 +7,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 ## [Unreleased]
 
 ### Added
+- **Indexing** (0.1.0 part 3b): chunks embedded through any OpenAI-compatible endpoint and stored in Qdrant, one collection per customer. New `embeddings` container (Hugging Face TEI, CPU) with BAAI/bge-m3 by default.
+- Indexing is the last ingestion step; a version that cannot be indexed fails and never replaces the active one. Activation, approval, restore, deletion and tenant deletion keep Qdrant in sync.
+- Retrieval service (customer + General, active versions only) with every hit re-checked against PostgreSQL, ready for the chat.
+- Preview: **Test a question** shows the passages of that version Mentis would use, with match score and page.
+- **Embedding and Qdrant** page (super-admin): endpoint, model, API key (encrypted), test connection, index stats, model-change detection and **Reindex everything** with progress.
+- Service status adds Qdrant and Embeddings.
+- Workers: `MENTIS_WORKER_REPLICAS`; `check.sh` checks every replica.
+- Help: Embedding and Qdrant (super-admin), Test a question, scaling.
 - **Documents** (0.1.0 part 3a): upload with validation (PDF/DOCX/PPTX/XLSX only, content must match extension, macro-enabled/encrypted/old formats refused, zip-bomb guard, 50 MB limit, sanitized names); originals in MinIO; versions by file name; identical re-upload refused.
 - Ingestion worker (`worker` container, RQ on Redis, OCR with Tesseract eng+ita, CPU/RAM limits): per-page Markdown text with tables, PDF page images, OCR confidence, quality flags, chunks per page for the coming index. Optional Docling parser behind `MENTIS_PARSER=docling` (not verified yet).
 - Version lifecycle: active version per document, approval before publishing (tenant setting), reject, make an older version active, retry failed; a failed or rejected version never replaces the active one.

@@ -18,7 +18,8 @@ from app.api.deps import client_ip, require_roles
 from app.core.config import get_settings
 from app.core.db import get_db
 from app.models import Document, DocumentVersion, Role, Tenant, User, VersionPage, VersionStatus
-from app.services import jobs, storage, versions
+from app.services import jobs, retrieval, storage, versions
+from app.services.embeddings import EmbeddingError
 from app.services.logs import log_event
 from app.services.uploads import UploadError, check_upload, safe_filename
 
@@ -76,6 +77,18 @@ class PageOut(BaseModel):
     tables: int
     has_image: bool
     flags: list[str]
+
+
+class SearchIn(BaseModel):
+    question: str = Field(min_length=2, max_length=1000)
+
+
+class PassageOut(BaseModel):
+    score: float
+    page_index: int
+    page_label: str
+    heading: str | None
+    text: str
 
 
 class Rename(BaseModel):
@@ -322,3 +335,20 @@ def retry_version(tenant_id: uuid.UUID, version_id: uuid.UUID, request: Request,
     jobs.enqueue_ingest(str(v.id))
     db.refresh(v)
     return _vout(v)
+
+
+@router.post("/versions/{version_id}/search", response_model=list[PassageOut])
+def test_question(tenant_id: uuid.UUID, version_id: uuid.UUID, body: SearchIn, request: Request,
+                  db: Session = Depends(get_db), user: User = Depends(admins)) -> list[PassageOut]:
+    """Preview's "test a question": the passages of this version that best match the question."""
+    tenant = _tenant(db, user, tenant_id)
+    v = _version(db, tenant, version_id)
+    if v.status != VersionStatus.READY:
+        raise HTTPException(status.HTTP_409_CONFLICT, "This version is not processed yet.")
+    try:
+        found = retrieval.search_version(db, v, body.question)
+    except EmbeddingError as e:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e)) from None
+    log_event(db, "document.test_question", actor=user, tenant_id=tenant.id, target=v.original_filename,
+              ip=client_ip(request), detail={"version": v.version})  # the question itself is not logged
+    return [PassageOut(score=p.score, page_index=p.page_index, page_label=p.page_label, heading=p.heading, text=p.text) for p in found]

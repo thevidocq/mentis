@@ -12,7 +12,7 @@ from app.ingestion import ParseLimits, parse
 from app.ingestion.chunking import chunk_pages
 from app.models import Chunk, DocumentVersion, VersionPage, VersionStatus
 from app.models.base import utcnow
-from app.services import storage, versions
+from app.services import embeddings, indexing, storage, vector_index, versions
 from app.services.logs import log_event
 
 _log = logging.getLogger("mentis.worker")
@@ -56,10 +56,17 @@ def ingest_version(version_id: str) -> None:
         stats = result.stats()
         if stats["chars"] == 0:
             raise ValueError("The file contains no readable text.")
+        db.flush()
+
+        # Index as the last step: a version that cannot be indexed fails and never replaces the active one.
+        cfg = embeddings.get_config(db)
+        indexing.check_model(cfg)
+        stats["chunks"] = indexing.index_version(db, version, cfg, active=False)
+
         version.stats = stats
         version.status = VersionStatus.READY
         version.processed_at = utcnow()
-        versions.on_ready(db, version)
+        versions.on_ready(db, version)  # flips the index flag too if the version becomes active
         db.commit()
         log_event(db, "document.processed", kind="system", tenant_id=version.tenant_id, target=version.original_filename,
                   detail={"version": version.version, "pages": stats["pages"], "ocr_pages": stats["ocr_pages"],
@@ -71,6 +78,10 @@ def ingest_version(version_id: str) -> None:
             # Deleted while processing: drop any page images written meanwhile.
             storage.get_storage().delete_prefix(prefix)
             return
+        try:
+            vector_index.delete_version(version.tenant_id, version.id)
+        except Exception:  # noqa: BLE001 - index unreachable: search re-checks the database anyway
+            _log.warning("could not clean index points for failed version %s", version_id)
         version.status, version.is_active = VersionStatus.FAILED, False
         version.error = _user_message(e)
         version.processed_at = utcnow()
@@ -83,7 +94,52 @@ def ingest_version(version_id: str) -> None:
 
 
 def _user_message(e: Exception) -> str:
+    if isinstance(e, embeddings.EmbeddingError):
+        return f"Indexing failed: {e}"
+    if isinstance(e, vector_index.VectorIndexError):
+        return f"Indexing failed: {e}"
     text = str(e) or e.__class__.__name__
     if "password" in text.lower() or "encrypt" in text.lower():
         return "The file is password-protected."
     return text[:500]
+
+
+REINDEX_STATE = "reindex"
+
+
+def reindex_all() -> None:
+    """Rebuild every tenant's collection from stored chunks (after an embedding model change)."""
+    from sqlalchemy import select
+
+    from app.models import PlatformSetting, Tenant
+
+    db = next(get_db())
+
+    def state(**value):
+        row = db.get(PlatformSetting, REINDEX_STATE)
+        if row is None:
+            db.add(PlatformSetting(key=REINDEX_STATE, value=value))
+        else:
+            row.value = value
+        db.commit()
+
+    try:
+        cfg = embeddings.get_config(db)
+        cfg.update(indexed_model=None, indexed_dim=None)  # force recording the new model
+        ready = db.scalars(select(DocumentVersion).where(DocumentVersion.status == VersionStatus.READY)).all()
+        state(status="running", done=0, total=len(ready), error=None)
+        for tenant_id in {t for (t,) in db.execute(select(Tenant.id))}:
+            vector_index.delete_tenant(tenant_id)
+        for i, v in enumerate(ready, start=1):
+            indexing.index_version(db, v, cfg, active=v.is_active)
+            if i % 10 == 0 or i == len(ready):
+                state(status="running", done=i, total=len(ready), error=None)
+        state(status="done", done=len(ready), total=len(ready), error=None, finished_at=utcnow().isoformat())
+        log_event(db, "index.reindexed", kind="system", detail={"versions": len(ready), "model": cfg["model"]})
+    except Exception as e:  # noqa: BLE001 - report the failure on the admin page
+        db.rollback()
+        state(status="failed", error=str(e)[:500])
+        _log.exception("reindex failed")
+        log_event(db, "index.reindex_failed", kind="system", level="error", detail={"error": str(e)[:300]})
+    finally:
+        db.close()

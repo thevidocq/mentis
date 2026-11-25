@@ -65,7 +65,7 @@ export const PLATFORM_NAV: NavItem[] = [
   { to: "/admin/users", label: "Users", icon: "users" },
   { to: "/admin/general", label: "General documentation", icon: "book" },
   { to: "/admin/ai", label: "AI providers", icon: "chip", soon: true },
-  { to: "/admin/embedding", label: "Embedding and Qdrant", icon: "database", soon: true },
+  { to: "/admin/embedding", label: "Embedding and Qdrant", icon: "database" },
   { to: "/admin/smtp", label: "Email (SMTP)", icon: "mail" },
   { to: "/admin/retention", label: "Retention", icon: "clock", soon: true },
   { to: "/admin/status", label: "Service status", icon: "pulse" },

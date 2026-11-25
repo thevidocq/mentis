@@ -11,16 +11,21 @@ bad()  { printf '  \033[31mFAIL\033[0m  %s\n' "$1"; fail=1; }
 echo "Mentis check"
 echo
 echo "Containers:"
-for svc in web api worker postgres qdrant minio redis; do
-  id=$(docker compose ps -q "$svc" 2>/dev/null)
-  if [ -z "$id" ]; then bad "$svc: not running"; continue; fi
-  state=$(docker inspect -f '{{.State.Status}}' "$id")
-  health=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}n/a{{end}}' "$id")
-  if [ "$state" = "running" ] && { [ "$health" = "healthy" ] || [ "$health" = "n/a" ]; }; then
-    ok "$svc: $state ($health)"
-  else
-    bad "$svc: $state ($health)"
-  fi
+for svc in web api worker embeddings postgres qdrant minio redis; do
+  ids=$(docker compose ps -q "$svc" 2>/dev/null)
+  if [ -z "$ids" ]; then bad "$svc: not running"; continue; fi
+  n=0
+  for id in $ids; do
+    n=$((n + 1))
+    state=$(docker inspect -f '{{.State.Status}}' "$id")
+    health=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}n/a{{end}}' "$id")
+    label="$svc"; [ "$(echo "$ids" | wc -w)" -gt 1 ] && label="$svc #$n"
+    if [ "$state" = "running" ] && { [ "$health" = "healthy" ] || [ "$health" = "n/a" ]; }; then
+      ok "$label: $state ($health)"
+    else
+      bad "$label: $state ($health)"
+    fi
+  done
 done
 
 echo
