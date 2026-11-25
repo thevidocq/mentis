@@ -40,6 +40,18 @@ class ProviderOut(BaseModel):
     is_default: bool
 
 
+class ModelsIn(BaseModel):
+    kind: str
+    base_url: str = Field(min_length=8, max_length=500)
+    api_key: str | None = None        # as typed in the form; omitted = use the stored key of provider_id
+    provider_id: uuid.UUID | None = None
+
+
+class ModelOption(BaseModel):
+    id: str
+    label: str
+
+
 class TenantLlmIn(BaseModel):
     provider_id: uuid.UUID | None = None  # None = platform default
     fallback_id: uuid.UUID | None = None
@@ -78,6 +90,24 @@ def _set_default(db: Session, p: LlmProvider) -> None:
 @router.get("/llm/kinds")
 def kinds(_: User = Depends(super_admin)) -> dict:
     return {"kinds": llm.KINDS, "presets": llm.PRESETS}
+
+
+@router.post("/llm/models", response_model=list[ModelOption])
+def provider_models(body: ModelsIn, db: Session = Depends(get_db), _: User = Depends(super_admin)) -> list[ModelOption]:
+    """The models a provider offers, to pick from in the form instead of typing a name."""
+    if body.kind not in llm.KINDS:
+        raise HTTPException(422, "Unknown provider type.")
+    if not body.base_url.startswith(("http://", "https://")):
+        raise HTTPException(422, "The URL must start with http:// or https://.")
+    api_key = body.api_key or None
+    if api_key is None and body.provider_id is not None:
+        p = db.get(LlmProvider, body.provider_id)
+        api_key = crypto.decrypt(p.api_key_enc) if p is not None and p.api_key_enc else None
+    try:
+        models = llm.list_models({"name": "The provider", "kind": body.kind, "base_url": body.base_url.rstrip("/"), "api_key": api_key})
+    except llm.LLMError as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Could not list the models: {e}") from None
+    return [ModelOption(**m) for m in models]
 
 
 @router.get("/llm/providers", response_model=list[ProviderOut])

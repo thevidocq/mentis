@@ -2,7 +2,7 @@
 
 - anthropic:        POST {base}/v1/messages           (x-api-key, anthropic-version)
 - openai_chat:      POST {base}/chat/completions       (OpenAI, Ollama /v1, vLLM, compatible)
-- openai_responses: POST {base}/responses              (OpenAI Responses API: gpt-oss on vLLM, Daybreak Blue)
+- openai_responses: POST {base}/responses              (OpenAI Responses API: OpenAI, gpt-oss on vLLM)
 """
 
 from app.services.llm.base import LLMError, LLMReply, Turn

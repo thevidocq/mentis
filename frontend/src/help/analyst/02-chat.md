@@ -2,7 +2,7 @@
 
 ## Ask a question
 
-1. Click **New chat**.
+1. Click **+** (New chat), next to the search box. On a phone, the **+** at the top right does the same.
 2. Choose the customer: type `@` and pick it from the list (arrows and Enter work), or click the customer button under the box. When you have several customers, **All my customers** (or **All customers**) is the default.
 3. Write the question and press **Enter**. **Shift+Enter** starts a new line.
 

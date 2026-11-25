@@ -11,7 +11,7 @@ Mentis is a multi-tenant AI assistant for SOC analysts. It answers questions fro
 - **Chat**: pick the customer with `@` (or ask about all customers). Answers come only from the documents in use. Every statement cites its source (customer, document, version, page), and the chat says "Not found" instead of guessing. Suggested follow-ups, history, feedback.
 - **One knowledge base per customer**, plus a **General** one shared by all. Tenant isolation is enforced server-side.
 - **Documents**: PDF, Word, Excel, PowerPoint, with OCR for scans and images. Versions, approval before publishing, and a side-by-side preview of what Mentis read.
-- **AI providers**: Claude, OpenAI, Daybreak Blue, gpt-oss (vLLM), Ollama. One LLM per customer with automatic fallback. Embeddings run locally (bge-m3), vectors are in Qdrant.
+- **AI providers**: Anthropic, OpenAI, vLLM (e.g. gpt-oss), Ollama, with the model picked from the list each provider offers. One LLM per customer with automatic fallback. Embeddings run locally (bge-m3), vectors are in Qdrant.
 - **Security**: mandatory 2FA, three roles with per-customer access (super-admin for the platform; tenant admins and analysts on the customers ticked for them), encrypted secrets, metadata-only logs.
 - **Operations**: service status, Logs with CSV export and syslog forwarding to a SIEM, retention, LLM usage and cost per customer, backup/restore scripts, configuration export/import.
 - Tenant admins of one or more customers, with a customer selector.

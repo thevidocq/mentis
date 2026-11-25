@@ -1,25 +1,11 @@
 import { useState } from "react";
-import type { ChatMessage, Citation } from "../../api/types";
+import type { ChatMessage } from "../../api/types";
 import { Icon } from "../../components/Icon";
 import { Markdown } from "../../components/Markdown";
+import { Sources } from "./Sources";
 
 export function UserMessage({ m }: { m: Pick<ChatMessage, "content"> }) {
   return <div className="msg-user"><div className="bubble">{m.content}</div></div>;
-}
-
-function Source({ c, open, onToggle }: { c: Citation; open: boolean; onToggle: () => void }) {
-  return (
-    <li id={`src-${c.n}`} className={open ? "open" : ""}>
-      <button type="button" className="source-head" onClick={onToggle} aria-expanded={open}>
-        <span className="cite-n">{c.n}</span>
-        <span className={`pill${c.is_general ? "" : " accent"}`}>{c.tenant}</span>
-        <span className="source-doc">{c.document}</span>
-        <span className="muted small">v{c.version} · {c.page}{c.heading && c.heading !== c.page ? ` · ${c.heading}` : ""}</span>
-        <span className="spacer" /><Icon name="chevronDown" size={14} />
-      </button>
-      {open && <div className="source-text">{c.text}</div>}
-    </li>
-  );
 }
 
 interface Props {
@@ -32,8 +18,10 @@ interface Props {
 
 export function AssistantMessage({ m, onFollowup, onFeedback, onRetry, busy }: Props) {
   const [open, setOpen] = useState<number | null>(null);
+  const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
-  const toggle = (n: number) => setOpen((o) => (o === n ? null : n));
+  // [n] in the text: open the sources on that section (or close it on a second click).
+  const toggle = (n: number) => { setExpanded(true); setOpen((o) => (o === n ? null : n)); };
 
   if (m.status === "error") {
     return (
@@ -62,10 +50,7 @@ export function AssistantMessage({ m, onFollowup, onFeedback, onRetry, busy }: P
         <Markdown source={m.content} cite={cite} />
       </div>
       {m.citations.length > 0 && (
-        <div className="sources">
-          <div className="eyebrow">Sources</div>
-          <ol>{m.citations.map((c) => <Source key={c.n} c={c} open={open === c.n} onToggle={() => toggle(c.n)} />)}</ol>
-        </div>
+        <Sources citations={m.citations} expanded={expanded} onExpand={setExpanded} openN={open} onOpen={setOpen} />
       )}
       {m.followups.length > 0 && (
         <div className="followups">

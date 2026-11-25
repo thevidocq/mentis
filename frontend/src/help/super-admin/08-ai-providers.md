@@ -4,15 +4,18 @@
 
 ## Add a provider
 
-1. Click **Add provider** and pick a preset in **Start from**: Claude Haiku, OpenAI, Daybreak Blue, gpt-oss on vLLM, Ollama.
-2. Check **Base URL** and **Model**, and paste the **API key** (not needed for local Ollama or vLLM without authentication).
-3. **Save**, then **Test**: the model must answer "ready".
+1. Click **Add provider** and pick a preset in **Start from**: Anthropic, OpenAI, OpenAI (Responses API), vLLM, Ollama. A preset fills the API type and the address, never a model.
+2. Check **Base URL** and paste the **API key** (not needed for local Ollama or vLLM without authentication).
+3. Click **Load models**: Mentis asks the provider which models it offers and lists them, newest first. Pick one. If the provider has no list, choose **Other** and type the name.
+4. **Save**, then **Test**: the model must answer "ready".
+
+When you edit a provider, the list is loaded with the stored key; **Reload** refreshes it, for example after the provider releases a new model.
 
 | API type | Use for | Endpoint called |
 |---|---|---|
-| Anthropic (Claude) | Claude models | `<base>/v1/messages` |
+| Anthropic Messages | Claude models | `<base>/v1/messages` |
 | OpenAI Chat Completions | OpenAI, Ollama, vLLM, any compatible server | `<base>/chat/completions` |
-| OpenAI Responses | gpt-oss on vLLM, Daybreak Blue | `<base>/responses` |
+| OpenAI Responses | OpenAI, vLLM (e.g. gpt-oss) | `<base>/responses` |
 
 **Reasoning effort** applies to the Responses API. **Max answer tokens** limits the answer length (default 1500). **Price input/output** (USD per million tokens, optional) feed the cost estimate in **LLM usage**.
 
@@ -38,7 +41,7 @@ Cloud providers (Anthropic, OpenAI) receive the passages. For customers whose do
 | Error | Meaning |
 |---|---|
 | invalid API key (401) | Key wrong or revoked |
-| access denied (403) | The account cannot use this model (Daybreak Blue needs program approval) |
+| access denied (403) | The account cannot use this model (some models need approval from the provider) |
 | wrong URL or model (404) | Check Base URL (with `/v1` for OpenAI-compatible servers) and model name |
 | rate limited (429) | Quota exceeded: wait or raise the limit |
 | not reachable / timed out | Network, DNS, or the model server is down |

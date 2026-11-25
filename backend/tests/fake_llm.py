@@ -13,6 +13,7 @@ class FakeLLM:
     def __init__(self):
         self.requests: list[dict] = []  # {"url", "headers", "body"}
         self.fail: dict[str, int] = {}  # host -> status code to return
+        self.model_requests: list[dict] = []
         self.reply_override: str | None = None
 
     def transport(self) -> httpx.MockTransport:
@@ -37,10 +38,15 @@ class FakeLLM:
                            "followups": followups, "title": title})
 
     def handle(self, request: httpx.Request) -> httpx.Response:
-        if request.method == "GET":  # model list, used by the status page
+        if request.method == "GET":  # model list: status page and the provider form
+            self.model_requests.append({"url": str(request.url), "headers": dict(request.headers)})
             if request.url.host in self.fail:
                 return httpx.Response(self.fail[request.url.host], text='{"error": "boom"}')
-            return httpx.Response(200, json={"data": [{"id": "m"}]})
+            if "anthropic-version" in request.headers:  # Anthropic format
+                return httpx.Response(200, json={"data": [
+                    {"id": "claude-old", "display_name": "Claude Old", "created_at": "2025-01-01T00:00:00Z"},
+                    {"id": "claude-new", "display_name": "Claude New", "created_at": "2026-06-01T00:00:00Z"}]})
+            return httpx.Response(200, json={"data": [{"id": "m"}, {"id": "b-model", "created": 2}, {"id": "a-model", "created": 3}]})
         body = json.loads(request.content)
         self.requests.append({"url": str(request.url), "headers": dict(request.headers), "body": body})
         if request.url.host in self.fail:

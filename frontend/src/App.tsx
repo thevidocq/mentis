@@ -4,8 +4,10 @@ import type { Role } from "./api/types";
 import { homePath, useAuth } from "./auth/AuthContext";
 import { useCurrentTenant } from "./auth/currentTenant";
 import { AdminShell, PLATFORM_NAV, TENANT_NAV } from "./layouts/AdminShell";
+import { CustomerSelect } from "./components/CustomerSelect";
 import { Account } from "./pages/Account";
 import { AcceptInvite } from "./pages/AcceptInvite";
+import { ForgotPassword, ResetPassword } from "./pages/PasswordReset";
 import { ChatPage } from "./pages/chat/ChatPage";
 import { Help } from "./pages/Help";
 import { TenantDocuments, TenantPreview } from "./pages/documents/routes";
@@ -56,13 +58,11 @@ function PlatformArea() {
 }
 
 function TenantArea() {
-  const { current, tenants, select } = useCurrentTenant();
+  const { current, tenants, select, recent } = useCurrentTenant();
   const navigate = useNavigate();
   const switcher = tenants.length > 1 ? (
-    <select className="input tenant-switch" aria-label="Customer" value={current?.id ?? ""}
-      onChange={(e) => { select(e.target.value); navigate("/tenant/documents"); }}>
-      {tenants.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-    </select>
+    <CustomerSelect tenants={tenants} current={current} recent={recent}
+      onSelect={(id) => { select(id); navigate("/tenant/documents"); }} />
   ) : undefined;
   return (
     <AdminShell eyebrow={tenants.length > 1 ? `Customer · ${tenants.length}` : "Customer"} title={current?.name ?? "My customer"} titleControl={switcher} nav={TENANT_NAV}>
@@ -93,6 +93,8 @@ export function App() {
     <Routes>
       <Route path="/login" element={user ? <Navigate to={homePath(user)} replace /> : <Login />} />
       <Route path="/invite/:token" element={<AcceptInvite />} />
+      <Route path="/forgot" element={user ? <Navigate to={homePath(user)} replace /> : <ForgotPassword />} />
+      <Route path="/reset/:token" element={<ResetPassword />} />
       <Route path="/account" element={<RequireRole><Account /></RequireRole>} />
       <Route path="/help" element={<RequireRole><Help /></RequireRole>} />
       <Route path="/admin/*" element={<RequireRole roles={["super_admin"]}><PlatformArea /></RequireRole>} />

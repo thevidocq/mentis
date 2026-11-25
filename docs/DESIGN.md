@@ -119,17 +119,16 @@ Uploads run as background jobs; a new version reaches answers only once indexed 
 
 ## AI layer
 
-LLM is configurable per tenant; default for the prototype is Claude Haiku. Embeddings stay local.
+LLM is configurable per tenant; the platform default is whichever provider the super-admin marks as default. Embeddings stay local.
 
 | Provider type | Use | Notes |
 | --- | --- | --- |
-| Anthropic | Claude Haiku (default) | API key |
+| Anthropic | Claude models | API key |
 | OpenAI Chat Completions | OpenAI cloud, vLLM, compatible endpoints | `/v1/chat/completions` |
 | OpenAI Responses API | Internal gpt-oss (vLLM) | `/v1/responses`, reasoning auto-on for gpt-oss/o-series, API key optional |
-| Daybreak Blue | OpenAI defensive-cyber model (`gpt-daybreak-blue-latest`) | Requires approval in OpenAI's Daybreak program |
 | Ollama | Local models | No key |
 
-- Every provider: test connection, failover to the tenant's fallback provider. One platform default; each tenant can choose its own provider and fallback. API keys encrypted at rest. (Model discovery: later.)
+- Every provider: test connection, failover to the tenant's fallback provider. One platform default; each tenant can choose its own provider and fallback. API keys encrypted at rest. Models are discovered from the provider (`GET /models`) and picked from a list; presets carry no model names.
 - **Embeddings:** local by default (bge-m3, multilingual). Other providers configurable (Ollama, OpenAI-compatible endpoints).
 - **Vector DB:** Qdrant only, one collection per tenant.
 - **Retrieval:** customer chunks + General chunks (if enabled), active versions only, score threshold; customer wins on conflict.
