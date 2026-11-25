@@ -6,6 +6,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-25
+
+### Fixed
+- Installation failed with `pull access denied for minio/minio`: MinIO, Inc. deleted its free images from Docker Hub. The `minio` service now uses `pgsty/minio` (community fork, drop-in: same data format and settings), pinned to `RELEASE.2026-03-25T00-00-00Z`.
+
 ## [0.1.0] - 2026-11-25
 
 First release. Everything below this heading, down to the end of the file, is part of it.

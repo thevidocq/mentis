@@ -112,7 +112,9 @@ services:
       - "127.0.0.1:6333:6333"
 
   minio:
-    image: minio/minio:latest
+    # MinIO, Inc. removed its free images from Docker Hub and Quay (2026).
+    # pgsty/minio is the community fork: same binary, data format and MINIO_* settings.
+    image: pgsty/minio:RELEASE.2026-03-25T00-00-00Z
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
