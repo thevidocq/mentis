@@ -49,13 +49,18 @@ def user_count(db: Session, tenant: Tenant) -> int:
 def delete_tenant(db: Session, tenant: Tenant) -> None:
     """Remove a customer tenant and everything it owns.
 
-    Documents, versions, pages, chunks and stored files are removed here. Later blocks add
-    the Qdrant collection, chats and integrations.
+    Documents, versions, pages, chunks, stored files, the chats scoped to it and the chats of
+    its tenant admins are removed here. Integrations will be added by their block.
     Log events are kept (retention applies).
     """
+    from app.models import Chat, ChatMessage
     from app.services.versions import delete_tenant_documents
 
     delete_tenant_documents(db, tenant.id)
+    admin_ids = select(User.id).where(User.tenant_id == tenant.id)
+    chat_ids = select(Chat.id).where((Chat.scope_tenant_id == tenant.id) | Chat.user_id.in_(admin_ids))
+    db.execute(delete(ChatMessage).where(ChatMessage.chat_id.in_(chat_ids)))
+    db.execute(delete(Chat).where((Chat.scope_tenant_id == tenant.id) | Chat.user_id.in_(admin_ids)))
     db.execute(delete(Invitation).where(Invitation.tenant_id == tenant.id))
     db.execute(delete(User).where(User.tenant_id == tenant.id))
     db.delete(tenant)
