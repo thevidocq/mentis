@@ -19,8 +19,9 @@ node_modules/
 frontend/dist/
 .vite/
 
-# Data volumes
+# Data volumes and backups (backups contain .env)
 data/
+backups/
 
 # OS / editors
 .DS_Store

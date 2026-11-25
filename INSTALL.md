@@ -100,7 +100,7 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_read_timeout 180s;
+        proxy_read_timeout 300s;     # as long as the web container waits for the API
     }
 }
 ```

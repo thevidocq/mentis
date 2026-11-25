@@ -36,7 +36,7 @@ cd mentis
 ./restore.sh backups/mentis-<date> --with-env   # new server: restores .env too
 ```
 
-The script checks the files, asks you to type `RESTORE`, stops the application, replaces the database, documents and index, starts everything again and runs `./check.sh`. A backup from an older version is migrated automatically at start.
+The script checks the files, asks you to type `RESTORE`, stops the application, replaces the database, documents and index, starts everything again and runs `./check.sh`. A backup from an older version is migrated automatically at start. With `--with-env`, `.env` is replaced only after you confirm, and the database password is set to the one in the restored `.env`. On a new server the script builds the images itself if they are missing.
 
 If you restore on the same server without `--with-env` and the secret key in `.env` differs from the backup's, the script warns you: stored passwords and API keys would not decrypt.
 
