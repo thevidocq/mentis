@@ -11,7 +11,14 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Chunk, Document, DocumentVersion, Tenant, VersionPage, VersionStatus
+from app.models import (
+    Chunk,
+    Document,
+    DocumentVersion,
+    Tenant,
+    VersionPage,
+    VersionStatus,
+)
 from app.services import embeddings, vector_index
 
 

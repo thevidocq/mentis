@@ -24,7 +24,7 @@ def ingest_version(version_id: str) -> None:
     if version is None:
         _log.warning("version %s no longer exists", version_id)
         return
-    version.status, version.error = VersionStatus.PROCESSING, None
+    version.status, version.error, version.status_at = VersionStatus.PROCESSING, None, utcnow()
     db.commit()
     prefix = storage.version_prefix(version.tenant_id, version.id)
 

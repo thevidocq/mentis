@@ -11,7 +11,15 @@ Rules
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
-from app.models import Approval, Chunk, Document, DocumentVersion, Tenant, VersionPage, VersionStatus
+from app.models import (
+    Approval,
+    Chunk,
+    Document,
+    DocumentVersion,
+    Tenant,
+    VersionPage,
+    VersionStatus,
+)
 from app.models.base import utcnow
 from app.services import storage, vector_index
 

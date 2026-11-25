@@ -7,7 +7,16 @@ Every query filters by the tenant resolved here, never by IDs alone.
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -17,7 +26,16 @@ from sqlalchemy.orm import Session
 from app.api.deps import client_ip, require_roles
 from app.core.config import get_settings
 from app.core.db import get_db
-from app.models import Document, DocumentVersion, Role, Tenant, User, VersionPage, VersionStatus
+from app.models import (
+    Document,
+    DocumentVersion,
+    Role,
+    Tenant,
+    User,
+    VersionPage,
+    VersionStatus,
+)
+from app.models.base import utcnow
 from app.services import jobs, retrieval, storage, versions
 from app.services.embeddings import EmbeddingError
 from app.services.logs import log_event
@@ -329,7 +347,7 @@ def retry_version(tenant_id: uuid.UUID, version_id: uuid.UUID, request: Request,
     v = _version(db, tenant, version_id)
     if v.status != VersionStatus.FAILED:
         raise HTTPException(status.HTTP_409_CONFLICT, "Only a failed version can be processed again.")
-    v.status, v.error = VersionStatus.QUEUED, None
+    v.status, v.error, v.status_at = VersionStatus.QUEUED, None, utcnow()
     db.commit()
     log_event(db, "document.retry", actor=user, tenant_id=tenant.id, target=v.original_filename, ip=client_ip(request), detail={"version": v.version})
     jobs.enqueue_ingest(str(v.id))

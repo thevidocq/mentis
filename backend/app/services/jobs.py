@@ -23,6 +23,22 @@ def redis_connection():
     return Redis.from_url(get_settings().redis_url)
 
 
+def ingest_job_id(version_id: str) -> str:
+    return f"ingest-{version_id}"
+
+
+def ingest_job_pending(version_id: str) -> bool:
+    """True if the version's job is still waiting or running in Redis."""
+    from rq.exceptions import NoSuchJobError
+    from rq.job import Job, JobStatus
+
+    try:
+        job = Job.fetch(ingest_job_id(version_id), connection=redis_connection())
+    except NoSuchJobError:
+        return False
+    return job.get_status() in (JobStatus.QUEUED, JobStatus.STARTED, JobStatus.DEFERRED, JobStatus.SCHEDULED)
+
+
 def enqueue_ingest(version_id: str) -> None:
     if _runner is not None:
         _runner("ingest", version_id)
@@ -32,6 +48,7 @@ def enqueue_ingest(version_id: str) -> None:
     Queue(QUEUE, connection=redis_connection()).enqueue(
         "app.worker.tasks.ingest_version",
         version_id,
+        job_id=ingest_job_id(version_id),
         job_timeout=get_settings().ingest_timeout_seconds,
         result_ttl=3600,
         failure_ttl=7 * 24 * 3600,

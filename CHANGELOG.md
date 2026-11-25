@@ -26,6 +26,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 - Interactive API docs (`/api/docs`, `/api/openapi.json`) were public; now off unless `MENTIS_API_DOCS=true`.
 - Syslog forwarding could lose events raised inside ingestion jobs (forked processes); they are now sent synchronously there.
 - Stray files removed from the repository (a shellcheck wheel).
+- **TOTP codes could be replayed** within their 90-second window (e.g. a code seen over a shoulder): each code now works once (migration 0006). A still-valid enrollment step can no longer replace an authenticator already set up.
+- **Wrong current password** on password change was not counted: it now counts like a failed sign-in (5 lock the account and end the session).
+- **Document versions stuck** in Processing after a worker crash or restart stayed there forever: after the ingestion timeout they become Failed ("Processing was interrupted", use Retry); versions Queued whose job was lost are queued again (migration 0007, checked every 10 minutes by the worker).
+- Expired sign-in sessions and invitations expired for a week were never deleted: removed by the daily purge.
+- When the session expires or is revoked, the app now returns to the sign-in page instead of showing "Not authenticated" errors.
+- Blank names (only spaces) were accepted for users, invitations and chat titles.
 
 ## [0.1.1] - 2026-11-25
 

@@ -7,9 +7,10 @@ Log events carry metadata only, never questions or answers.
 
 import uuid
 from datetime import datetime
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
@@ -67,7 +68,7 @@ class NewMessage(BaseModel):
 
 
 class Rename(BaseModel):
-    title: str = Field(min_length=1, max_length=120)
+    title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
 
 
 class Feedback(BaseModel):

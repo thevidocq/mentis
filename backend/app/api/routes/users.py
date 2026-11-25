@@ -3,12 +3,12 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import client_ip, require_roles
-from app.api.schemas import TenantRef, UserOut
+from app.api.schemas import Name, TenantRef, UserOut
 from app.core.db import get_db
 from app.models import Chat, ChatMessage, Role, User, user_tenants
 from app.services import sessions
@@ -27,7 +27,7 @@ class UserAdminOut(UserOut):
 
 
 class UserUpdate(BaseModel):
-    full_name: str | None = Field(default=None, min_length=1, max_length=120)
+    full_name: Name | None = None
     role: str | None = None
     tenant_ids: list[uuid.UUID] | None = None
     is_active: bool | None = None
@@ -126,7 +126,7 @@ def delete_user(user_id: uuid.UUID, request: Request, db: Session = Depends(get_
 @router.post("/{user_id}/reset-2fa", status_code=status.HTTP_204_NO_CONTENT)
 def reset_2fa(user_id: uuid.UUID, request: Request, db: Session = Depends(get_db), actor: User = Depends(super_admin)) -> None:
     target = _target(db, actor, user_id)
-    target.totp_secret_enc, target.totp_enabled = None, False
+    target.totp_secret_enc, target.totp_enabled, target.totp_last_step = None, False, None
     db.commit()
     sessions.revoke_all_sessions(db, target)
     log_event(db, "user.mfa_reset", actor=actor, tenant_id=rules.single_tenant(target), target=target.email, ip=client_ip(request))

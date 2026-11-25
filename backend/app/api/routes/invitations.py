@@ -4,12 +4,12 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import client_ip, require_roles
-from app.api.schemas import TenantRef
+from app.api.schemas import Name, TenantRef
 from app.core.db import get_db
 from app.core.security import password_problem
 from app.models import Invitation, Role, Tenant, User
@@ -23,7 +23,7 @@ admins = require_roles(Role.SUPER_ADMIN, Role.TENANT_ADMIN)
 
 class InviteCreate(BaseModel):
     email: EmailStr
-    full_name: str = Field(min_length=1, max_length=120)
+    full_name: Name
     role: str
     tenant_ids: list[uuid.UUID] = []
 

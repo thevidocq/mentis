@@ -6,7 +6,18 @@ Every row carries tenant_id so isolation can be enforced with a single filter.
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, Uuid
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    Uuid,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, CreatedMixin, IdMixin, utcnow
@@ -65,6 +76,8 @@ class DocumentVersion(IdMixin, Base):
     uploaded_by: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # When the status last became queued or processing: finds versions stuck after a worker crash.
+    status_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=utcnow)
     reviewed_by: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
