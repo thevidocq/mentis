@@ -40,7 +40,8 @@ One chat = one customer scope, locked at the first message; integrations are cho
 
 - Left sidebar, clearly separated blocks: logo + "New chat" (light outlined button), history search, history grouped by day, account link at the bottom.
 - History items show title and `@customer`; the active chat has rename and delete icons.
-- Header: chat title, locked customer badge, LLM badge (brain icon + configured instance name).
+- Header: chat title and customer badge (lock icon once locked). The LLM that wrote each answer is shown under it, with latency.
+- Chats are private to their user. Analysts and super-admins chat on any customer; tenant admins only on their own, to test answers.
 
 **`@` customer scope**
 
@@ -59,7 +60,9 @@ One chat = one customer scope, locked at the first message; integrations are cho
 
 - Every answer states which customer it refers to (and "+ General" when used).
 - Citations: documents as [1], [2] (document, version, page/sheet/slide); live integration data as [A], [B] (source, object, read time).
-- If the documentation does not cover the question: "Not found in <customer> documentation", never an invented procedure.
+- If the documentation does not cover the question: "Not found in <customer> documentation", never an invented procedure. With no passage above the score threshold the LLM is not called at all; the model can also flag not-found itself.
+- Passages go to the LLM as numbered, untrusted data blocks labelled with their customer; citation numbers not among them are dropped.
+- The last turns of the chat are sent as context; short follow-ups also reuse the previous question for retrieval.
 
 **Suggested follow-ups**
 
@@ -71,7 +74,7 @@ One chat = one customer scope, locked at the first message; integrations are cho
 
 **Titles**
 
-- Generated after the first exchange by a short call to the chat tenant's LLM (4–6 words, no customer name).
+- Generated with the first answer, in the same LLM call (4–6 words, no customer name).
 - Fallback: first 60 characters of the question. Manual rename locks the title.
 
 ## Document ingestion and versioning
@@ -122,7 +125,7 @@ LLM is configurable per tenant; default for the prototype is Claude Haiku. Embed
 | Daybreak Blue | OpenAI defensive-cyber model (`gpt-daybreak-blue-latest`) | Requires approval in OpenAI's Daybreak program |
 | Ollama | Local models | No key |
 
-- Every provider: test connection, model discovery, failover to a secondary provider.
+- Every provider: test connection, failover to the tenant's fallback provider. One platform default; each tenant can choose its own provider and fallback. API keys encrypted at rest. (Model discovery: later.)
 - **Embeddings:** local by default (bge-m3, multilingual). Other providers configurable (Ollama, OpenAI-compatible endpoints).
 - **Vector DB:** Qdrant only, one collection per tenant.
 - **Retrieval:** customer chunks + General chunks (if enabled), active versions only, score threshold; customer wins on conflict.

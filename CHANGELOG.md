@@ -7,6 +7,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 ## [Unreleased]
 
 ### Added
+- **Chat** (0.1.0 part 4): analysts ask questions and get answers only from the documentation in use, with numbered citations (customer, document, version, page, passage). `@` chooses the customer (All customers by default) and the first message locks it; typing `@` afterwards shows the list greyed. `#` integrations are shown as coming.
+- Answer pipeline: customer + General (tenant setting) or every active customer; no matching passage → "Not found" without calling the LLM; anti-hallucination system prompt, passages treated as untrusted data; JSON answer with lenient parsing; citations validated against the passages sent; up to 3 follow-ups (tenant setting); automatic title from the first exchange (kept once renamed); last turns sent as context.
+- History sidebar grouped by day with search (titles and messages), rename and delete; feedback thumbs; copy; model name and latency under each answer; Retry on errors; disabled customers make their chats read-only.
+- Chats are private to their user. Analysts and super-admins can chat on any customer; tenant admins only on their own (to test). Logs record metadata only (model, tokens, latency, passages), never questions or answers.
+- **AI providers** (super-admin): Anthropic Messages, OpenAI Chat Completions (OpenAI, Ollama, vLLM) and OpenAI Responses (gpt-oss, Daybreak Blue) with presets, encrypted API keys, test, platform default. Per-tenant LLM and fallback (tenant admin **LLM** page, brain icon in Tenants); automatic failover.
+- Settings `MENTIS_CHAT_PASSAGES` (8) and `MENTIS_CHAT_MIN_SCORE` (0.3); `api` can reach model servers on the host via `host.docker.internal`.
+- Service status: one line per AI provider (lists models: checks address and key, no tokens spent).
+- Tenant deletion and user deletion also remove the related chats.
+- Help: Using the chat (analyst), LLM and testing answers (tenant admin), AI providers (super-admin); updated getting started, tenants, roles.
+- Migration 0004.
+- Release notes for v0.1.0-alpha.2 (`docs/releases/v0.1.0-alpha.2.md`).
 - **Indexing** (0.1.0 part 3b): chunks embedded through any OpenAI-compatible endpoint and stored in Qdrant, one collection per customer. New `embeddings` container (Hugging Face TEI, CPU) with BAAI/bge-m3 by default.
 - Indexing is the last ingestion step; a version that cannot be indexed fails and never replaces the active one. Activation, approval, restore, deletion and tenant deletion keep Qdrant in sync.
 - Retrieval service (customer + General, active versions only) with every hit re-checked against PostgreSQL, ready for the chat.

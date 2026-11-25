@@ -3,6 +3,7 @@ import { api, errorText } from "../../api/client";
 import type { Tenant } from "../../api/types";
 import { Icon } from "../../components/Icon";
 import { Modal } from "../../components/Modal";
+import { TenantLlmForm } from "../tenant/TenantLlm";
 import { PageHead } from "../../layouts/AdminShell";
 
 const STATUSES: Tenant["status"][] = ["active", "onboarding", "disabled"];
@@ -13,6 +14,7 @@ export function Tenants() {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Tenant | "new" | null>(null);
   const [deleting, setDeleting] = useState<Tenant | null>(null);
+  const [llmFor, setLlmFor] = useState<Tenant | null>(null);
 
   const load = useCallback(() => {
     api<Tenant[]>("/tenants").then(setTenants).catch((e) => setError(errorText(e)));
@@ -43,6 +45,7 @@ export function Tenants() {
                   <td><span className={`pill ${statusPill(t.status)}`}>{t.status}</span></td>
                   <td>
                     <div className="actions">
+                      {!t.is_global && <button className="icon-btn" aria-label={`LLM of ${t.name}`} title="LLM" onClick={() => setLlmFor(t)}><Icon name="brain" /></button>}
                       <button className="icon-btn" aria-label={`Edit ${t.name}`} onClick={() => setEditing(t)}><Icon name="pencil" /></button>
                       {t.is_global ? (
                         <span className="icon-btn" style={{ border: 0, color: "var(--muted)" }} title="The General tenant cannot be deleted"><Icon name="lock" /></span>
@@ -58,6 +61,7 @@ export function Tenants() {
         </div>
       </div>
       {editing && <TenantForm tenant={editing === "new" ? null : editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />}
+      {llmFor && <Modal title={`LLM of ${llmFor.name}`} onClose={() => setLlmFor(null)}><TenantLlmForm tenantId={llmFor.id} /></Modal>}
       {deleting && <DeleteTenant tenant={deleting} onClose={() => setDeleting(null)} onDeleted={() => { setDeleting(null); load(); }} />}
     </>
   );

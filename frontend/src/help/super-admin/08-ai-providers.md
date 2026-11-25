@@ -1,0 +1,44 @@
+# AI providers
+
+**AI providers** lists the LLMs that write the answers. The chat does not answer until at least one is configured.
+
+## Add a provider
+
+1. Click **Add provider** and pick a preset in **Start from**: Claude Haiku, OpenAI, Daybreak Blue, gpt-oss on vLLM, Ollama.
+2. Check **Base URL** and **Model**, and paste the **API key** (not needed for local Ollama or vLLM without authentication).
+3. **Save**, then **Test**: the model must answer "ready".
+
+| API type | Use for | Endpoint called |
+|---|---|---|
+| Anthropic (Claude) | Claude models | `<base>/v1/messages` |
+| OpenAI Chat Completions | OpenAI, Ollama, vLLM, any compatible server | `<base>/chat/completions` |
+| OpenAI Responses | gpt-oss on vLLM, Daybreak Blue | `<base>/responses` |
+
+**Reasoning effort** applies to the Responses API. **Max answer tokens** limits the answer length (default 1500).
+
+API keys are stored encrypted and never shown again; leave the field empty to keep the stored key.
+
+## Default, tenant choice and fallback
+
+- The **Default** provider (star icon to change it) answers for every customer and for **All customers** chats.
+- A tenant can use another provider and a **fallback**: in **Tenants**, click the brain icon of the tenant, or the tenant admin does it in **LLM**.
+- If the first model fails (down, timeout, quota), Mentis asks the fallback. The model that answered is shown under each answer.
+- A provider in use by a tenant cannot be deleted.
+
+## What is sent to the model
+
+Only the question, the last few messages of the chat and the passages found in the customer's documents. Questions without matching passages are answered "Not found" without calling the model. Logs record metadata only (customer, model, tokens, time), never questions or answers.
+
+## Data residency
+
+Cloud providers (Anthropic, OpenAI) receive the passages. For customers whose documents must stay internal, give them an internal model (gpt-oss on vLLM, Ollama) and no cloud fallback.
+
+## Troubleshooting
+
+| Error | Meaning |
+|---|---|
+| invalid API key (401) | Key wrong or revoked |
+| access denied (403) | The account cannot use this model (Daybreak Blue needs program approval) |
+| wrong URL or model (404) | Check Base URL (with `/v1` for OpenAI-compatible servers) and model name |
+| rate limited (429) | Quota exceeded: wait or raise the limit |
+| not reachable / timed out | Network, DNS, or the model server is down |

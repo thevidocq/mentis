@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     embedding_batch_size: int = 32
     embedding_timeout_seconds: int = 120
 
+    # Chat retrieval: passages sent to the LLM and the minimum similarity to keep one.
+    chat_passages: int = 8
+    chat_min_score: float = 0.3
+
     # Base URL users open in the browser; used to build invitation links.
     public_url: str = "http://localhost"
     invitation_ttl_hours: int = 72

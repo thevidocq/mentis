@@ -4,13 +4,13 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import client_ip, require_roles
 from app.api.schemas import UserOut
 from app.core.db import get_db
-from app.models import Role, User
+from app.models import Chat, ChatMessage, Role, User
 from app.services import sessions
 from app.services import users as rules
 from app.services.logs import log_event
@@ -106,6 +106,9 @@ def delete_user(user_id: uuid.UUID, request: Request, db: Session = Depends(get_
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "There must be at least one active super-admin.")
     email, tid = target.email, target.tenant_id
     sessions.revoke_all_sessions(db, target)
+    chat_ids = select(Chat.id).where(Chat.user_id == target.id)
+    db.execute(delete(ChatMessage).where(ChatMessage.chat_id.in_(chat_ids)))
+    db.execute(delete(Chat).where(Chat.user_id == target.id))
     db.delete(target)
     db.commit()
     log_event(db, "user.deleted", level="warning", actor=actor, tenant_id=tid, target=email, ip=client_ip(request))

@@ -5,17 +5,19 @@ import { homePath, useAuth } from "./auth/AuthContext";
 import { AdminShell, PLATFORM_NAV, TENANT_NAV } from "./layouts/AdminShell";
 import { Account } from "./pages/Account";
 import { AcceptInvite } from "./pages/AcceptInvite";
-import { ChatHome } from "./pages/ChatHome";
+import { ChatPage } from "./pages/chat/ChatPage";
 import { Help } from "./pages/Help";
 import { GeneralDocuments, TenantDocuments, GeneralPreview, TenantPreview } from "./pages/documents/routes";
 import { Login } from "./pages/Login";
 import { Placeholder } from "./pages/Placeholder";
 import { Setup } from "./pages/Setup";
+import { AiProviders } from "./pages/platform/AiProviders";
 import { EmbeddingSettings } from "./pages/platform/EmbeddingSettings";
 import { ServiceStatus } from "./pages/platform/ServiceStatus";
 import { SmtpSettings } from "./pages/platform/SmtpSettings";
 import { Tenants } from "./pages/platform/Tenants";
 import { Users } from "./pages/Users";
+import { TenantLlm } from "./pages/tenant/TenantLlm";
 import { TenantSettings } from "./pages/tenant/TenantSettings";
 
 function RequireRole({ roles, children }: { roles?: Role[]; children: ReactNode }) {
@@ -38,7 +40,7 @@ function PlatformArea() {
         <Route path="status" element={<ServiceStatus />} />
         <Route path="general" element={<GeneralDocuments />} />
         <Route path="general/preview/:versionId" element={<GeneralPreview />} />
-        <Route path="ai" element={soon("AI providers", "LLM provider configuration")} />
+        <Route path="ai" element={<AiProviders />} />
         <Route path="embedding" element={<EmbeddingSettings />} />
         <Route path="retention" element={soon("Retention", "Retention settings")} />
         <Route path="logs" element={soon("Logs", "The Logs section")} />
@@ -58,7 +60,7 @@ function TenantArea() {
         <Route path="documents" element={<TenantDocuments />} />
         <Route path="documents/preview/:versionId" element={<TenantPreview />} />
         <Route path="integrations" element={soon("Integrations", "Ticketing, EDR and SIEM integrations")} />
-        <Route path="llm" element={soon("LLM", "Choosing the tenant's LLM")} />
+        <Route path="llm" element={<TenantLlm />} />
         <Route path="*" element={<Navigate to="documents" replace />} />
       </Routes>
     </AdminShell>
@@ -83,7 +85,8 @@ export function App() {
       <Route path="/help" element={<RequireRole><Help /></RequireRole>} />
       <Route path="/admin/*" element={<RequireRole roles={["super_admin"]}><PlatformArea /></RequireRole>} />
       <Route path="/tenant/*" element={<RequireRole roles={["tenant_admin"]}><TenantArea /></RequireRole>} />
-      <Route path="/chat" element={<RequireRole><ChatHome /></RequireRole>} />
+      <Route path="/chat" element={<RequireRole><ChatPage /></RequireRole>} />
+      <Route path="/chat/:chatId" element={<RequireRole><ChatPage /></RequireRole>} />
       <Route path="*" element={user ? <Navigate to={homePath(user)} replace /> : <Navigate to="/login" replace />} />
     </Routes>
   );

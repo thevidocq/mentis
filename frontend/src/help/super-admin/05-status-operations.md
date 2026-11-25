@@ -2,7 +2,7 @@
 
 ## Service status
 
-Shows each service with its state, latency and detail, refreshed every 60 seconds: API, PostgreSQL, MinIO (stored documents), Redis (job queue, with the number of waiting jobs), the ingestion worker, Qdrant (vector index) and the embedding service. If the worker is **Down**, uploads stay **Queued** until it is back. If embeddings are **Down**, new versions fail with "Indexing failed" and can be retried. LLM providers and integrations are added as they ship.
+Shows each service with its state, latency and detail, refreshed every 60 seconds: API, PostgreSQL, MinIO (stored documents), Redis (job queue, with the number of waiting jobs), the ingestion worker, Qdrant (vector index) and the embedding service. If the worker is **Down**, uploads stay **Queued** until it is back. If embeddings are **Down**, new versions fail with "Indexing failed" and can be retried. Each AI provider has its own line (**LLM: name**): the check lists the provider's models, so it verifies address and API key without spending tokens. **AI provider: Down** means none is configured. Integrations are added as they ship.
 
 ## Commands on the server
 

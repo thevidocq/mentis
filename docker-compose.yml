@@ -30,6 +30,11 @@ services:
       MENTIS_QDRANT_API_KEY: ${QDRANT_API_KEY}
       MENTIS_EMBEDDING_URL: ${MENTIS_EMBEDDING_URL:-http://embeddings/v1}
       MENTIS_EMBEDDING_MODEL: ${MENTIS_EMBEDDING_MODEL:-BAAI/bge-m3}
+      MENTIS_CHAT_PASSAGES: ${MENTIS_CHAT_PASSAGES:-8}
+      MENTIS_CHAT_MIN_SCORE: ${MENTIS_CHAT_MIN_SCORE:-0.3}
+    # Lets AI providers reach a model server on the host (e.g. Ollama at http://host.docker.internal:11434/v1).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
