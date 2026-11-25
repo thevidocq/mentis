@@ -1,7 +1,16 @@
 # Mentis – Docker Compose
-# Worker, embeddings and frontend are added later in the 0.1.0 work.
+# Open the app at http://127.0.0.1:8080 (put your own nginx/HTTPS in front for remote access).
+# Worker and embeddings are added later in the 0.1.0 work.
 
 services:
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "127.0.0.1:8080:8080"
+
   api:
     build: ./backend
     restart: unless-stopped

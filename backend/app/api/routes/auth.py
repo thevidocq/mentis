@@ -31,12 +31,20 @@ from app.core.security import (
     verify_password,
     verify_totp,
 )
-from app.models import User
+from app.models import Tenant, User
 from app.models.base import utcnow
 from app.services import sessions
 from app.services.logs import log_event
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def user_out(db: Session, user: User) -> UserOut:
+    out = UserOut.model_validate(user, from_attributes=True)
+    if user.tenant_id:
+        tenant = db.get(Tenant, user.tenant_id)
+        out.tenant_name = tenant.name if tenant else None
+    return out
 
 PURPOSE_MFA = "mfa"
 PURPOSE_ENROLL = "enroll"
@@ -124,7 +132,7 @@ def totp_verify(body: VerifyRequest, request: Request, response: Response, db: S
     token = sessions.create_session(db, user, ip, request.headers.get("user-agent"))
     _set_session_cookie(response, token)
     log_event(db, "auth.login.success", actor=user, ip=ip)
-    return UserOut.model_validate(user, from_attributes=True)
+    return user_out(db, user)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
@@ -138,8 +146,8 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db), 
 
 
 @router.get("/me", response_model=UserOut)
-def me(user: User = Depends(current_user)) -> UserOut:
-    return UserOut.model_validate(user, from_attributes=True)
+def me(db: Session = Depends(get_db), user: User = Depends(current_user)) -> UserOut:
+    return user_out(db, user)
 
 
 @router.patch("/me", response_model=UserOut)
@@ -151,7 +159,7 @@ def update_profile(body: ProfileUpdate, db: Session = Depends(get_db), user: Use
             raise HTTPException(422, f"Theme must be one of: {', '.join(THEMES)}.")
         user.preferences = {**(user.preferences or {}), "theme": body.theme}
     db.commit()
-    return UserOut.model_validate(user, from_attributes=True)
+    return user_out(db, user)
 
 
 @router.post("/password", status_code=status.HTTP_204_NO_CONTENT)
