@@ -1,6 +1,7 @@
 """Invitations: create, send, accept."""
 
 import logging
+import uuid
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import delete, select
@@ -25,7 +26,7 @@ def invite_url(token: str) -> str:
     return f"{get_settings().public_url.rstrip('/')}/invite/{token}"
 
 
-def create(db: Session, *, email: str, full_name: str, role: str, tenant_id, invited_by) -> tuple[Invitation, str]:
+def create(db: Session, *, email: str, full_name: str, role: str, tenant_ids: list[str], invited_by) -> tuple[Invitation, str]:
     # A new invitation replaces any pending one for the same email.
     db.execute(delete(Invitation).where(Invitation.email == email, Invitation.accepted_at.is_(None)))
     token = new_session_token()
@@ -33,7 +34,7 @@ def create(db: Session, *, email: str, full_name: str, role: str, tenant_id, inv
         email=email,
         full_name=full_name,
         role=role,
-        tenant_id=tenant_id,
+        tenant_ids=tenant_ids,
         token_hash=hash_token(token),
         expires_at=utcnow() + timedelta(hours=get_settings().invitation_ttl_hours),
         invited_by=invited_by,
@@ -48,8 +49,8 @@ def send(db: Session, inv: Invitation, token: str) -> bool:
     cfg = mail.get_smtp(db)
     if not mail.is_configured(cfg):
         return False
-    tenant = db.get(Tenant, inv.tenant_id) if inv.tenant_id else None
-    scope = f" for {tenant.name}" if tenant else ""
+    names = _tenant_names(db, inv)
+    scope = f" for {', '.join(names)}" if names else ""
     body = (
         f"Hello {inv.full_name},\n\n"
         f"you have been invited to Mentis as {ROLE_LABELS.get(inv.role, inv.role)}{scope}.\n\n"
@@ -72,15 +73,25 @@ def find_valid(db: Session, token: str) -> Invitation | None:
     return inv
 
 
+def _tenants(db: Session, inv: Invitation) -> list[Tenant]:
+    ids = [uuid.UUID(t) for t in inv.tenant_ids or []]
+    return list(db.scalars(select(Tenant).where(Tenant.id.in_(ids)).order_by(Tenant.name))) if ids else []
+
+
+def _tenant_names(db: Session, inv: Invitation) -> list[str]:
+    return [t.name for t in _tenants(db, inv)]
+
+
 def accept(db: Session, inv: Invitation, password: str) -> User:
     user = User(
         email=inv.email,
         full_name=inv.full_name,
         password_hash=hash_password(password),
         role=inv.role,
-        tenant_id=inv.tenant_id,
         password_changed_at=utcnow(),
     )
+    # Tenants deleted since the invitation are simply skipped.
+    user.tenants = _tenants(db, inv)
     db.add(user)
     inv.accepted_at = utcnow()
     db.commit()

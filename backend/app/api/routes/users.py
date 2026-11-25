@@ -1,4 +1,4 @@
-"""User management (super-admin: everyone; tenant admin: admins of its own tenant)."""
+"""User management (super-admin: everyone; tenant admin: admins whose tenants are all its own)."""
 
 import uuid
 
@@ -8,9 +8,9 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import client_ip, require_roles
-from app.api.schemas import UserOut
+from app.api.schemas import TenantRef, UserOut
 from app.core.db import get_db
-from app.models import Chat, ChatMessage, Role, User
+from app.models import Chat, ChatMessage, Role, User, user_tenants
 from app.services import sessions
 from app.services import users as rules
 from app.services.logs import log_event
@@ -23,20 +23,22 @@ super_admin = require_roles(Role.SUPER_ADMIN)
 class UserAdminOut(UserOut):
     is_active: bool
     locked: bool
+    manageable: bool = True
 
 
 class UserUpdate(BaseModel):
     full_name: str | None = Field(default=None, min_length=1, max_length=120)
     role: str | None = None
-    tenant_id: uuid.UUID | None = None
+    tenant_ids: list[uuid.UUID] | None = None
     is_active: bool | None = None
 
 
-def _out(u: User) -> UserAdminOut:
+def _out(u: User, actor: User | None = None) -> UserAdminOut:
     return UserAdminOut(
-        id=u.id, email=u.email, full_name=u.full_name, role=u.role, tenant_id=u.tenant_id,
+        id=u.id, email=u.email, full_name=u.full_name, role=u.role,
+        tenants=[TenantRef(id=t.id, name=t.name) for t in u.tenants],
         totp_enabled=u.totp_enabled, preferences=u.preferences or {}, is_active=u.is_active,
-        locked=sessions.is_locked(u),
+        locked=sessions.is_locked(u), manageable=rules.can_manage(actor, u) if actor else True,
     )
 
 
@@ -51,10 +53,12 @@ def _target(db: Session, actor: User, user_id: uuid.UUID) -> User:
 def list_users(tenant_id: uuid.UUID | None = None, db: Session = Depends(get_db), actor: User = Depends(admins)) -> list[UserAdminOut]:
     q = select(User).order_by(User.full_name)
     if actor.role == Role.TENANT_ADMIN.value:
-        q = q.where(User.tenant_id == actor.tenant_id)
+        # Admins sharing at least one tenant; only those entirely inside the actor's tenants are manageable.
+        ids = actor.tenant_ids if tenant_id is None else ({tenant_id} & actor.tenant_ids)
+        q = q.where(User.id.in_(select(user_tenants.c.user_id).where(user_tenants.c.tenant_id.in_(ids))))
     elif tenant_id is not None:
-        q = q.where(User.tenant_id == tenant_id)
-    return [_out(u) for u in db.scalars(q)]
+        q = q.where(User.id.in_(select(user_tenants.c.user_id).where(user_tenants.c.tenant_id == tenant_id)))
+    return [_out(u, actor) for u in db.scalars(q)]
 
 
 @router.patch("/{user_id}", response_model=UserAdminOut)
@@ -62,21 +66,26 @@ def update_user(user_id: uuid.UUID, body: UserUpdate, request: Request, db: Sess
     target = _target(db, actor, user_id)
     changes: dict = {}
 
-    if body.role is not None or "tenant_id" in body.model_fields_set:
+    if body.role is not None or body.tenant_ids is not None:
         new_role = body.role or target.role
-        new_tenant = body.tenant_id if "tenant_id" in body.model_fields_set else target.tenant_id
-        if new_role != Role.TENANT_ADMIN.value and "tenant_id" not in body.model_fields_set:
-            new_tenant = None
+        if body.tenant_ids is not None:
+            new_ids = body.tenant_ids
+        else:
+            new_ids = list(target.tenant_ids) if new_role == Role.TENANT_ADMIN.value else []
         if actor.role != Role.SUPER_ADMIN.value:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Only a super-admin can change roles or tenants.")
         try:
-            rules.check_role_assignment(db, actor, new_role, new_tenant)
+            tenants = rules.check_role_assignment(db, actor, new_role, new_ids)
         except rules.RuleError as e:
             raise HTTPException(e.status, e.message) from None
         if new_role != target.role and rules.is_last_super_admin(db, target):
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "There must be at least one active super-admin.")
-        changes.update(role=[target.role, new_role], tenant_id=[str(target.tenant_id), str(new_tenant)])
-        target.role, target.tenant_id = new_role, new_tenant
+        if new_role != target.role:
+            changes["role"] = [target.role, new_role]
+        old_names, new_names = sorted(t.name for t in target.tenants), sorted(t.name for t in tenants)
+        if old_names != new_names:
+            changes["tenants"] = [old_names, new_names]
+        target.role, target.tenants = new_role, tenants
 
     if body.full_name is not None:
         changes["full_name"] = [target.full_name, body.full_name.strip()]
@@ -91,10 +100,10 @@ def update_user(user_id: uuid.UUID, body: UserUpdate, request: Request, db: Sess
         changes["is_active"] = body.is_active
 
     db.commit()
-    if changes.get("is_active") is False or "role" in changes:
+    if changes.get("is_active") is False or "role" in changes or "tenants" in changes:
         sessions.revoke_all_sessions(db, target)
-    log_event(db, "user.updated", actor=actor, tenant_id=target.tenant_id, target=target.email, ip=client_ip(request), detail=changes)
-    return _out(target)
+    log_event(db, "user.updated", actor=actor, tenant_id=rules.single_tenant(target), target=target.email, ip=client_ip(request), detail=changes)
+    return _out(target, actor)
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -104,7 +113,7 @@ def delete_user(user_id: uuid.UUID, request: Request, db: Session = Depends(get_
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "You cannot delete yourself.")
     if rules.is_last_super_admin(db, target):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "There must be at least one active super-admin.")
-    email, tid = target.email, target.tenant_id
+    email, tid = target.email, rules.single_tenant(target)
     sessions.revoke_all_sessions(db, target)
     chat_ids = select(Chat.id).where(Chat.user_id == target.id)
     db.execute(delete(ChatMessage).where(ChatMessage.chat_id.in_(chat_ids)))
@@ -120,4 +129,4 @@ def reset_2fa(user_id: uuid.UUID, request: Request, db: Session = Depends(get_db
     target.totp_secret_enc, target.totp_enabled = None, False
     db.commit()
     sessions.revoke_all_sessions(db, target)
-    log_event(db, "user.mfa_reset", actor=actor, tenant_id=target.tenant_id, target=target.email, ip=client_ip(request))
+    log_event(db, "user.mfa_reset", actor=actor, tenant_id=rules.single_tenant(target), target=target.email, ip=client_ip(request))

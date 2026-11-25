@@ -28,7 +28,7 @@ def _upload(c, tenant_id, filename, data, note=None):
 
 
 def _tenant_admin(super_admin, tenant_id, email="ta@example.com"):
-    r = super_admin.post("/api/invitations", json={"email": email, "full_name": "TA", "role": "tenant_admin", "tenant_id": tenant_id})
+    r = super_admin.post("/api/invitations", json={"email": email, "full_name": "TA", "role": "tenant_admin", "tenant_ids": [tenant_id]})
     token = r.json()["invite_url"].rsplit("/", 1)[1]
     anon = new_client(super_admin.app)
     anon.post(f"/api/invitations/accept/{token}", json={"password": PASSWORD})

@@ -5,7 +5,7 @@ import re
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from app.models import Invitation, Tenant, User
+from app.models import Invitation, Tenant, User, user_tenants
 from app.models.tenant import DEFAULT_TENANT_SETTINGS
 
 ALLOWED_SETTINGS = set(DEFAULT_TENANT_SETTINGS)
@@ -43,25 +43,39 @@ def merge_settings(current: dict, changes: dict) -> dict:
 
 
 def user_count(db: Session, tenant: Tenant) -> int:
-    return db.scalar(select(func.count()).select_from(User).where(User.tenant_id == tenant.id)) or 0
+    return db.scalar(select(func.count()).select_from(user_tenants).where(user_tenants.c.tenant_id == tenant.id)) or 0
 
 
 def delete_tenant(db: Session, tenant: Tenant) -> None:
     """Remove a customer tenant and everything it owns.
 
-    Documents, versions, pages, chunks, stored files, the chats scoped to it and the chats of
-    its tenant admins are removed here. Integrations will be added by their block.
-    Log events are kept (retention applies).
+    Documents, versions, pages, chunks and stored files go, and every chat scoped to it.
+    Tenant admins of this tenant only are deleted with their chats; admins of other tenants too
+    just lose this one. Pending invitations lose it, and are deleted when nothing is left.
+    Integrations will be added by their block. Log events are kept (retention applies).
     """
     from app.models import Chat, ChatMessage
     from app.services.versions import delete_tenant_documents
 
     delete_tenant_documents(db, tenant.id)
-    admin_ids = select(User.id).where(User.tenant_id == tenant.id)
-    chat_ids = select(Chat.id).where((Chat.scope_tenant_id == tenant.id) | Chat.user_id.in_(admin_ids))
-    db.execute(delete(ChatMessage).where(ChatMessage.chat_id.in_(chat_ids)))
-    db.execute(delete(Chat).where((Chat.scope_tenant_id == tenant.id) | Chat.user_id.in_(admin_ids)))
-    db.execute(delete(Invitation).where(Invitation.tenant_id == tenant.id))
-    db.execute(delete(User).where(User.tenant_id == tenant.id))
+    admins = list(db.scalars(select(User).where(User.id.in_(select(user_tenants.c.user_id).where(user_tenants.c.tenant_id == tenant.id)))))
+    only_here = [u.id for u in admins if u.tenant_ids == {tenant.id}]
+    gone = (Chat.scope_tenant_id == tenant.id) | Chat.user_id.in_(only_here)
+    db.execute(delete(ChatMessage).where(ChatMessage.chat_id.in_(select(Chat.id).where(gone))))
+    db.execute(delete(Chat).where(gone))
+    tid = str(tenant.id)
+    for inv in db.scalars(select(Invitation).where(Invitation.accepted_at.is_(None))):
+        if tid in (inv.tenant_ids or []):
+            left = [t for t in inv.tenant_ids if t != tid]
+            if left:
+                inv.tenant_ids = left
+            else:
+                db.delete(inv)
+    for u in admins:
+        if u.id in only_here:
+            db.delete(u)
+        else:
+            u.tenants = [t for t in u.tenants if t.id != tenant.id]
+    db.flush()
     db.delete(tenant)
     db.commit()

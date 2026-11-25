@@ -20,8 +20,9 @@ def _create_tenant(c, name="Cliente Alfa"):
     return r.json()
 
 
-def _invite_and_accept(c, email, role, tenant_id=None, name="User"):
-    r = c.post("/api/invitations", json={"email": email, "full_name": name, "role": role, "tenant_id": tenant_id})
+def _invite_and_accept(c, email, role, tenant_id=None, name="User", tenant_ids=None):
+    ids = tenant_ids if tenant_ids is not None else ([tenant_id] if tenant_id else [])
+    r = c.post("/api/invitations", json={"email": email, "full_name": name, "role": role, "tenant_ids": ids})
     assert r.status_code == 201, r.text
     body = r.json()
     assert body["email_sent"] is False and body["invite_url"]  # no SMTP configured in tests
@@ -88,9 +89,9 @@ def test_tenant_admin_scope(super_admin):
     assert ta.patch(f"/api/tenants/{beta['id']}", json={"settings": {"include_general": False}}).status_code == 403
     assert ta.post("/api/tenants", json={"name": "Gamma"}).status_code == 403
     # Can invite tenant admins for its own tenant only.
-    ok = ta.post("/api/invitations", json={"email": "ta2@example.com", "full_name": "B", "role": "tenant_admin", "tenant_id": alfa["id"]})
+    ok = ta.post("/api/invitations", json={"email": "ta2@example.com", "full_name": "B", "role": "tenant_admin", "tenant_ids": [alfa["id"]]})
     assert ok.status_code == 201
-    assert ta.post("/api/invitations", json={"email": "x@example.com", "full_name": "X", "role": "tenant_admin", "tenant_id": beta["id"]}).status_code == 403
+    assert ta.post("/api/invitations", json={"email": "x@example.com", "full_name": "X", "role": "tenant_admin", "tenant_ids": [beta["id"]]}).status_code == 403
     assert ta.post("/api/invitations", json={"email": "y@example.com", "full_name": "Y", "role": "analyst"}).status_code == 403
     # Sees only users of its tenant.
     assert {u["email"] for u in ta.get("/api/users").json()} == {"ta@example.com"}
@@ -110,8 +111,8 @@ def test_invitation_validation(super_admin):
     g = _general(super_admin)
     bad = [
         {"email": "a@example.com", "full_name": "A", "role": "tenant_admin"},                    # no tenant
-        {"email": "a@example.com", "full_name": "A", "role": "tenant_admin", "tenant_id": g["id"]},  # General
-        {"email": "a@example.com", "full_name": "A", "role": "analyst", "tenant_id": g["id"]},       # analyst with tenant
+        {"email": "a@example.com", "full_name": "A", "role": "tenant_admin", "tenant_ids": [g["id"]]},  # General
+        {"email": "a@example.com", "full_name": "A", "role": "analyst", "tenant_ids": [g["id"]]},       # analyst with tenant
         {"email": "a@example.com", "full_name": "A", "role": "wizard"},
     ]
     for body in bad:

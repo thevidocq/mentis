@@ -245,7 +245,9 @@ def test_scopes_and_tenant_admin_limits(super_admin, fake_llm):
     login(ta, "ta@example.com")
     assert [s["name"] for s in ta.get("/api/chats/scopes").json()] == ["Alfa"]
     assert ta.post("/api/chats", json={"tenant_id": beta["id"], "message": "x"}).status_code == 403
-    assert ta.post("/api/chats", json={"tenant_id": None, "message": "x"}).status_code == 403
+    # "All my customers" for a tenant admin covers only its own tenants.
+    own_all = ta.post("/api/chats", json={"tenant_id": None, "message": "brute force escalation"}).json()
+    assert own_all["chat"]["scope_name"] == "All my customers" and "Anna Verdi" not in own_all["answer"]["content"]
     assert ta.post("/api/chats", json={"tenant_id": alfa["id"], "message": "brute force escalation"}).status_code == 201
 
 
@@ -282,3 +284,55 @@ def test_status_lists_llm_providers(super_admin, fake_llm):
     assert s["LLM: Claude (default)"]["state"] == "ok"
     assert s["LLM: Ollama"]["state"] == "down" and "invalid API key" in s["LLM: Ollama"]["detail"]
     assert fake_llm.requests == []  # the check lists models: nothing is generated
+
+
+def test_tenant_admin_of_several_tenants(super_admin, fake_llm):
+    _provider(super_admin)
+    alfa, beta = _setup(super_admin)
+    gamma = _tenant(super_admin, "Gamma")
+    _invite_and_accept(super_admin, "ta@example.com", "tenant_admin", tenant_ids=[alfa["id"], beta["id"]])
+    ta = new_client(super_admin.app)
+    login(ta, "ta@example.com")
+    me = ta.get("/api/auth/me").json()
+    assert sorted(t["name"] for t in me["tenants"]) == ["Alfa", "Beta"]
+    assert sorted(t["name"] for t in ta.get("/api/tenants").json()) == ["Alfa", "Beta"]
+    # Documents, settings and LLM of both; not of Gamma.
+    for t in (alfa, beta):
+        assert ta.get(f"/api/tenants/{t['id']}/documents").status_code == 200
+        assert ta.get(f"/api/tenants/{t['id']}/llm").status_code == 200
+    assert ta.get(f"/api/tenants/{gamma['id']}/documents").status_code == 404
+    assert ta.patch(f"/api/tenants/{gamma['id']}", json={"settings": {"include_general": False}}).status_code in (403, 404)
+    # Chat: @ lists its customers plus "All my customers"; that scope searches both, not Gamma.
+    assert [s["name"] for s in ta.get("/api/chats/scopes").json()] == ["All my customers", "Alfa", "Beta"]
+    ta.post("/api/chats", json={"tenant_id": None, "message": "brute force escalation"})
+    sent = fake_llm.requests[-1]["body"]["messages"][-1]["content"]
+    assert "Mario Rossi" in sent and "Anna Verdi" in sent
+    assert ta.post("/api/chats", json={"tenant_id": gamma["id"], "message": "x"}).status_code == 403
+    # It may invite admins only within its tenants.
+    ok = ta.post("/api/invitations", json={"email": "b@example.com", "full_name": "B", "role": "tenant_admin", "tenant_ids": [alfa["id"]]})
+    assert ok.status_code == 201
+    bad = ta.post("/api/invitations", json={"email": "c@example.com", "full_name": "C", "role": "tenant_admin", "tenant_ids": [alfa["id"], gamma["id"]]})
+    assert bad.status_code == 403
+    assert [i["email"] for i in ta.get("/api/invitations").json()] == ["b@example.com"]
+
+
+def test_super_admin_changes_tenants_and_deleting_one_keeps_the_admin(super_admin, fake_llm):
+    alfa, beta = _setup(super_admin)
+    _invite_and_accept(super_admin, "ta@example.com", "tenant_admin", tenant_ids=[alfa["id"]])
+    ta_id = next(u["id"] for u in super_admin.get("/api/users").json() if u["email"] == "ta@example.com")
+    r = super_admin.patch(f"/api/users/{ta_id}", json={"tenant_ids": [alfa["id"], beta["id"]]})
+    assert r.status_code == 200 and sorted(t["name"] for t in r.json()["tenants"]) == ["Alfa", "Beta"]
+    assert super_admin.patch(f"/api/users/{ta_id}", json={"tenant_ids": []}).status_code == 422
+    assert super_admin.patch(f"/api/users/{ta_id}", json={"role": "analyst"}).json()["tenants"] == []
+    super_admin.patch(f"/api/users/{ta_id}", json={"role": "tenant_admin", "tenant_ids": [alfa["id"], beta["id"]]})
+    # A pending invitation on Alfa and Beta loses Alfa; one only on Alfa disappears.
+    super_admin.post("/api/invitations", json={"email": "p1@example.com", "full_name": "P1", "role": "tenant_admin", "tenant_ids": [alfa["id"], beta["id"]]})
+    super_admin.post("/api/invitations", json={"email": "p2@example.com", "full_name": "P2", "role": "tenant_admin", "tenant_ids": [alfa["id"]]})
+    assert super_admin.request("DELETE", f"/api/tenants/{alfa['id']}", json={"confirm_name": "Alfa"}).status_code == 204
+    users = {u["email"]: u for u in super_admin.get("/api/users").json()}
+    assert [t["name"] for t in users["ta@example.com"]["tenants"]] == ["Beta"]
+    invs = {i["email"]: i for i in super_admin.get("/api/invitations").json()}
+    assert "p2@example.com" not in invs and [t["name"] for t in invs["p1@example.com"]["tenants"]] == ["Beta"]
+    # Deleting its last tenant deletes the admin.
+    super_admin.request("DELETE", f"/api/tenants/{beta['id']}", json={"confirm_name": "Beta"})
+    assert "ta@example.com" not in {u["email"] for u in super_admin.get("/api/users").json()}

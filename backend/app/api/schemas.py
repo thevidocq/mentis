@@ -5,15 +5,19 @@ import uuid
 from pydantic import BaseModel, EmailStr, Field
 
 
+class TenantRef(BaseModel):
+    id: uuid.UUID
+    name: str
+
+
 class UserOut(BaseModel):
     id: uuid.UUID
     email: str
     full_name: str
     role: str
-    tenant_id: uuid.UUID | None
+    tenants: list[TenantRef] = []  # tenant admins: the customers they administer
     totp_enabled: bool
     preferences: dict = {}
-    tenant_name: str | None = None
 
 
 THEMES = ("light", "medium", "dark")

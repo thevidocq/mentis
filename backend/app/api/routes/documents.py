@@ -100,7 +100,7 @@ class Rename(BaseModel):
 def _tenant(db: Session, user: User, tenant_id: uuid.UUID) -> Tenant:
     tenant = db.get(Tenant, tenant_id)
     allowed = tenant is not None and (
-        user.role == Role.SUPER_ADMIN.value or (user.role == Role.TENANT_ADMIN.value and user.tenant_id == tenant_id)
+        user.administers(tenant_id)
     )
     if not allowed:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found.")
