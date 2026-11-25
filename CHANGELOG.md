@@ -6,6 +6,27 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-25
+
+### Added
+- **Tenant admins of several customers**: invitations and user edit pick one or more customers; a customer selector in the tenant area; `@` in chat lists their customers plus **All my customers** (only theirs, with General). Migration 0005 moves every existing tenant admin to the new model (`user_tenants`, `invitations.tenant_ids`).
+- **Phone layout**: the menu and the chat history open as drawers from a top bar (☰); tables become one card per row; full-width chat; 16 px inputs (no zoom on iOS); bottom-sheet dialogs.
+- **`create-admin` command** (`docker compose exec api python -m app.cli create-admin`). The browser setup page is off by default (`MENTIS_WEB_SETUP=false`): a fresh public install cannot be claimed by whoever opens it first.
+- `MENTIS_WEB_PORT` (default 8080); `check.sh` reads it from `.env`.
+- INSTALL: publishing behind the Caddy of Equalizer on the same VPS.
+- A one- or two-word message without matching documents ("ciao") gets a hint on what to ask, still without calling the LLM.
+
+### Changed
+- Only the web container publishes a host port. API, PostgreSQL, Qdrant, MinIO and Redis no longer bind 127.0.0.1 ports (no conflicts with other stacks, nothing exposed). `check.sh` asks the API from inside its container.
+- `MENTIS_TRUSTED_PROXIES` defaults to private networks instead of `*`.
+
+### Fixed
+- Security headers (CSP, X-Frame-Options, ...) were missing on the pages and assets themselves: nginx dropped them in locations with their own headers. Now included everywhere; checked with a real nginx and a CSP-violation watch.
+- The client IP in Logs could be spoofed with an `X-Forwarded-For` header sent by the client.
+- Interactive API docs (`/api/docs`, `/api/openapi.json`) were public; now off unless `MENTIS_API_DOCS=true`.
+- Syslog forwarding could lose events raised inside ingestion jobs (forked processes); they are now sent synchronously there.
+- Stray files removed from the repository (a shellcheck wheel).
+
 ## [0.1.1] - 2026-11-25
 
 ### Fixed

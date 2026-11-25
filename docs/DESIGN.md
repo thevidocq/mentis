@@ -17,10 +17,12 @@ Mentis is a standalone, multi-tenant web app: an AI assistant that answers SOC a
 | Role | Area | Can do |
 | --- | --- | --- |
 | Super-admin | Platform admin | Onboard, edit and delete tenants; manage the General tenant; configure AI providers, embeddings, retention; view service status and audit log |
-| Tenant admin | Tenant admin | Upload, version, preview and approve documents; choose tenant LLM; configure integrations; manage tenant users |
+| Tenant admin | Tenant admin | For each of its customers (one or more): upload, version, preview and approve documents; choose tenant LLM; configure integrations; manage tenant admins; test the chat |
 | Analyst | Chat + account | Chat (read-only consultation), own profile, theme, password |
 
 - Analysts see the **global** list of onboarded customers, not only assigned ones.
+- A tenant admin administers one or more customers (`user_tenants`). In the tenant area a selector picks the customer the pages show; in the chat `@` lists only its customers plus "All my customers".
+- The first super-admin is created on the server (`app.cli create-admin`); the browser setup page is off by default.
 - Every user has an account page: profile, theme (Light / Medium / Dark), password change, 2FA status.
 
 ## Tenancy model
@@ -30,7 +32,7 @@ Mentis is a standalone, multi-tenant web app: an AI assistant that answers SOC a
 - **Precedence:** when General and customer documents disagree (escalation, SLA), the customer document wins; the answer may flag the conflict.
 - **Opt-out:** per-tenant setting "Include General documentation", default on.
 - **Isolation:** the tenant filter is applied server-side on every query, never left to the prompt or the frontend.
-- **Deletion:** removes documents and versions, Qdrant collection, chats, LLM and integration settings. Audit log is kept per retention. Confirmation requires typing the tenant name.
+- **Deletion:** removes documents and versions, Qdrant collection, chats, LLM and integration settings; its tenant admins lose it, and those left without a customer are deleted. Audit log is kept per retention. Confirmation requires typing the tenant name.
 
 ## Chat experience
 
@@ -156,7 +158,7 @@ All integrations are per tenant and read-only; they are invoked from chat with `
 
 ## Admin areas and UI
 
-Admin areas use a left menu with the logo top-left; content takes the full width, no side cards.
+Admin areas use a left menu with the logo top-left; content takes the full width, no side cards. On screens up to 900 px wide the menu (and the chat history) becomes a drawer opened from a top bar, and tables become one card per row.
 
 | Area | Menu | Key content |
 | --- | --- | --- |
@@ -208,7 +210,7 @@ PostgreSQL (users, tenants, chats, audit) | Qdrant (one collection per tenant) |
 - **Language:** everything in the repo in English: code, comments, docs, commit messages.
 - **Docs:** README, INSTALL.md, admin manual, user manual, CHANGELOG updated on every commit so another session can pick up the work.
 - **Flow:** Claude develops on branches and opens pull requests; the owner reviews and merges, tests in the lab and tags releases (first: 0.1.0).
-- **Deploy:** Docker Compose on the owner's VPS.
+- **Deploy:** Docker Compose on the owner's VPS. Only the web container publishes a port (`MENTIS_WEB_PORT`); a reverse proxy with HTTPS goes in front (on the owner's VPS: the Caddy of Equalizer).
 - **Code:** modular backend services and React components; no monolithic files.
 
 ## Roadmap and open points

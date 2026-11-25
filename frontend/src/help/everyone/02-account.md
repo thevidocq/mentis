@@ -1,6 +1,6 @@
 # Your account
 
-Open **Account** by selecting your name at the bottom of the left menu.
+Open **Account** by selecting your name at the bottom of the left menu. On a phone, open the menu first with the ☰ button at the top left.
 
 ## Profile
 
