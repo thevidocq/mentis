@@ -26,6 +26,7 @@ class ProfileUpdate(BaseModel):
 
 class SetupStatus(BaseModel):
     needs_setup: bool
+    web_setup: bool = False
 
 
 class SetupRequest(BaseModel):

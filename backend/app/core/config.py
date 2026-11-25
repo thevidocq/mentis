@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     session_ttl_hours: int = 12
     # Set to False only for local HTTP testing; behind HTTPS keep True.
     cookie_secure: bool = True
+    # First super-admin from the browser. Off: use `python -m app.cli create-admin` on the server.
+    web_setup: bool = False
 
     # MFA challenge lifetime (between password check and TOTP code).
     mfa_challenge_ttl_seconds: int = 300
