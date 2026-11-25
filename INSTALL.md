@@ -33,7 +33,8 @@ Passwords: at least 12 characters, upper and lower case, at least one digit.
 Next steps in the interface:
 1. **Email (SMTP)**: configure it so invitations are emailed. Without it, the invitation link is shown to you to share manually. Set `MENTIS_PUBLIC_URL` in `.env` to the address users open, so links point to the right place.
 2. **Tenants**: onboard each customer.
-3. **Users**: invite tenant admins (one customer each) and analysts (all customers).
+3. **AI providers**: add the LLM that writes the answers (preset **Claude Haiku**: paste the Anthropic API key) and click **Test**. Without a provider the chat answers with an error.
+4. **Users**: invite tenant admins (one customer each) and analysts (all customers).
 
 ## Reverse proxy (nginx example)
 
@@ -68,6 +69,12 @@ Embeddings: the `embeddings` container runs BAAI/bge-m3 (Hugging Face TEI, CPU).
 More workers in parallel: `MENTIS_WORKER_REPLICAS=3` in `.env`, then `docker compose up -d`.
 
 Parser: `MENTIS_PARSER=standard` (default). To try Docling in the lab, set `MENTIS_PARSER=docling` and `MENTIS_PARSER_EXTRAS=worker,docling` in `.env`, then `docker compose up -d --build worker` (large download: PyTorch and models).
+
+## Chat and LLM
+
+The `api` container calls the LLM providers configured in **AI providers**. It needs outbound HTTPS to cloud providers (`api.anthropic.com`, `api.openai.com`). For a model server on the same host (Ollama, vLLM), use `http://host.docker.internal:<port>/v1` as Base URL; for one in another compose project, put it on a shared Docker network and use its service name.
+
+Retrieval tuning in `.env`: `MENTIS_CHAT_PASSAGES` (default 8) and `MENTIS_CHAT_MIN_SCORE` (default 0.3), then `docker compose up -d api`.
 
 ## Upgrade
 

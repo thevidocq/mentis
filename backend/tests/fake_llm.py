@@ -37,6 +37,10 @@ class FakeLLM:
                            "followups": followups, "title": title})
 
     def handle(self, request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":  # model list, used by the status page
+            if request.url.host in self.fail:
+                return httpx.Response(self.fail[request.url.host], text='{"error": "boom"}')
+            return httpx.Response(200, json={"data": [{"id": "m"}]})
         body = json.loads(request.content)
         self.requests.append({"url": str(request.url), "headers": dict(request.headers), "body": body})
         if request.url.host in self.fail:

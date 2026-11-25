@@ -64,6 +64,25 @@ def call_provider(cfg: dict, system: str, turns: list[Turn], timeout: float = 12
     return reply
 
 
+def ping(cfg: dict, timeout: float = 5) -> tuple[bool, str]:
+    """Cheap reachability and key check for the status page: lists models, generates nothing."""
+    base = cfg["base_url"].rstrip("/")
+    if cfg["kind"] == "anthropic":
+        url, headers = f"{base}/v1/models", {"anthropic-version": "2023-06-01"}
+        if cfg["api_key"]:
+            headers["x-api-key"] = cfg["api_key"]
+    else:
+        url, headers = f"{base}/models", {"Authorization": f"Bearer {cfg['api_key']}"} if cfg["api_key"] else {}
+    try:
+        with httpx.Client(timeout=timeout, transport=_transport) as client:
+            r = client.get(url, headers=headers)
+    except httpx.HTTPError as e:
+        return False, f"not reachable: {e.__class__.__name__}"
+    if r.status_code == 200:
+        return True, cfg["model"]
+    return False, str(status_error(cfg["name"], r.status_code, r.text))
+
+
 def call_with_failover(primary: dict | None, fallback: dict | None, system: str, turns: list[Turn]) -> tuple[LLMReply, dict, int]:
     """Try the primary, then the fallback. Returns (reply, provider used, latency ms)."""
     errors = []

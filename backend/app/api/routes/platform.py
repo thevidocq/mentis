@@ -102,7 +102,30 @@ def platform_status(db: Session = Depends(get_db), _: User = Depends(super_admin
         {"name": "Embeddings", "category": "AI", "state": "ok" if em_ok else "down", "latency_ms": em_ms,
          "detail": cfg["model"] if em_ok else f"not reachable at {cfg['url']}"},
     ]
+    services.extend(_llm_status(db))
     return {"services": services}
+
+
+def _llm_status(db: Session) -> list[dict]:
+    """One line per AI provider. The check lists models, so it costs no tokens."""
+    import time
+
+    from sqlalchemy import select
+
+    from app.models import LlmProvider
+    from app.services import llm
+
+    providers = db.scalars(select(LlmProvider).order_by(LlmProvider.name)).all()
+    if not providers:
+        return [{"name": "AI provider", "category": "AI", "state": "down", "latency_ms": None,
+                 "detail": "none configured: the chat cannot answer"}]
+    out = []
+    for p in providers:
+        t0 = time.perf_counter()
+        ok, detail = llm.ping(llm.provider_config(p))
+        out.append({"name": f"LLM: {p.name}" + (" (default)" if p.is_default else ""), "category": "AI",
+                    "state": "ok" if ok else "down", "latency_ms": round((time.perf_counter() - t0) * 1000), "detail": detail})
+    return out
 
 
 # --- Embedding and Qdrant ------------------------------------------------------

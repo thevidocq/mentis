@@ -13,6 +13,7 @@ In the app: **Help** in the left menu. Each profile sees its own guide plus the 
 - [Service status and operations](../frontend/src/help/super-admin/05-status-operations.md)
 - [General documentation](../frontend/src/help/super-admin/06-general-documentation.md)
 - [Embedding and Qdrant](../frontend/src/help/super-admin/07-embedding-qdrant.md)
+- [AI providers](../frontend/src/help/super-admin/08-ai-providers.md)
 
 ## Tenant admin
 
@@ -20,10 +21,12 @@ In the app: **Help** in the left menu. Each profile sees its own guide plus the 
 - [Users of your customer](../frontend/src/help/tenant-admin/02-users.md)
 - [Customer settings](../frontend/src/help/tenant-admin/03-settings.md)
 - [Documents](../frontend/src/help/tenant-admin/04-documents.md)
+- [LLM and testing answers](../frontend/src/help/tenant-admin/05-llm.md)
 
 ## Analyst
 
 - [Your role as analyst](../frontend/src/help/analyst/01-your-role.md)
+- [Using the chat](../frontend/src/help/analyst/02-chat.md)
 
 ## Everyone
 

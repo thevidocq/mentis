@@ -102,3 +102,78 @@ export interface DocPage {
   has_image: boolean;
   flags: string[];
 }
+
+// --- Chat --------------------------------------------------------------------
+
+export interface Citation {
+  n: number;
+  tenant: string;
+  is_general: boolean;
+  document: string;
+  version: number;
+  page: string;
+  heading: string | null;
+  text: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  status: "ok" | "not_found" | "error";
+  citations: Citation[];
+  followups: string[];
+  tenants: string[];
+  provider_name: string | null;
+  model: string | null;
+  latency_ms: number | null;
+  feedback: 1 | -1 | null;
+  created_at: string;
+}
+
+export interface ChatSummary {
+  id: string;
+  title: string;
+  scope_tenant_id: string | null;
+  scope_name: string;
+  updated_at: string;
+}
+
+export interface ChatFull extends ChatSummary {
+  scope_available: boolean;
+  messages: ChatMessage[];
+}
+
+export interface Exchange {
+  chat: ChatSummary;
+  question: ChatMessage;
+  answer: ChatMessage;
+}
+
+export interface ScopeOption {
+  id: string | null;
+  name: string;
+}
+
+// --- LLM providers -----------------------------------------------------------
+
+export type LlmKind = "anthropic" | "openai_chat" | "openai_responses";
+
+export interface LlmProvider {
+  id: string;
+  name: string;
+  kind: LlmKind;
+  base_url: string;
+  model: string;
+  api_key_set: boolean;
+  options: { reasoning_effort?: string; max_tokens?: number };
+  is_default: boolean;
+}
+
+export interface LlmPreset {
+  label: string;
+  kind: LlmKind;
+  base_url: string;
+  model: string;
+  options: LlmProvider["options"];
+}

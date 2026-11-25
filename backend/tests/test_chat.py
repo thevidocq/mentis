@@ -270,3 +270,15 @@ def test_disabled_customer_blocks_new_messages(super_admin, fake_llm):
     assert an.post(f"/api/chats/{cid}/messages", json={"message": "again"}).status_code == 409
     assert an.get(f"/api/chats/{cid}").json()["scope_available"] is False
     assert an.post("/api/chats", json={"tenant_id": alfa["id"], "message": "x"}).status_code == 409
+
+
+def test_status_lists_llm_providers(super_admin, fake_llm):
+    names = lambda: {s["name"]: s for s in super_admin.get("/api/platform/status").json()["services"]}  # noqa: E731
+    assert names()["AI provider"]["state"] == "down"
+    _provider(super_admin)
+    _provider(super_admin, name="Ollama", kind="openai_chat", base_url="http://ollama:11434/v1", model="llama3.1")
+    fake_llm.fail["ollama"] = 401
+    s = names()
+    assert s["LLM: Claude (default)"]["state"] == "ok"
+    assert s["LLM: Ollama"]["state"] == "down" and "invalid API key" in s["LLM: Ollama"]["detail"]
+    assert fake_llm.requests == []  # the check lists models: nothing is generated
