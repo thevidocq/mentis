@@ -6,6 +6,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Fixed
+- Login lockout: failed attempts are counted in the database, so parallel password or code guesses can no longer slip past the limit.
+- 2FA: a code is stored as used atomically, so the same code sent twice in parallel signs in only once.
+- 2FA: a code with non-ASCII digits or a challenge with non-ASCII characters is refused (401) instead of causing a server error.
+- Login: disabled and locked accounts take as long to answer as others, so response time no longer reveals them.
+- Invitations: an expired pending invitation from another admin no longer blocks inviting the same email again.
+
 ## [0.3.0] - 2026-11-25
 
 ### Added
