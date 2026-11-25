@@ -2,7 +2,7 @@
 
 Mentis is a multi-tenant AI assistant for SOC analysts. It answers questions from each customer's own documentation (procedures, escalation matrices, runbooks) and cites its sources on every answer. Read-only integrations with the customer's ticketing, EDR and SIEM tools are planned.
 
-> Status: pre-release (`0.1.0-alpha`), for lab use. See [CHANGELOG](CHANGELOG.md) and [release notes](docs/releases/).
+> Status: `0.1.0`, first release. See [CHANGELOG](CHANGELOG.md) and [release notes](docs/releases/).
 
 ![Answer with sources](docs/screenshots/chat-answer.png)
 
@@ -13,6 +13,7 @@ Mentis is a multi-tenant AI assistant for SOC analysts. It answers questions fro
 - **Documents**: PDF, Word, Excel, PowerPoint, with OCR for scans and images. Versions, approval before publishing, and a side-by-side preview of what Mentis read.
 - **AI providers**: Claude, OpenAI, Daybreak Blue, gpt-oss (vLLM), Ollama. One LLM per customer with automatic fallback. Embeddings run locally (bge-m3), vectors are in Qdrant.
 - **Security**: mandatory 2FA, three roles (super-admin, tenant admin, analyst), encrypted secrets, metadata-only logs.
+- **Operations**: service status, Logs with CSV export and syslog forwarding to a SIEM, retention, LLM usage and cost per customer, backup/restore scripts, configuration export/import.
 - Light, Medium and Dark themes, plus in-app help for each profile.
 
 ## Screenshots
@@ -28,7 +29,10 @@ The screenshots use fictional demo data.
 | ![General documentation](docs/screenshots/general-documentation.png) Documents and versions | ![OCR preview](docs/screenshots/document-preview-ocr.png) Preview: original next to what Mentis read |
 | ![Slide preview](docs/screenshots/document-preview-slide.png) Slides: tables and text in images | ![AI providers](docs/screenshots/ai-providers.png) AI providers |
 | ![Add provider](docs/screenshots/ai-provider-add.png) Add a provider from a preset | ![Tenant LLM](docs/screenshots/tenant-llm.png) LLM and fallback for each customer |
-| ![Service status](docs/screenshots/service-status.png) Service status | ![Account](docs/screenshots/account.png) Account and themes |
+| ![LLM usage](docs/screenshots/llm-usage.png) LLM usage and cost per customer | ![Service status](docs/screenshots/service-status.png) Service status |
+| ![Logs](docs/screenshots/logs.png) Logs, metadata only for chats | ![Syslog](docs/screenshots/logs-syslog.png) Syslog forwarding to a SIEM |
+| ![Retention](docs/screenshots/retention.png) Retention | ![Configuration import](docs/screenshots/configuration-import.png) Configuration import with preview |
+| ![Account](docs/screenshots/account.png) Account and themes | |
 
 ## Documentation
 

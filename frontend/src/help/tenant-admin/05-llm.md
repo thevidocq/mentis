@@ -9,6 +9,10 @@
 
 The list shows the models added by the super-admin. Analysts see the model's name under each answer.
 
+## Usage
+
+Below the choice, **Usage, last 30 days** shows the questions about your customer, the tokens used and the estimated cost, per model.
+
 ## Test what analysts get
 
 **Chat** in the left menu opens the chat on your own customer only. Use it to check that a new document version answers as expected. Your chats are private.

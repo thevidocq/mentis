@@ -6,6 +6,7 @@ import uuid
 from sqlalchemy.orm import Session
 
 from app.models import AuditEvent, User
+from app.models.base import utcnow
 
 _log = logging.getLogger("mentis")
 
@@ -25,6 +26,7 @@ def log_event(
     commit: bool = True,
 ) -> AuditEvent:
     event = AuditEvent(
+        ts=utcnow(),
         kind=kind,
         level=level,
         action=action,
@@ -38,6 +40,9 @@ def log_event(
     db.add(event)
     if commit:
         db.commit()
-    # Mirror to stdout so `docker compose logs` shows it; syslog forwarding hooks in here later.
+    # Mirror to stdout so `docker compose logs` shows it, and to the SIEM when syslog is on.
     _log.info("%s %s actor=%s target=%s", kind, action, event.actor_email, target)
+    from app.services.syslog import forwarder
+
+    forwarder.submit(db, event)
     return event

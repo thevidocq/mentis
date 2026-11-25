@@ -58,6 +58,13 @@ def _validate(body: ProviderIn) -> None:
     effort = body.options.get("reasoning_effort")
     if effort not in (None, "", "minimal", "low", "medium", "high"):
         raise HTTPException(422, "Reasoning effort must be minimal, low, medium or high.")
+    for k in ("price_in", "price_out"):
+        v = body.options.get(k)
+        if v is not None and (not isinstance(v, int | float) or isinstance(v, bool) or not 0 <= v <= 1000):
+            raise HTTPException(422, "Prices are USD per million tokens, between 0 and 1000.")
+    unknown = set(body.options) - {"reasoning_effort", "max_tokens", "price_in", "price_out"}
+    if unknown:
+        raise HTTPException(422, f"Unknown options: {', '.join(sorted(unknown))}.")
     mt = body.options.get("max_tokens")
     if mt is not None and (not isinstance(mt, int) or not 100 <= mt <= 16000):
         raise HTTPException(422, "Max tokens must be between 100 and 16000.")

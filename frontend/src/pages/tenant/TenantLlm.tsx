@@ -3,6 +3,7 @@ import { api, errorText } from "../../api/client";
 import type { LlmProvider } from "../../api/types";
 import { useAuth } from "../../auth/AuthContext";
 import { PageHead } from "../../layouts/AdminShell";
+import { UsageTable, usd, useUsage } from "../platform/Usage";
 
 interface Choice { provider_id: string | null; fallback_id: string | null }
 
@@ -68,7 +69,20 @@ export function TenantLlm() {
       <div className="page-body" style={{ maxWidth: 760 }}>
         <p className="muted" style={{ margin: 0 }}>Which AI model writes the answers about this customer. Analysts see the model's name under each answer.</p>
         {user?.tenant_id && <div className="card"><div className="card-body"><TenantLlmForm tenantId={user.tenant_id} /></div></div>}
+        <TenantUsage />
       </div>
+    </>
+  );
+}
+
+function TenantUsage() {
+  const { data } = useUsage(30);
+  if (!data) return null;
+  return (
+    <>
+      <h2>Usage, last 30 days</h2>
+      <span className="muted small">{data.totals.questions} questions · estimated cost {usd(data.totals.cost_usd)}</span>
+      <UsageTable rows={data.rows} showCustomer={false} />
     </>
   );
 }

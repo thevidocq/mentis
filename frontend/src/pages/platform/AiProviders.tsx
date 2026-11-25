@@ -15,14 +15,17 @@ interface Form {
   api_key_set: boolean;
   reasoning_effort: string;
   max_tokens: string;
+  price_in: string;
+  price_out: string;
   is_default: boolean;
 }
 
-const EMPTY: Form = { name: "", kind: "anthropic", base_url: "", model: "", api_key: "", api_key_set: false, reasoning_effort: "", max_tokens: "", is_default: false };
+const EMPTY: Form = { name: "", kind: "anthropic", base_url: "", model: "", api_key: "", api_key_set: false, reasoning_effort: "", max_tokens: "", price_in: "", price_out: "", is_default: false };
 
 function toForm(p: LlmProvider): Form {
   return { id: p.id, name: p.name, kind: p.kind, base_url: p.base_url, model: p.model, api_key: "", api_key_set: p.api_key_set,
-    reasoning_effort: p.options.reasoning_effort ?? "", max_tokens: p.options.max_tokens ? String(p.options.max_tokens) : "", is_default: p.is_default };
+    reasoning_effort: p.options.reasoning_effort ?? "", max_tokens: p.options.max_tokens ? String(p.options.max_tokens) : "",
+    price_in: p.options.price_in != null ? String(p.options.price_in) : "", price_out: p.options.price_out != null ? String(p.options.price_out) : "", is_default: p.is_default };
 }
 
 export function AiProviders() {
@@ -47,6 +50,8 @@ export function AiProviders() {
     const options: Record<string, unknown> = {};
     if (form.reasoning_effort) options.reasoning_effort = form.reasoning_effort;
     if (form.max_tokens) options.max_tokens = Number(form.max_tokens);
+    if (form.price_in !== "") options.price_in = Number(form.price_in);
+    if (form.price_out !== "") options.price_out = Number(form.price_out);
     const body: Record<string, unknown> = { name: form.name.trim(), kind: form.kind, base_url: form.base_url.trim(), model: form.model.trim(), options, is_default: form.is_default };
     if (form.api_key) body.api_key = form.api_key;
     try {
@@ -177,6 +182,11 @@ export function AiProviders() {
             <label className="field" style={{ flex: 1 }}>Max answer tokens<input className="input" type="number" min={100} max={16000} value={form.max_tokens} placeholder="1500" onChange={(e) => set("max_tokens", e.target.value)} /></label>
           </div>
           <span className="muted small">Reasoning effort applies to the Responses API (gpt-oss, Daybreak Blue).</span>
+          <div className="row" style={{ alignItems: "flex-end" }}>
+            <label className="field" style={{ flex: 1 }}>Price input (USD / 1M tokens)<input className="input" type="number" min={0} step="0.01" value={form.price_in} placeholder="optional" onChange={(e) => set("price_in", e.target.value)} /></label>
+            <label className="field" style={{ flex: 1 }}>Price output (USD / 1M tokens)<input className="input" type="number" min={0} step="0.01" value={form.price_out} placeholder="optional" onChange={(e) => set("price_out", e.target.value)} /></label>
+          </div>
+          <span className="muted small">Prices only feed the cost estimate in LLM usage. Leave empty for internal models.</span>
           <label className="check"><input type="checkbox" checked={form.is_default} disabled={!!form.id && !!items?.find((i) => i.id === form.id)?.is_default} onChange={(e) => set("is_default", e.target.checked)} />Default for all customers</label>
           {formError && <div className="error">{formError}</div>}
         </Modal>
