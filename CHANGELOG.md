@@ -6,6 +6,22 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [0.3.7] - 2026-11-26
+
+### Fixed
+- Storage sweep: files of a document uploaded while the sweep ran could be removed as leftovers; storage is now listed before the database rows are read (READ COMMITTED snapshot per query). Test reproduces the race.
+- Answer check, Hide mode: a failure while rewriting a wrong answer showed it unchecked; it now stays hidden.
+- Answer check: any unexpected error in level 1 or 2 (or around them in the chat route) gives `level2: unavailable` and never breaks the answer.
+- Level 1: year ranges, ISO dates (now dates), number ranges and amounts with thousands separators are no longer phone numbers.
+- `history_note` is empty for hidden answers.
+- Chat: unexpected answer-check errors no longer give a 500 (undefined logger); grouped citations `[1, 2]` are recognised; customer names with quotes no longer break the passage tags; `"not_found": "false"` from weak models is read as false; NUL characters in questions and replies are removed (PostgreSQL refuses them).
+- Auth: password-reset and invitation links are single-use under parallel submits (the second gets 404, no 500); without SMTP, "Forgot password" no longer invalidates a link an admin created by hand.
+- Documents: approve/restore with Qdrant down answers 503 and changes nothing; a duplicate ingest job no longer re-processes a ready version (approval reset, version out of answers); Qdrant/MinIO internals no longer appear in version errors shown to tenant admins; downloads answer 503 when MinIO is down; renaming to the bare extension is refused.
+- Platform: a malformed provider address is an LLM error (failover, status page) instead of a 500; an API key echoed by a provider is redacted in the model-list error; config import keeps one default per role, and importing exports older than 0.3.6 no longer resets tenants' checker and answer-check mode; tenant names made of spaces are refused.
+- Ops: `backup.sh` free-space check now measures the previous backup (it never fired); it refuses a non-empty existing destination (a failed backup deleted the folder); Postgres healthcheck and `restore.sh` wait over TCP (first start could report ready too early).
+- Frontend: late responses no longer overwrite newer ones (chat search, document versions, overview, LLM usage); double clicks no longer send twice (document actions, Add provider); load errors are shown (SMTP, Embedding, Retention, Syslog); the share dialog closes when the chat changes; Escape in a dialog no longer closes the sources panel; mobile drawers close on every navigation; documents on phones with a stale `?doc=`; Retention "Custom…" days while typing; Help on phones has the menu bar.
+- Chat polling of a pending check: 90 × 1.5 s, longer than the 120 s after which the server reports it unavailable (was 60 s: "Checking…" could stay forever).
+
 ## [0.3.6] - 2026-11-26
 
 ### Added

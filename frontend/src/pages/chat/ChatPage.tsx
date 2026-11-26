@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { errorText } from "../../api/client";
 import type { ChatFull, ChatMessage, ChatSummary, ScopeOption } from "../../api/types";
 import { MobileBar } from "../../layouts/AdminShell";
@@ -12,9 +12,13 @@ import { ShareDialog } from "./ShareDialog";
 import { SourcesPanel } from "./Sources";
 import "./chat.css";
 
+// Polling of a pending answer check: 90 x 1.5 s outlasts the 120 s after which the server reports it unavailable.
+const MAX_TRIES = 90;
+
 export function ChatPage() {
   const { chatId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [query, setQuery] = useState("");
   const [scopes, setScopes] = useState<ScopeOption[]>([]);
@@ -29,9 +33,17 @@ export function ChatPage() {
   const end = useRef<HTMLDivElement>(null);
   const [drawer, setDrawer] = useState(false);
   const [sharing, setSharing] = useState(false);
-  useEffect(() => { setDrawer(false); setSources(null); }, [chatId]); // another chat: close the menu and the sources panel
+  useEffect(() => { setSources(null); setSharing(false); }, [chatId]); // another chat: close the sources panel and the share dialog
+  useEffect(() => setDrawer(false), [location.key]); // close the menu after navigating (also to the chat already shown)
 
-  const refreshList = useCallback((q: string) => chatApi.list(q).then(setChats).catch(() => undefined), []);
+  // Searching while typing: an older, slower list must not replace a newer one.
+  const listSeq = useRef(0);
+  const queryRef = useRef(query);
+  queryRef.current = query;
+  const refreshList = useCallback((q: string) => {
+    const mine = ++listSeq.current;
+    return chatApi.list(q).then((cs) => { if (mine === listSeq.current) setChats(cs); }).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     chatApi.scopes().then((s) => { setScopes(s); setScopesLoaded(true); setDraftScope((d) => d ?? s[0] ?? null); }).catch((e) => setError(errorText(e)));
@@ -74,8 +86,8 @@ export function ChatPage() {
           if (stop || shown.current !== id) return;
           const checks = new Map(fresh.messages.map((m) => [m.id, m.check]));
           setChat((c) => (c && c.id === id ? { ...c, messages: c.messages.map((m) => (checks.has(m.id) ? { ...m, check: checks.get(m.id) } : m)) } : c));
-          if (fresh.messages.some((m) => m.check?.level2 === "pending") && ++tries < 40) tick();
-        }).catch(() => { if (!stop && ++tries < 40) tick(); });
+          if (fresh.messages.some((m) => m.check?.level2 === "pending") && ++tries < MAX_TRIES) tick();
+        }).catch(() => { if (!stop && ++tries < MAX_TRIES) tick(); });
       }, 1500);
     };
     tick();
@@ -117,7 +129,7 @@ export function ChatPage() {
         const ex = await chatApi.ask(chat.id, text);
         setChat((c) => (c && c.id === ex.chat.id ? { ...c, ...ex.chat, messages: [...c.messages, ex.question, ex.answer] } : c));
       }
-      refreshList(query);
+      refreshList(queryRef.current);
     } catch (e) {
       if (shown.current === from) setError(errorText(e));
     } finally {

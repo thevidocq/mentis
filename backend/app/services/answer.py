@@ -125,6 +125,9 @@ def _cited(answer_text: str, passages) -> tuple[str, list[dict]]:
             return f"[{n}]"
         return ""
 
+    # Grouped markers ("[1, 2]") are split first, so each number is checked like a single one.
+    answer_text = re.sub(r"\[(\d{1,3}(?:\s*,\s*\d{1,3})+)\]",
+                         lambda m: "".join(f"[{n.strip()}]" for n in m.group(1).split(",")), answer_text)
     text = re.sub(r"\[(\d{1,3})\]", keep, answer_text)
     citations = []
     for n in order:
@@ -176,13 +179,17 @@ def answer(db: Session, chat: Chat, question: str, first: bool, correction: str 
     reply, used, latency = llm.call_with_failover(primary, fallback, system, turns)
 
     data = _parse_json(reply.text)
-    raw_answer = data["answer"] if data else reply.text.strip()
+    # PostgreSQL text columns refuse NUL (raw or written as \u0000 in the JSON).
+    raw_answer = (data["answer"] if data else reply.text.strip()).replace("\x00", "")
     text, citations = _cited(raw_answer, passages)
-    is_not_found = bool(data and data.get("not_found")) or not text.strip()
+    flag = data.get("not_found") if data else False
+    if isinstance(flag, str):  # weak models write "false" / "true"
+        flag = flag.strip().lower() in ("true", "yes", "1")
+    is_not_found = bool(flag) or not text.strip()
     raw_followups = data.get("followups") if data else None
-    followups = [f.strip() for f in raw_followups if isinstance(f, str) and f.strip()][:3] \
+    followups = [f.replace("\x00", "").strip() for f in raw_followups if isinstance(f, str) and f.strip()][:3] \
         if isinstance(raw_followups, list) and want_followups else []
-    title = data.get("title") if data and isinstance(data.get("title"), str) else None
+    title = data["title"].replace("\x00", "") if data and isinstance(data.get("title"), str) else None
 
     names = list(dict.fromkeys(c["tenant"] for c in citations if not c["is_general"]))
     if any(c["is_general"] for c in citations):

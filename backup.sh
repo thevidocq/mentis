@@ -31,11 +31,17 @@ fi
 KEEP="$(setting MENTIS_BACKUP_KEEP)"; KEEP="${KEEP:-7}"
 DEFAULT_DEST=0; [ -z "${1:-}" ] && DEFAULT_DEST=1
 DEST="${1:-backups/mentis-$(date +%Y%m%d-%H%M%S)}"
+# A failed backup removes its folder: never write into a folder that already holds other files.
+if [ -e "$DEST" ] && { [ ! -d "$DEST" ] || [ -n "$(ls -A "$DEST")" ]; }; then
+  echo "$DEST already exists and is not an empty folder: choose a new destination."
+  exit 1
+fi
+# The newest earlier backup, before this one's (empty) folder is created and becomes the newest.
+last=$(ls -1dt backups/mentis-* 2>/dev/null | head -1 || true)
 mkdir -p "$DEST"
 chmod 700 "$DEST"
 # Free space: a backup needs about as much as the data it copies (compressed, usually less).
 avail_kb=$(df -Pk "$DEST" | awk 'NR==2 {print $4}')
-last=$(ls -1dt backups/mentis-* 2>/dev/null | head -1 || true)
 need_kb=$([ -n "$last" ] && du -sk "$last" | awk '{print int($1 * 1.2)}' || echo 0)
 if [ "${need_kb:-0}" -gt "${avail_kb:-0}" ]; then
   echo "Not enough free disk space for a backup: about $((need_kb / 1024)) MB needed, $((avail_kb / 1024)) MB free."

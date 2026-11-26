@@ -73,6 +73,8 @@ def list_tenants(db: Session = Depends(get_db), user: User = Depends(current_use
 @router.post("", response_model=TenantOut, status_code=status.HTTP_201_CREATED)
 def create_tenant(body: TenantCreate, request: Request, db: Session = Depends(get_db), admin: User = Depends(super_admin)) -> TenantOut:
     name = body.name.strip()
+    if len(name) < 2:  # the length check of the model counts spaces
+        raise HTTPException(422, "The name must be 2 to 120 characters.")
     if body.status not in svc.STATUSES:
         raise HTTPException(422, f"Status must be one of: {', '.join(sorted(svc.STATUSES))}.")
     if svc.name_taken(db, name):
@@ -108,6 +110,8 @@ def update_tenant(
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Only a super-admin can rename a tenant or change its status.")
         if body.name is not None:
             name = body.name.strip()
+            if len(name) < 2:
+                raise HTTPException(422, "The name must be 2 to 120 characters.")
             if svc.name_taken(db, name, exclude_id=tenant.id):
                 raise HTTPException(status.HTTP_409_CONFLICT, "A tenant with this name already exists.")
             changes["name"] = [tenant.name, name]

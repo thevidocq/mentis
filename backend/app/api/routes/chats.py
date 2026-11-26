@@ -5,6 +5,7 @@ tenant admins only on their own tenant (to check what analysts will get).
 Log events carry metadata only, never questions or answers.
 """
 
+import logging
 import uuid
 from datetime import datetime
 from typing import Annotated
@@ -27,6 +28,7 @@ from app.services.vector_index import VectorIndexError
 from app.services.logs import log_event
 from app.services.public_errors import public_message
 
+_log = logging.getLogger("mentis.chats")
 router = APIRouter(prefix="/chats", tags=["chats"])
 # Super-admins manage the platform: no chat, no customer content.
 readers = require_roles(Role.TENANT_ADMIN, Role.ANALYST)
@@ -152,7 +154,7 @@ def _scope_usable(db: Session, chat: Chat, user: User) -> bool:
 
 def _ask(db: Session, user: User, chat: Chat, question: str, first: bool, request: Request,
          background: BackgroundTasks | None = None) -> Exchange:
-    question = question.strip()
+    question = question.replace("\x00", "").strip()
     if not question:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Write a question.")
     try:
@@ -168,6 +170,9 @@ def _ask(db: Session, user: User, chat: Chat, question: str, first: bool, reques
         result, check, later = check_runner.before_save(
             db, chat, question, first, result, lambda problems: answering.answer(db, chat, question, first, correction=problems))
     except (LLMError, EmbeddingError, VectorIndexError):
+        check, later = {"level2": "unavailable", "issues": [], "checker": None}, False
+    except Exception:  # noqa: BLE001 - a broken check must never lose the answer
+        _log.exception("answer check failed")
         check, later = {"level2": "unavailable", "issues": [], "checker": None}, False
 
     q = ChatMessage(chat_id=chat.id, role="user", content=question)

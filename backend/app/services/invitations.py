@@ -4,7 +4,7 @@ import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -91,11 +91,21 @@ def _tenant_names(db: Session, inv: Invitation) -> list[str]:
     return [t.name for t in _tenants(db, inv)]
 
 
-def accept(db: Session, inv: Invitation, password: str) -> User:
+def accept(db: Session, inv: Invitation, password: str) -> User | None:
+    """None if the invitation was accepted meanwhile (two submits in parallel)."""
+    password_hash = hash_password(password)
+    # Claimed in the database, not on the loaded row: parallel submits would otherwise all pass.
+    claimed = db.execute(
+        update(Invitation).where(Invitation.id == inv.id, Invitation.accepted_at.is_(None))
+        .values(accepted_at=utcnow()).execution_options(synchronize_session=False)
+    ).rowcount == 1
+    if not claimed:
+        db.rollback()
+        return None
     user = User(
         email=inv.email,
         full_name=inv.full_name,
-        password_hash=hash_password(password),
+        password_hash=password_hash,
         role=inv.role,
         password_changed_at=utcnow(),
     )
@@ -104,6 +114,5 @@ def accept(db: Session, inv: Invitation, password: str) -> User:
     user.tenants = [t for t in _tenants(db, inv) if not t.is_global or inv.role == "tenant_admin"]
     user.all_tenants = inv.all_tenants
     db.add(user)
-    inv.accepted_at = utcnow()
     db.commit()
     return user

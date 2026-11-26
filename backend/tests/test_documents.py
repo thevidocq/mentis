@@ -261,6 +261,7 @@ def test_rename_keeps_extension_and_name_unique(super_admin):
     base = f"/api/tenants/{t['id']}/documents/{docs['Runbook.docx']}"
     assert super_admin.patch(base, json={"name": "Runbook.pdf"}).status_code == 422
     assert super_admin.patch(base, json={"name": "matrix.XLSX"}).status_code == 422
+    assert super_admin.patch(base, json={"name": "docx"}).status_code == 422  # the extension alone, without a dot
     assert super_admin.patch(base, json={"name": "Firewall Runbook.docx"}).status_code == 200
 
 
@@ -276,6 +277,20 @@ def test_storage_failure_does_not_leave_a_version(super_admin, monkeypatch):
     from app.models import Document
     assert _db().scalars(select(Document)).first() is None
     assert super_admin.queued == []
+
+
+def test_download_with_storage_down_answers_503(super_admin, monkeypatch):
+    t = _tenant(super_admin)
+    v = _upload(super_admin, t["id"], "P.pdf", samples.scanned_pdf()).json()
+    run_jobs(super_admin)
+
+    def boom(*a, **k):
+        raise ConnectionError("minio down")
+
+    monkeypatch.setattr(super_admin.storage, "get", boom)
+    base = f"/api/tenants/{t['id']}/documents/versions/{v['id']}"
+    assert super_admin.get(f"{base}/original").status_code == 503
+    assert super_admin.get(f"{base}/pages/1/image").status_code == 503
 
 
 def test_stuck_versions_are_recovered(super_admin, monkeypatch):

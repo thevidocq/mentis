@@ -21,13 +21,28 @@ _UNIT_RE = "|".join(f"(?:{u})" for u, _ in _UNITS)
 PATTERNS = [
     ("email", re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")),
     ("ip", re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}(?:/\d{1,2})?\b")),
-    ("date", re.compile(r"\b\d{1,2}[./-]\d{1,2}[./-](?:\d{4}|\d{2})\b")),
+    ("date", re.compile(r"\b(?:\d{1,2}[./-]\d{1,2}[./-](?:\d{4}|\d{2})|\d{4}-\d{2}-\d{2})\b")),
     ("time", re.compile(r"\b(?:[01]?\d|2[0-3]):[0-5]\d\b")),
     ("duration", re.compile(rf"\b(\d+(?:[.,]\d+)?)\s*({_UNIT_RE})\b", re.I)),
     ("percent", re.compile(r"\b(\d+(?:[.,]\d+)?)\s?%")),
     ("code", re.compile(r"\b[A-Z]{2,10}(?:-\d{2,}){1,3}\b")),
     ("phone", re.compile(r"(?<![\w.])(?:\+|00)?\d[\d ()\-.]{5,}\d(?![\w])")),
 ]
+
+
+# Numbers that look like phones but are not: ranges ("2023-2024", "1000 - 2000") and amounts with
+# thousands separators ("1.000.000", "1,250,000", "10 000 000").
+_RANGE = re.compile(r"\d+\s*[-\u2013]\s*\d+")
+_AMOUNT = re.compile(r"\d{1,3}(?:([.,  ])\d{3})(?:\1\d{3})*")
+
+
+def _not_phone(raw: str) -> bool:
+    if raw.startswith(("+", "00")):
+        return False
+    if _RANGE.fullmatch(raw):
+        a, b = re.split(r"\s*[-\u2013]\s*", raw)
+        return len(a) == len(b) and len(a) <= 6  # 2023-2024; a real number is "02-1234567"
+    return bool(_AMOUNT.fullmatch(raw))
 
 
 @dataclass
@@ -72,7 +87,7 @@ def extract(text: str) -> list[Value]:
                 key = re.sub(r"[./-]", "/", raw)
             elif kind == "phone":
                 digits = re.sub(r"\D", "", raw)
-                if len(digits) < 7 or len(digits) > 15 or re.fullmatch(r"\d{4}", digits):
+                if len(digits) < 7 or len(digits) > 15 or _not_phone(raw.strip()):
                     continue
                 key = digits[2:] if raw.startswith("00") else digits
             else:

@@ -98,7 +98,8 @@ export function DocumentsPage({ tenantId, title, scopeName = "this customer", ge
   }
 
   return (
-    <div className={`docs-browser${wanted ? " has-selection" : ""}`}>
+    // Phones show the list or the document: a ?doc= that is not (or no longer) in the list keeps the list visible.
+    <div className={`docs-browser${wanted && (!docs || doc) ? " has-selection" : ""}`}>
       <aside className="doc-list" aria-label="Documents"
         data-drag={dragging} onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop}>
         <header className="doc-list-head">

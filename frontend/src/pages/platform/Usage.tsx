@@ -23,7 +23,14 @@ export const usd = (v: number | null) => (v == null ? "—" : `$${v < 1 ? v.toFi
 export function useUsage(days: number) {
   const [data, setData] = useState<UsageData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => { api<UsageData>(`/usage?days=${days}`).then(setData).catch((e) => setError(errorText(e))); }, [days]);
+  useEffect(() => {
+    // Switching period quickly: a slower answer for the previous period must not replace this one.
+    let stale = false;
+    api<UsageData>(`/usage?days=${days}`)
+      .then((d) => { if (!stale) { setData(d); setError(null); } })
+      .catch((e) => { if (!stale) setError(errorText(e)); });
+    return () => { stale = true; };
+  }, [days]);
   return { data, error };
 }
 

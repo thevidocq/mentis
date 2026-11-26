@@ -37,7 +37,14 @@ function ago(iso: string): string {
 export function DocOverview({ base, scope, refreshKey, onOpen }: { base: string; scope: string; refreshKey: number; onOpen: (id: string) => void }) {
   const [o, setO] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => { api<Overview>(`${base}/overview`).then(setO).catch((e) => setError(errorText(e))); }, [base, refreshKey]);
+  useEffect(() => {
+    // Reloaded on every list refresh: only the latest answer may write, and a success clears an old error.
+    let stale = false;
+    api<Overview>(`${base}/overview`)
+      .then((r) => { if (!stale) { setO(r); setError(null); } })
+      .catch((e) => { if (!stale) setError(errorText(e)); });
+    return () => { stale = true; };
+  }, [base, refreshKey]);
 
   const types = o ? TYPES.filter(([k]) => o.by_type[k]) : [];
   const check = o ? [o.to_check.low_confidence && `${o.to_check.low_confidence} low OCR`, o.to_check.empty && `${o.to_check.empty} without text`,

@@ -6,6 +6,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import client_ip, require_roles
@@ -140,6 +141,12 @@ def accept_invitation(token: str, body: InviteAccept, request: Request, db: Sess
         raise HTTPException(status.HTTP_409_CONFLICT, "A user with this email already exists.")
     if inv.role in rules.CONTENT_ROLES and not inv.all_tenants and inv.tenant_ids and not svc.tenants_of(db, inv):
         raise HTTPException(status.HTTP_409_CONFLICT, "The customers of this invitation no longer exist. Ask for a new invitation.")
-    user = svc.accept(db, inv, body.password)
+    try:
+        user = svc.accept(db, inv, body.password)
+    except IntegrityError:  # the same email registered by a parallel request
+        db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "A user with this email already exists.") from None
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "This invitation is invalid or has expired.")
     log_event(db, "user.invitation_accepted", actor=user, ip=client_ip(request))
     return {"email": user.email, "next": "login"}

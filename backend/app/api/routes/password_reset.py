@@ -14,6 +14,7 @@ from app.core.db import get_db
 from app.core.ratelimit import auth_rate_limit
 from app.core.security import password_problem
 from app.models import Role, User
+from app.services import mail
 from app.services import password_reset as svc
 from app.services import users as rules
 from app.services.logs import log_event
@@ -60,6 +61,10 @@ def _forgot(email: str, ip: str | None) -> None:
         if svc.recently_requested(db, user):
             log_event(db, "auth.password.reset_requested", level="warning", actor=user, ip=ip, detail={"sent": False, "reason": "too_soon"})
             return
+        if not mail.is_configured(mail.get_smtp(db)):
+            # Nothing can be emailed: a new link would only replace the one an admin shared by hand.
+            log_event(db, "auth.password.reset_requested", level="warning", actor=user, ip=ip, detail={"sent": False, "reason": "smtp_not_configured"})
+            return
         minutes = get_settings().password_reset_ttl_minutes
         token = svc.create(db, user, timedelta(minutes=minutes))
         sent = svc.send(db, user, token, minutes)
@@ -85,7 +90,8 @@ def reset(token: str, body: ResetIn, request: Request, db: Session = Depends(get
     if problem:
         raise HTTPException(422, problem)
     row, user = found
-    svc.apply(db, row, user, body.password)
+    if not svc.apply(db, row, user, body.password):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "This link is invalid, already used or expired. Ask for a new one.")
     log_event(db, "auth.password.reset", level="warning", actor=user, ip=client_ip(request),
               detail={"by_admin": row.created_by is not None})
 

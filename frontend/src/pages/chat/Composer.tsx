@@ -66,7 +66,7 @@ export function Composer({ scopes, scope, locked, disabled, disabledReason, onSc
       if (e.key === "ArrowUp") { e.preventDefault(); setHi((h) => (h - 1 + options.length) % options.length); return; }
       if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); choose(options[hi]); return; }
     }
-    if (picker && e.key === "Escape") { setPicker(null); return; }
+    if (picker && e.key === "Escape") { e.preventDefault(); setPicker(null); return; }
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
   }
 

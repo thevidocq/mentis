@@ -44,7 +44,7 @@ def passages_block(passages) -> str:
         owner = "General Knowledge Base" if p.is_general else p.tenant_name
         where = f"{p.document_name} v{p.version}, {p.page_label}" + (f", section \"{p.heading}\"" if p.heading else "")
         text = _CLOSE_TAG.sub("</ passage", p.text)  # a document cannot close its own passage (any case or spacing)
-        where = where.replace('"', "'")
+        where, owner = where.replace('"', "'"), owner.replace('"', "'")
         lines.append(f'<passage n="{i}" customer="{owner}" source="{where}">\n{text}\n</passage>')
     return "\n".join(lines)
 

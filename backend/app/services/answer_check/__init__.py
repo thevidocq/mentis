@@ -73,7 +73,7 @@ def public(check: dict | None, created_at=None) -> dict | None:
 def history_note(check: dict | None) -> str:
     """Added to a flagged answer when it goes back to the LLM as history, so the error does not spread."""
     issues = (check or {}).get("issues") or []
-    if not issues:
+    if not issues or (check or {}).get("hidden"):  # a hidden answer is already replaced by a plain note
         return ""
     parts = [i["text"] for i in issues if i.get("text")][:5]
     what = "; ".join(f'"{p[:120]}"' for p in parts) or "statements without a source"

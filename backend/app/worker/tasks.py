@@ -19,11 +19,21 @@ from app.services.public_errors import public_message
 _log = logging.getLogger("mentis.worker")
 
 
+class StorageUnavailable(RuntimeError):
+    """MinIO failed while processing; the message is safe to show to tenant admins."""
+
+
 def ingest_version(version_id: str) -> None:
     db = next(get_db())
     version = db.get(DocumentVersion, uuid.UUID(version_id))
     if version is None:
         _log.warning("version %s no longer exists", version_id)
+        return
+    if version.status != VersionStatus.QUEUED:
+        # A duplicate job (e.g. queued again by recovery just as the first one finished): processing
+        # a ready version again would reset its approval and take it out of answers meanwhile.
+        _log.warning("version %s is %s, not queued: job skipped", version_id, version.status)
+        db.close()
         return
     version.status, version.error, version.status_at = VersionStatus.PROCESSING, None, utcnow()
     db.commit()
@@ -32,7 +42,10 @@ def ingest_version(version_id: str) -> None:
 
     store = storage.get_storage()
     try:
-        data = store.get(version.storage_key)
+        try:
+            data = store.get(version.storage_key)
+        except Exception as e:  # noqa: BLE001 - the raw error carries the storage address and key
+            raise StorageUnavailable("The stored file could not be read (document storage not reachable). Use Retry.") from e
         s = get_settings()
         result = parse(data, version.file_type, ParseLimits(max_pages=s.max_pages), parser=os.getenv("MENTIS_PARSER", "standard"))
         if not result.pages:
@@ -45,7 +58,10 @@ def ingest_version(version_id: str) -> None:
             image_key = None
             if page.image:
                 image_key = storage.page_image_key(version.tenant_id, version.id, page.index)
-                store.put(image_key, page.image, "image/webp")
+                try:
+                    store.put(image_key, page.image, "image/webp")
+                except Exception as e:  # noqa: BLE001 - as above
+                    raise StorageUnavailable("Page images could not be saved (document storage not reachable). Use Retry.") from e
             db.add(VersionPage(
                 version_id=version.id, tenant_id=version.tenant_id, index=page.index, kind=page.kind,
                 label=page.label, text=page.text, method=page.method, ocr_confidence=page.ocr_confidence,
@@ -94,7 +110,7 @@ def ingest_version(version_id: str) -> None:
         db.commit()
         _log.exception("ingestion failed for version %s", version_id)
         log_event(db, "document.failed", kind="system", level="error", tenant_id=version.tenant_id,
-                  target=version.original_filename, detail={"version": version.version, "error": version.error, "cause": str(e)[:500]})
+                  target=version.original_filename, detail={"version": version.version, "error": version.error, "cause": str(e.__cause__ or e)[:500]})
     finally:
         db.close()
 

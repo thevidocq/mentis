@@ -68,7 +68,6 @@ def ensure_collection(tenant_id, dim: int) -> str:
 def upsert_chunks(tenant_id, document_id, version_id, active: bool, chunks: list[tuple[uuid.UUID, list[float]]]) -> None:
     if not chunks:
         return
-    name = ensure_collection(tenant_id, len(chunks[0][1]))
     points = [
         models.PointStruct(id=str(chunk_id), vector=vec, payload={
             "tenant_id": str(tenant_id), "document_id": str(document_id), "version_id": str(version_id),
@@ -76,8 +75,14 @@ def upsert_chunks(tenant_id, document_id, version_id, active: bool, chunks: list
         })
         for chunk_id, vec in chunks
     ]
-    for i in range(0, len(points), 256):
-        client().upsert(name, points=points[i : i + 256], wait=True)
+    try:
+        name = ensure_collection(tenant_id, len(chunks[0][1]))
+        for i in range(0, len(points), 256):
+            client().upsert(name, points=points[i : i + 256], wait=True)
+    except VectorIndexError:
+        raise
+    except Exception as e:  # noqa: BLE001 - the raw reply may carry the service address
+        raise VectorIndexError(f"The vector index (Qdrant) could not be updated: {e.__class__.__name__}") from e
 
 
 def _exists(tenant_id) -> bool:
@@ -85,8 +90,12 @@ def _exists(tenant_id) -> bool:
 
 
 def delete_version(tenant_id, version_id) -> None:
-    if _exists(tenant_id):
-        client().delete(collection_name(tenant_id), points_selector=models.Filter(must=[_match("version_id", version_id)]), wait=True)
+    try:
+        if _exists(tenant_id):
+            client().delete(collection_name(tenant_id), points_selector=models.Filter(must=[_match("version_id", version_id)]),
+                            wait=True)
+    except Exception as e:  # noqa: BLE001 - the raw reply may carry the service address
+        raise VectorIndexError(f"The vector index (Qdrant) could not be updated: {e.__class__.__name__}") from e
 
 
 def delete_document(tenant_id, document_id) -> None:
@@ -135,15 +144,18 @@ def delete_tenant(tenant_id) -> None:
 
 def sync_active(tenant_id, document_id, active_version_id) -> None:
     """Mark only `active_version_id` as active among a document's points (None = no active version)."""
-    if not _exists(tenant_id):
-        return
-    name = collection_name(tenant_id)
-    if active_version_id is not None:
-        client().set_payload(name, payload={"active": True}, wait=True,
-                             points=models.Filter(must=[_match("version_id", active_version_id)]))
-    others = models.Filter(must=[_match("document_id", document_id)],
-                           must_not=[_match("version_id", active_version_id)] if active_version_id else None)
-    client().set_payload(name, payload={"active": False}, points=others, wait=True)
+    try:
+        if not _exists(tenant_id):
+            return
+        name = collection_name(tenant_id)
+        if active_version_id is not None:
+            client().set_payload(name, payload={"active": True}, wait=True,
+                                 points=models.Filter(must=[_match("version_id", active_version_id)]))
+        others = models.Filter(must=[_match("document_id", document_id)],
+                               must_not=[_match("version_id", active_version_id)] if active_version_id else None)
+        client().set_payload(name, payload={"active": False}, points=others, wait=True)
+    except Exception as e:  # noqa: BLE001 - callers report it; the database change is not committed
+        raise VectorIndexError(f"The vector index (Qdrant) could not be updated: {e.__class__.__name__}") from e
 
 
 def search(tenant_id, vector: list[float], limit: int, version_id=None, active_only: bool = True) -> list[models.ScoredPoint]:

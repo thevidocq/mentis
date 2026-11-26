@@ -82,3 +82,57 @@ def test_expired_pending_invitation_does_not_block_a_new_one(super_admin):
     db.execute(update(Invitation).where(Invitation.email == "x@example.com").values(expires_at=utcnow() - timedelta(hours=1)))
     db.commit()
     assert ta.post("/api/invitations", json=body).status_code == 201
+
+
+def _stale_lookup(model, monkeypatch, svc):
+    """Emulate two submits of one link in parallel: both pass the validity check before either commits."""
+    from app.core.security import hash_token
+
+    def find(db, token):
+        row = db.scalar(select(model).where(model.token_hash == hash_token(token)))
+        if model is Invitation:
+            return row
+        return row, db.get(User, row.user_id)
+
+    monkeypatch.setattr(svc, "find_valid", find)
+
+
+def test_password_reset_link_used_twice_in_parallel_works_once(super_admin, monkeypatch):
+    from app.models import PasswordReset
+    from app.services import password_reset as reset_svc
+
+    _invite_and_accept(super_admin, "an@example.com", "analyst")
+    uid = next(u["id"] for u in super_admin.get("/api/users").json() if u["email"] == "an@example.com")
+    token = super_admin.post(f"/api/users/{uid}/password-reset").json()["reset_url"].rsplit("/", 1)[1]
+    anon = new_client(super_admin.app)
+    assert anon.post(f"/api/auth/password/reset/{token}", json={"password": "First-Passw0rd!"}).status_code == 204
+    _stale_lookup(PasswordReset, monkeypatch, reset_svc)
+    assert anon.post(f"/api/auth/password/reset/{token}", json={"password": "Second-Passw0rd!"}).status_code == 404
+    r = anon.post("/api/auth/login", json={"email": "an@example.com", "password": "First-Passw0rd!"})
+    assert r.status_code == 200
+
+
+def test_invitation_accepted_twice_in_parallel_is_not_a_500(super_admin, monkeypatch):
+    from app.services import invitations as inv_svc
+    from app.services import users as user_rules
+
+    r = super_admin.post("/api/invitations", json={"email": "x@example.com", "full_name": "X", "role": "analyst",
+                                                   "all_tenants": True})
+    token = r.json()["invite_url"].rsplit("/", 1)[1]
+    anon = new_client(super_admin.app)
+    assert anon.post(f"/api/invitations/accept/{token}", json={"password": PASSWORD}).status_code == 201
+    _stale_lookup(Invitation, monkeypatch, inv_svc)
+    monkeypatch.setattr(user_rules, "email_in_use", lambda db, email: False)
+    assert anon.post(f"/api/invitations/accept/{token}", json={"password": PASSWORD}).status_code in (404, 409)
+
+
+def test_forgot_password_without_smtp_keeps_the_admin_link(super_admin):
+    _invite_and_accept(super_admin, "an@example.com", "analyst")
+    uid = next(u["id"] for u in super_admin.get("/api/users").json() if u["email"] == "an@example.com")
+    r = super_admin.post(f"/api/users/{uid}/password-reset")
+    assert r.json()["email_sent"] is False
+    token = r.json()["reset_url"].rsplit("/", 1)[1]
+    anon = new_client(super_admin.app)
+    # Nothing can be emailed: the sign-in page request must not replace the link shared by the admin.
+    assert anon.post("/api/auth/password/forgot", json={"email": "an@example.com"}).status_code == 202
+    assert anon.get(f"/api/auth/password/reset/{token}").status_code == 200

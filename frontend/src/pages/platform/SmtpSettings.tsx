@@ -13,7 +13,7 @@ export function SmtpSettings() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => { api<Smtp>("/platform/smtp").then(setCfg).catch((e) => setMsg({ ok: false, text: errorText(e) })); }, []);
-  if (!cfg) return <PageHead title="Email (SMTP)" narrow />;
+  if (!cfg) return <><PageHead title="Email (SMTP)" narrow />{msg && <div className="page-body narrow"><div className="error" role="alert">{msg.text}</div></div>}</>;
 
   const set = <K extends keyof Smtp>(k: K, v: Smtp[K]) => setCfg({ ...cfg, [k]: v });
 

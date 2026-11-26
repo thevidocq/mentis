@@ -224,3 +224,65 @@ def test_models_that_refuse_temperature_are_asked_again_without_it():
         assert "temperature" in bodies[0] and "temperature" not in bodies[1]
     finally:
         llm.set_transport(None)
+
+
+# --- Robustness ------------------------------------------------------------------------
+
+@pytest.mark.parametrize("text", ["Logs from 2023-2024 [1].", "Since 2024-05-12 [1].", "About 1.000.000 events [1].",
+                                  "Between 1000 - 2000 events [1].", "Keep 10,000,000 rows [1]."])
+def test_numbers_that_are_not_phone_numbers(text):
+    assert [v for v in values.extract(text) if v.kind == "phone"] == []
+
+
+def test_hidden_answer_goes_back_without_a_note():
+    from app.services.answer_check import history_note
+    assert history_note({"issues": [{"level": [1], "kind": "value"}], "hidden": True}) == ""
+
+
+def test_hide_mode_when_the_rewrite_fails(super_admin, fake_llm, monkeypatch):
+    from app.api.routes import chats as chat_routes
+    from app.services.llm import LLMError
+    _provider(super_admin)
+    alfa, _ = _setup(super_admin)
+    an = _analyst(super_admin)
+    _mode(super_admin, alfa["id"], "hide")
+    real = chat_routes.answering.answer
+
+    def answer(*a, correction=None, **kw):
+        if correction:
+            raise LLMError("provider down")
+        return real(*a, **kw)
+    monkeypatch.setattr(chat_routes.answering, "answer", answer)
+    fake_llm.reply_override = _answer("Call **Mario Rossi**, +39 085 999 0000 [1].")
+    ex, msg = _ask(an, alfa["id"])
+    assert ex["answer"]["status"] == "not_found" and msg["check"]["hidden"] is True and "999" not in json.dumps(msg)
+
+
+def test_a_broken_check_never_breaks_the_chat(super_admin, fake_llm, monkeypatch):
+    from app.services import answer_check
+    _provider(super_admin)
+    alfa, _ = _setup(super_admin)
+    an = _analyst(super_admin)
+
+    def boom(*a, **kw):
+        raise ValueError("bug")
+    monkeypatch.setattr(answer_check, "level2", boom)
+    monkeypatch.setattr(answer_check, "level1", boom)
+    ex, msg = _ask(an, alfa["id"])
+    assert ex["answer"]["status"] == "ok" and msg["check"]["level2"] == "unavailable"
+    _mode(super_admin, alfa["id"], "hide")
+    ex, msg = _ask(an, alfa["id"])
+    assert ex["answer"]["status"] == "ok" and msg["check"]["level2"] == "unavailable"
+
+
+def test_a_crash_around_the_check_keeps_the_answer(super_admin, fake_llm, monkeypatch):
+    from app.api.routes import chats as chat_routes
+
+    def boom(*a, **kw):
+        raise ValueError("bug")
+    _provider(super_admin)
+    alfa, _ = _setup(super_admin)
+    an = _analyst(super_admin)
+    monkeypatch.setattr(chat_routes.check_runner, "before_save", boom)
+    ex, msg = _ask(an, alfa["id"])
+    assert ex["answer"]["status"] == "ok" and msg["check"]["level2"] == "unavailable"

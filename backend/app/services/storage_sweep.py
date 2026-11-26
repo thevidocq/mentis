@@ -4,8 +4,9 @@ Deleting a document, a version or a tenant removes its rows first and then its f
 vectors (Qdrant). If one of those services is down at that moment, the leftovers stay: they are
 invisible and unused, but take space. This sweep finds and removes them.
 
-Safe by construction: a version's row is written before its files and vectors, so anything under
-an id that has no row is a leftover.
+Safe by construction: a version's row is committed before its files and vectors are written, and
+the sweep lists storage first and reads the rows afterwards, so an upload running at the same time
+is never taken for a leftover.
 """
 
 import logging
@@ -20,23 +21,32 @@ from app.services import storage, vector_index
 _log = logging.getLogger("mentis.sweep")
 
 
-def sweep(db: Session) -> dict:
+def _rows(db: Session) -> tuple[dict, set]:
+    # READ COMMITTED: each query sees the rows committed so far by other requests.
     tenants = {t.id.hex: t.id for t in db.scalars(select(Tenant))}
     known = {str(v) for v in db.scalars(select(DocumentVersion.id))}
+    return tenants, known
+
+
+def sweep(db: Session) -> dict:
     result = {"files": 0, "vectors": 0}
     store = storage.get_storage()
 
-    # Files: tenants/<tenant>/versions/<version>/...
+    # Files: tenants/<tenant>/versions/<version>/... Listed BEFORE the rows are read.
+    listing = {}
     for tdir in store.list_dirs("tenants/"):
         try:
-            tid = uuid.UUID(tdir)
+            uuid.UUID(tdir)
         except ValueError:
             continue
-        if tid.hex not in tenants:
+        listing[tdir] = store.list_dirs(f"tenants/{tdir}/versions/")
+    tenants, known = _rows(db)
+    for tdir, vdirs in listing.items():
+        if uuid.UUID(tdir).hex not in tenants:
             store.delete_prefix(f"tenants/{tdir}/")
             result["files"] += 1
             continue
-        for vdir in store.list_dirs(f"tenants/{tdir}/versions/"):
+        for vdir in vdirs:
             if vdir not in known:
                 store.delete_prefix(f"tenants/{tdir}/versions/{vdir}/")
                 result["files"] += 1
@@ -47,6 +57,7 @@ def sweep(db: Session) -> dict:
     except Exception:  # noqa: BLE001 - Qdrant down: try again tomorrow
         _log.warning("storage sweep: Qdrant not reachable, vectors skipped", exc_info=True)
         return result
+    tenants, _ = _rows(db)
     for name, thex in collections.items():
         if thex not in tenants:
             vector_index.delete_collection(name)
@@ -57,7 +68,9 @@ def sweep(db: Session) -> dict:
                 _log.info("vectors of %s moved to disk", name)
         except Exception:  # noqa: BLE001 - an optimisation, not a cleanup: never blocks the sweep
             _log.warning("could not move the vectors of %s to disk", name, exc_info=True)
-        for vid in vector_index.version_ids(tenants[thex]) - known:
+        found = vector_index.version_ids(tenants[thex])
+        _, known = _rows(db)
+        for vid in found - known:
             vector_index.delete_version(tenants[thex], vid)
             result["vectors"] += 1
     return result
