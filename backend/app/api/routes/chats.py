@@ -154,7 +154,7 @@ def _scope_usable(db: Session, chat: Chat, user: User) -> bool:
 
 def _ask(db: Session, user: User, chat: Chat, question: str, first: bool, request: Request,
          background: BackgroundTasks | None = None) -> Exchange:
-    question = question.strip()
+    question = question.replace("\x00", "").strip()
     if not question:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Write a question.")
     try:

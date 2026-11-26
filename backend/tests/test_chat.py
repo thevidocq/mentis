@@ -385,3 +385,14 @@ def test_customer_name_with_quotes_keeps_the_passage_tag_well_formed():
                         page_label="Page 1", heading=None, text="Call 111")
     tag = prompts.passages_block([p]).splitlines()[1]
     assert tag.count('"') == 6 and "customer=\"Acme 'EU' source='x\"" in tag
+
+
+def test_string_not_found_and_nul_characters(super_admin, fake_llm):
+    _provider(super_admin)
+    alfa, _ = _setup(super_admin)
+    an = _analyst(super_admin)
+    fake_llm.reply_override = '{"answer": "Call Mario Rossi\\u0000 [1].", "not_found": "false", "title": "T\\u0000"}'
+    r = an.post("/api/chats", json={"tenant_id": alfa["id"], "message": "brute force\x00 escalation"})
+    assert r.status_code == 201, r.text
+    a = r.json()["answer"]
+    assert a["status"] == "ok" and "\x00" not in a["content"] and a["citations"]
