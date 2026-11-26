@@ -70,7 +70,8 @@ echo "- Stopping the application"
 docker compose stop web api worker >/dev/null
 
 echo "- PostgreSQL"
-until docker compose exec -T postgres sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >/dev/null 2>&1; do sleep 2; done
+# Over TCP: on a new server the first-start init server listens on the socket only, then restarts.
+until docker compose exec -T postgres sh -c 'pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >/dev/null 2>&1; do sleep 2; done
 docker compose exec -T postgres sh -c 'psql -q -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"'
 gunzip -c "$SRC/postgres.sql.gz" | docker compose exec -T postgres sh -c 'psql -q -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >/dev/null
 # The database role keeps the password it was created with; make it match POSTGRES_PASSWORD of the
