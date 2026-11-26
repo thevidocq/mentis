@@ -159,3 +159,63 @@ def test_pptx_grouped_shapes_are_read():
     buf = io.BytesIO()
     prs.save(buf)
     assert "Laura Bianchi" in _parse(buf.getvalue(), "pptx").pages[0].text
+
+
+# --- Service failures and duplicate jobs -------------------------------------------
+
+def test_approve_and_restore_with_the_index_down_change_nothing(super_admin, monkeypatch):
+    t = _tenant(super_admin, "Alfa")
+    super_admin.patch(f"/api/tenants/{t['id']}", json={"settings": {"require_approval": True}})
+    base = f"/api/tenants/{t['id']}/documents"
+    v1 = _upload(super_admin, t["id"], "A.docx", _docx("first"))
+    run_jobs(super_admin)
+    super_admin.post(f"{base}/versions/{v1['id']}/approve")
+    v2 = _upload(super_admin, t["id"], "A.docx", _docx("second"))
+    run_jobs(super_admin)
+
+    def down(*_a, **_k):
+        raise ConnectionError("qdrant:6333 refused")
+
+    monkeypatch.setattr(vector_index.client(), "set_payload", down)
+    r = super_admin.post(f"{base}/versions/{v2['id']}/approve")
+    assert r.status_code == 503 and "qdrant" not in r.text
+    v2 = super_admin.get(f"{base}/versions/{v2['id']}").json()
+    assert v2["approval"] == "pending" and v2["is_active"] is False
+    assert super_admin.get(base).json()[0]["active"]["id"] == v1["id"]
+    assert super_admin.post(f"{base}/versions/{v1['id']}/restore").status_code == 503
+
+
+def test_duplicate_ingest_job_keeps_an_approved_version_in_use(super_admin):
+    t = _tenant(super_admin, "Alfa")
+    super_admin.patch(f"/api/tenants/{t['id']}", json={"settings": {"require_approval": True}})
+    v = _upload(super_admin, t["id"], "A.docx", _docx("Alfa procedure about phishing"))
+    run_jobs(super_admin)
+    super_admin.post(f"/api/tenants/{t['id']}/documents/versions/{v['id']}/approve")
+    tasks.ingest_version(v["id"])  # recovery queued it again just as the first job finished
+    v = super_admin.get(f"/api/tenants/{t['id']}/documents/versions/{v['id']}").json()
+    assert v["status"] == "ready" and v["approval"] == "approved" and v["is_active"] is True
+    assert any(p.payload["active"] for p in _points(t["id"]) if p.payload["version_id"] == v["id"])
+
+
+def test_service_errors_while_processing_do_not_reach_tenant_admins(super_admin, monkeypatch):
+    from qdrant_client.http.exceptions import UnexpectedResponse
+
+    t = _tenant(super_admin, "Alfa")
+    v = _upload(super_admin, t["id"], "A.docx", _docx("Alfa procedure"))
+
+    def qdrant_refuses(*_a, **_k):
+        raise UnexpectedResponse(500, "Internal Server Error", b"panic at http://qdrant.internal:6333", {})
+
+    monkeypatch.setattr(vector_index.client(), "upsert", qdrant_refuses)
+    run_jobs(super_admin)
+    v = super_admin.get(f"/api/tenants/{t['id']}/documents/versions/{v['id']}").json()
+    assert v["status"] == "failed" and v["error"].startswith("Indexing failed") and "qdrant.internal" not in v["error"]
+
+    def minio_down(*_a, **_k):
+        raise ConnectionError("HTTPConnectionPool(host='minio.internal', port=9000): Max retries exceeded")
+
+    monkeypatch.setattr(super_admin.storage, "get", minio_down)
+    super_admin.post(f"/api/tenants/{t['id']}/documents/versions/{v['id']}/retry")
+    run_jobs(super_admin)
+    v = super_admin.get(f"/api/tenants/{t['id']}/documents/versions/{v['id']}").json()
+    assert v["status"] == "failed" and "storage" in v["error"] and "minio.internal" not in v["error"]

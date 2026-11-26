@@ -152,6 +152,14 @@ def _enqueue(v: DocumentVersion) -> None:
         _log.warning("could not queue version %s; recovery will retry", v.id)
 
 
+def _stored(key: str) -> bytes:
+    try:
+        return storage.get_storage().get(key)
+    except Exception:  # noqa: BLE001 - MinIO down (or the object missing): no stack trace for the user
+        _log.warning("could not read %s from storage", key, exc_info=True)
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Document storage is not reachable. Try again later.") from None
+
+
 def _vout(v: DocumentVersion) -> VersionOut:
     return VersionOut.model_validate(v, from_attributes=True)
 
@@ -273,7 +281,7 @@ def rename_document(tenant_id: uuid.UUID, document_id: uuid.UUID, body: Rename, 
     except UploadError as e:
         raise HTTPException(422, str(e)) from None
     # Keep the extension: versions of one document must all be the same file type.
-    if name.rsplit(".", 1)[-1].lower() != doc.name.rsplit(".", 1)[-1].lower():
+    if "." not in name or name.rsplit(".", 1)[-1].lower() != doc.name.rsplit(".", 1)[-1].lower():
         raise HTTPException(422, f"Keep the .{doc.name.rsplit('.', 1)[-1].lower()} extension.")
     old = doc.name
     doc.name, doc.name_key = name, name.lower()
@@ -319,7 +327,7 @@ def page_image(tenant_id: uuid.UUID, version_id: uuid.UUID, index: int, db: Sess
     page = db.scalar(select(VersionPage).where(VersionPage.version_id == v.id, VersionPage.index == index))
     if page is None or not page.image_key:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No image for this page.")
-    return Response(storage.get_storage().get(page.image_key), media_type=storage.image_type(page.image_key),
+    return Response(_stored(page.image_key), media_type=storage.image_type(page.image_key),
                     headers={"X-Content-Type-Options": "nosniff"})
 
 
@@ -327,7 +335,7 @@ def page_image(tenant_id: uuid.UUID, version_id: uuid.UUID, index: int, db: Sess
 def download_original(tenant_id: uuid.UUID, version_id: uuid.UUID, request: Request, db: Session = Depends(get_db), user: User = Depends(admins)) -> Response:
     tenant = _tenant(db, user, tenant_id)
     v = _version(db, tenant, version_id)
-    data = storage.get_storage().get(v.storage_key)
+    data = _stored(v.storage_key)
     ascii_name = v.original_filename.encode("ascii", "replace").decode().replace('"', "").replace("?", "_")
     log_event(db, "document.downloaded", actor=user, tenant_id=tenant.id, target=v.original_filename, ip=client_ip(request),
               detail={"version": v.version})
@@ -349,6 +357,10 @@ def _transition(action: str, tenant_id: uuid.UUID, version_id: uuid.UUID, reques
             versions.restore(db, v)
     except versions.VersionError as e:
         raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from None
+    except VectorIndexError as e:  # Qdrant unreachable: nothing is committed, the active version stays
+        db.rollback()
+        _log.warning("could not %s version %s: %s", action, v.id, e)
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, public_message(e)) from None
     db.commit()
     log_event(db, f"document.version_{action}d" if action != "reject" else "document.version_rejected", actor=user,
               tenant_id=tenant.id, target=v.original_filename, ip=client_ip(request), detail={"version": v.version})
