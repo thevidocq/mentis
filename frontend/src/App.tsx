@@ -9,6 +9,7 @@ import { Account } from "./pages/Account";
 import { AcceptInvite } from "./pages/AcceptInvite";
 import { ForgotPassword, ResetPassword } from "./pages/PasswordReset";
 import { ChatPage } from "./pages/chat/ChatPage";
+import { SharedChatPage } from "./pages/chat/SharedChatPage";
 import { Help } from "./pages/Help";
 import { TenantDocuments, TenantPreview } from "./pages/documents/routes";
 import { Login } from "./pages/Login";
@@ -65,7 +66,7 @@ function TenantArea() {
       onSelect={(id) => { select(id); navigate("/tenant/documents"); }} />
   ) : undefined;
   return (
-    <AdminShell eyebrow={tenants.length > 1 ? `Customer · ${tenants.length}` : "Customer"} title={current?.name ?? "My customer"} titleControl={switcher} nav={TENANT_NAV}>
+    <AdminShell eyebrow={tenants.length > 1 ? `Tenant · ${tenants.length}` : "Tenant"} title={current?.name ?? "My customer"} titleControl={switcher} nav={TENANT_NAV}>
       <Routes key={current?.id}>
         <Route path="users" element={<Users />} />
         <Route path="settings" element={<TenantSettings />} />
@@ -100,6 +101,7 @@ export function App() {
       <Route path="/admin/*" element={<RequireRole roles={["super_admin"]}><PlatformArea /></RequireRole>} />
       <Route path="/tenant/*" element={<RequireRole roles={["tenant_admin"]}><TenantArea /></RequireRole>} />
       <Route path="/chat" element={<RequireRole roles={["tenant_admin", "analyst"]}><ChatPage /></RequireRole>} />
+      <Route path="/shared/:token" element={<RequireRole roles={["tenant_admin", "analyst"]}><SharedChatPage /></RequireRole>} />
       <Route path="/chat/:chatId" element={<RequireRole roles={["tenant_admin", "analyst"]}><ChatPage /></RequireRole>} />
       <Route path="*" element={user ? <Navigate to={homePath(user)} replace /> : <Navigate to="/login" replace />} />
     </Routes>

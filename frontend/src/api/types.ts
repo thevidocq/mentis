@@ -151,7 +151,22 @@ export interface ChatSummary {
 
 export interface ChatFull extends ChatSummary {
   scope_available: boolean;
+  shared?: boolean; // an active share link exists
   messages: ChatMessage[];
+}
+
+export interface ShareState {
+  url: string | null; // only right after creating it: the link is not stored
+  active: boolean;
+  expires_at: string | null;
+}
+
+export interface SharedChat {
+  title: string;
+  scope_name: string;
+  owner_name: string;
+  messages: ChatMessage[];
+  hidden: number; // exchanges left out: they used a customer you do not see
 }
 
 export interface Exchange {

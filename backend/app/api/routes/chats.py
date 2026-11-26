@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import client_ip, require_roles
 from app.core.db import get_db
-from app.models import Chat, ChatMessage, Role, Tenant, User
+from app.models import Chat, ChatMessage, ChatShare, Role, Tenant, User
 from app.models.base import utcnow
 from app.services import access, chat_visibility
 from app.services import answer as answering
@@ -61,6 +61,7 @@ class ChatSummary(BaseModel):
 
 class ChatOut(ChatSummary):
     scope_available: bool
+    shared: bool = False  # an active share link exists
     messages: list[MessageOut]
 
 
@@ -233,7 +234,9 @@ def get_chat(chat_id: uuid.UUID, db: Session = Depends(get_db), user: User = Dep
     msgs = db.scalars(select(ChatMessage).where(ChatMessage.chat_id == chat.id).order_by(ChatMessage.created_at, ChatMessage.role.desc())).all()
     s = _summary(db, chat)
     vis = chat_visibility.Visibility(db, user)
-    return ChatOut(**s.model_dump(), scope_available=_scope_usable(db, chat, user),
+    shared = db.scalar(select(ChatShare.id).where(ChatShare.chat_id == chat.id, ChatShare.revoked_at.is_(None),
+                                                  ChatShare.expires_at > utcnow()).limit(1)) is not None
+    return ChatOut(**s.model_dump(), scope_available=_scope_usable(db, chat, user), shared=shared,
                    messages=[_msg(m, vis.hidden(chat, m)) for m in msgs])
 
 
@@ -268,6 +271,7 @@ def rename(chat_id: uuid.UUID, body: Rename, db: Session = Depends(get_db), user
 def delete_chat(chat_id: uuid.UUID, db: Session = Depends(get_db), user: User = Depends(readers)) -> None:
     chat = _own_chat(db, user, chat_id)
     db.execute(delete(ChatMessage).where(ChatMessage.chat_id == chat.id))
+    db.execute(delete(ChatShare).where(ChatShare.chat_id == chat.id))  # its links stop working
     db.delete(chat)
     db.commit()
 

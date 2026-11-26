@@ -10,6 +10,6 @@ export function PersonalShell({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const { current } = useCurrentTenant();
   if (user?.role === "super_admin") return <AdminShell eyebrow="Administration" title="Platform" nav={PLATFORM_NAV}>{children}</AdminShell>;
-  if (user?.role === "tenant_admin") return <AdminShell eyebrow="Customer" title={current?.name ?? "My customer"} nav={TENANT_NAV}>{children}</AdminShell>;
+  if (user?.role === "tenant_admin") return <AdminShell eyebrow="Tenant" title={current?.name ?? "My customer"} nav={TENANT_NAV}>{children}</AdminShell>;
   return <AdminShell eyebrow="Mentis" title="Analyst" nav={ANALYST_NAV}>{children}</AdminShell>;
 }

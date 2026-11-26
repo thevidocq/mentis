@@ -28,9 +28,9 @@ export function AdminShell({ eyebrow, title, titleControl, nav, children }: {
           <Brand />
           <button className="icon-btn drawer-close" style={{ border: 0 }} aria-label="Close menu" onClick={() => setOpen(false)}><Icon name="x" /></button>
         </div>
-        <div className="sidebar-block">
+        <div className="sidebar-block sidebar-context">
           <div className="eyebrow">{eyebrow}</div>
-          {titleControl ?? <strong>{title}</strong>}
+          {titleControl ?? <strong className="sidebar-context-title">{title}</strong>}
         </div>
         <nav className="nav" aria-label={`${eyebrow} menu`}>
           {nav.map((item) => (

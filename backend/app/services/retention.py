@@ -13,6 +13,7 @@ from app.models import (
     AuthSession,
     Chat,
     ChatMessage,
+    ChatShare,
     Invitation,
     PasswordReset,
     PlatformSetting,
@@ -52,6 +53,7 @@ def purge(db: Session) -> dict:
     if cfg["chats_days"]:
         cutoff = now - timedelta(days=cfg["chats_days"])
         old = select(Chat.id).where(Chat.updated_at < cutoff)
+        db.execute(delete(ChatShare).where(ChatShare.chat_id.in_(old)))
         result["messages"] = db.execute(delete(ChatMessage).where(ChatMessage.chat_id.in_(old))).rowcount or 0
         result["chats"] = db.execute(delete(Chat).where(Chat.updated_at < cutoff)).rowcount or 0
     if cfg["logs_days"]:
@@ -61,6 +63,7 @@ def purge(db: Session) -> dict:
     db.execute(delete(AuthSession).where(AuthSession.expires_at < now))
     db.execute(delete(Invitation).where(Invitation.accepted_at.is_(None), Invitation.expires_at < now - timedelta(days=7)))
     db.execute(delete(PasswordReset).where(PasswordReset.expires_at < now - timedelta(days=7)))
+    db.execute(delete(ChatShare).where(ChatShare.expires_at < now - timedelta(days=7)))
     cfg["last_purge"], cfg["last_result"] = now.isoformat(), result
     _store(db, cfg)
     db.commit()

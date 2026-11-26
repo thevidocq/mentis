@@ -66,6 +66,7 @@ class Probe:
     kw: dict = field(default_factory=dict)
     check: Callable | None = None  # extra assertion on an allowed response
     skip: str | None = None        # reason the allowed case is not executed
+    shown: set = field(default_factory=set)  # forbidden tokens this probe may legitimately return (a shared chat)
 
 
 @dataclass
@@ -78,6 +79,7 @@ class World:
     page: dict        # tenant key -> page index with an image
     chat: dict        # owner -> chat id
     msg: dict         # owner -> assistant message id
+    share: dict       # owner -> share token of its chat
     inv: dict         # tenant key -> invitation id
     inv_email: dict   # tenant key -> invitation email
     uid: dict         # actor -> user id
@@ -183,6 +185,11 @@ def _build(c: TestClient, fake: FakeLLM) -> World:
         assert r.status_code == 201, r.text
         chat[owner], msg[owner] = r.json()["chat"]["id"], r.json()["answer"]["id"]
     assert r.json()["answer"]["status"] == "ok"  # ta_all, All customers: grounded answer
+    share = {}
+    for owner in CHAT_OWNERS:
+        r = clients[owner].post(f"/api/chats/{chat[owner]}/share")
+        assert r.status_code == 201, r.text
+        share[owner] = r.json()["url"].rsplit("/", 1)[1]
 
     inv, inv_email = {}, {}
     for k in "ABG":
@@ -194,7 +201,7 @@ def _build(c: TestClient, fake: FakeLLM) -> World:
 
     # Disable last: its client keeps a cookie whose session no longer exists.
     assert sa.patch(f"/api/users/{uid['disabled']}", json={"is_active": False}).status_code == 200
-    return World(c=c, clients=clients, t=t, doc=doc, ver=ver, page=page, chat=chat, msg=msg, inv=inv,
+    return World(c=c, clients=clients, t=t, doc=doc, ver=ver, page=page, chat=chat, msg=msg, share=share, inv=inv,
                  inv_email=inv_email, uid=uid, provider=provider, fake=fake)
 
 
@@ -550,6 +557,30 @@ def _routes(w: World) -> dict[tuple[str, str], list[Probe]]:
                     exp = ALLOW if a == owner == mo else 404
                 feedback.append(Probe(a, "POST", path, exp, {"json": {"value": None}}))
     add("POST", "/chats/{chat_id}/messages/{message_id}/feedback", feedback)
+
+    # Share links: only the owner creates or revokes them (the allowed case would replace the world's link).
+    add("GET", "/chats/{chat_id}/share", chat_route(w, "GET", A + "/chats/{chat}/share"))
+    add("POST", "/chats/{chat_id}/share", chat_route(w, "POST", A + "/chats/{chat}/share", skip_allowed="would replace the world share link"))
+    add("DELETE", "/chats/{chat_id}/share", chat_route(w, "DELETE", A + "/chats/{chat}/share", skip_allowed="would revoke the world share link"))
+    # Opening a link: signed-in content roles that see the chat's customer.
+    shared = []
+    for a in ACTORS:
+        for owner in CHAT_OWNERS + ["bogus"]:
+            path = f"{A}/shared/{w.share.get(owner, 'not-a-real-token')}"
+            scope = CHAT_SCOPE.get(owner)
+            if a in LOGGED_OUT:
+                exp = 401
+            elif a == "sa":
+                exp = 403
+            elif owner == "bogus":
+                exp = 404
+            else:
+                # An "All customers" chat (ta_all's searched A, B and G): only who sees all of them.
+                exp = ALLOW if (scope in sees(a) if scope else {"A", "B", "G"} <= sees(a)) else 404
+            # Its question and ids may show: every customer the answer can cite is seen.
+            shown = {_qmark(owner), w.chat[owner], w.msg[owner]} if exp == ALLOW else set()
+            shared.append(Probe(a, "GET", path, exp, shown=shown))
+    add("GET", "/shared/{token}", shared)
     return R
 
 
@@ -610,7 +641,7 @@ def test_authorization_matrix(world):
                 failures.append(f"{where}: expected {p.expect}, got {r.status_code} {r.text[:150]}")
                 continue
             body = r.content.decode("utf-8", "replace")
-            leaked = [f"{what} ({tok})" for tok, what in tokens[p.actor].items() if tok in body]
+            leaked = [f"{what} ({tok})" for tok, what in tokens[p.actor].items() if tok in body and tok not in p.shown]
             if leaked:
                 failures.append(f"{where}: response {r.status_code} leaks {leaked}")
     for key, actors in coverage.items():
