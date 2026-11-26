@@ -6,6 +6,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Fixed
+- `backup.sh` failed with "No such image" when the api image id of the container it used no longer existed (after rebuilds): it now uses the running container and the image by name (`mentis-api`). Same for `restore.sh`.
+
 ## [0.3.4] - 2026-11-26
 
 ### Added
