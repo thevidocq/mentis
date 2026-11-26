@@ -119,10 +119,18 @@ export interface Citation {
   tenant: string;
   is_general: boolean;
   document: string;
-  version: number;
+  version: number | null; // null for live records of an integration
   page: string;
   heading: string | null;
   text: string;
+  // Live records read from an integration (#): ticket, device, alert, indicator.
+  kind?: "document" | "integration";
+  integration?: string;
+  product?: string;
+  record?: string;
+  record_kind?: string;
+  url?: string | null;
+  links?: Record<string, string>;
 }
 
 export interface ChatMessage {
@@ -165,6 +173,7 @@ export interface ChatSummary {
   scope_name: string;
   updated_at: string;
   use_general?: boolean; // General Knowledge Base searched with the customer
+  integration_ids?: string[]; // integrations chosen with #
 }
 
 export interface ChatFull extends ChatSummary {
@@ -197,6 +206,65 @@ export interface ScopeOption {
   id: string | null;
   name: string;
   is_general?: boolean; // the General Knowledge Base alone
+}
+
+export interface IntegrationOption {
+  id: string;
+  name: string;
+  product: string;
+  type: "ticketing" | "edr" | "siem";
+}
+
+// --- Integrations (admin) -------------------------------------------------------
+
+export interface SchemaProp {
+  type?: "string" | "boolean" | "integer";
+  title?: string;
+  description?: string;
+  format?: string;
+  enum?: string[];
+  enumLabels?: string[];
+  default?: string | boolean | number;
+  secret?: boolean;
+  maxLength?: number;
+  showIf?: Record<string, string>;
+}
+
+export interface IntegrationPlugin {
+  name: string;
+  label: string;
+  type: "ticketing" | "edr" | "siem";
+  vendor: string;
+  version: string;
+  description: string;
+  operations: { name: string; label: string; description: string; returns: string; params: Record<string, string> }[];
+  enabled: boolean;
+  instances?: number | null;
+  config_schema?: { properties: Record<string, SchemaProp>; required: string[] } | null;
+}
+
+export interface Integration {
+  id: string;
+  plugin: string;
+  product: string;
+  type: string | null;
+  name: string;
+  config: Record<string, string | boolean | number>;
+  secrets_set: Record<string, boolean>;
+  enabled: boolean;
+  available: boolean;
+  updated_at: string;
+}
+
+export interface LookupRecord {
+  kind: string;
+  id: string;
+  title: string;
+  url: string | null;
+  fields: Record<string, string>;
+  text: string | null;
+  updated: string | null;
+  links: Record<string, string>;
 }
 
 // --- LLM providers -----------------------------------------------------------

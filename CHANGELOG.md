@@ -6,6 +6,29 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-26
+
+### Added
+- **Integrations (`#`)**, read only: in a chat on one customer, `#` (or the Integrations chip) chooses the customer's integrations; Mentis reads tickets, devices and alerts at the moment of the question and cites them like documents (one numbering, Sources panel marked *live*, answer check on them too).
+  - Identifiers with an unmistakable shape (INC0012345, SOC-123, alert ids) are looked up directly; a short planning call to the chat's LLM adds lookups for host names, IPs and searches (max 4 per question; tokens counted in LLM usage). Works with every provider, no native tool calling.
+  - **Links to what was found**: the model writes a record's id as a link to its page (ticket, device, alert, IP page in Defender); a cited record the answer does not link gets an **Open:** line under the answer; the Sources panel has **Open in <product>** and the extra links. Only links of the records found stay links: anything else (invented by the model or written in a ticket) becomes plain text, in the API and again in the browser.
+  - Lookups that fail or find nothing are named in a short line under the answer; the cause goes to the Logs only.
+- **Plugins** (`plugins/<name>/`, entry point `mentis.connectors`, standard library only, installed into the api image): **ServiceNow** (ticket by number incl. SIR/CHG/PRB/RITM/SCTASK, search, open tickets of a host; basic, OAuth client credentials or API key; extra fields), **Jira** Cloud and Data Center (issue by key, JQL search, open issues of a host; projects limit; extra fields), **CrowdStrike Falcon** (host and containment, alerts of a host, alert by composite id, open alerts; regions; MSSP child CID), **Microsoft Defender for Endpoint** (device with IP links, alerts of a device, alert by id with evidence and incident link, open alerts, IP statistics; regional APIs), **Trend Vision One** (endpoint, Workbench alerts of an endpoint, alert by WB id, open alerts; regions). Tests: `python -m pytest plugins/` (fake HTTP, no services).
+- **Core connector runtime** (`app/connectors/`): contract, plugin registry, HTTP client that allows only GET plus declared read POSTs (token, alert queries), only to the instance's origins, without redirects, with time, request and size caps; records capped and cleaned (links must be http(s) without Markdown-breaking characters).
+- **Platform → Integrations** (super-admin): enable the installed types; counts of customer integrations. `GET/PUT /platform/integrations`.
+- **Tenant → Integrations** (tenant admin): add (form generated from the plugin's schema), edit, **Test**, **Try a lookup**, turn off, delete. Credentials encrypted and write-only; sent only to the origin they were saved for (changing the address requires them again). `/tenants/{id}/integrations[/{iid}[/test|/run]]`. The General Knowledge Base has no integrations.
+- Chat API: `GET /chats/integrations?tenant_id=`, `integration_ids` on `POST /chats` and `PATCH /chats/{id}` (validated against the chat's own customer; 422 otherwise), on chat summaries; citations of live records carry `kind: "integration"`, product, integration, record, `url`, `links`.
+- Service status: one line per active integration (category Integrations). Logs: `integration.called` (integration, operation, object ids only, ok/cause, latency), `integration.created/updated/deleted/tested`, `chat.integrations`, `platform.integrations`.
+- Configuration export/import: enabled types and each customer's integrations **without credentials**; imported integrations are added turned off; one whose address changes loses its stored credentials.
+- Help: *Integrations* for super-admins and tenant admins; analyst chat help (`#`, links). Authorization matrix extended (plugins, instances under every tenant id, chat integrations); `tests/test_integrations.py`.
+
+### Changed
+- Prompt: live records are labelled "read now from <integration>", treated as data, and their ids written as links to the given page.
+- Deleting a tenant deletes its integrations and their credentials.
+- Docker Compose 2.17 or later (second build context `plugins` for the api image).
+
+Migration 0013 (`integrations`, `chats.integration_ids`).
+
 ## [0.3.7] - 2026-11-26
 
 ### Fixed

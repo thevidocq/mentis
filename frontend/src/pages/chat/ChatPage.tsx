@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { errorText } from "../../api/client";
-import type { ChatFull, ChatMessage, ChatSummary, ScopeOption } from "../../api/types";
+import type { ChatFull, ChatMessage, ChatSummary, IntegrationOption, ScopeOption } from "../../api/types";
 import { MobileBar } from "../../layouts/AdminShell";
 import { Icon } from "../../components/Icon";
 import { chatApi } from "./chatApi";
@@ -25,6 +25,9 @@ export function ChatPage() {
   const [scopesLoaded, setScopesLoaded] = useState(false);
   const [draftScope, setDraftScope] = useState<ScopeOption | null>(null);
   const [draftGeneral, setDraftGeneral] = useState(true); // on by default; turned off only explicitly
+  const [draftIntegrations, setDraftIntegrations] = useState<string[]>([]);
+  // Integrations (#) of the customer of the chat (or of the draft): reloaded when the customer changes.
+  const [integrations, setIntegrations] = useState<{ tenant: string; items: IntegrationOption[] } | null>(null);
   const [chat, setChat] = useState<ChatFull | null>(null);
   // Sources panel on the right: the answer whose sources are shown, and the section in focus.
   const [sources, setSources] = useState<{ messageId: string; focus: number | null } | null>(null);
@@ -95,6 +98,17 @@ export function ChatPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checking, chat?.id]);
 
+  const integrationTenant = chat ? chat.scope_tenant_id : draftScope?.is_general ? null : draftScope?.id ?? null;
+  useEffect(() => {
+    if (!integrationTenant) { setIntegrations(null); return; }
+    let stop = false;
+    chatApi.integrations(integrationTenant)
+      .then((items) => { if (!stop) setIntegrations({ tenant: integrationTenant, items }); })
+      .catch(() => { if (!stop) setIntegrations({ tenant: integrationTenant, items: [] }); });
+    return () => { stop = true; };
+  }, [integrationTenant]);
+  useEffect(() => setDraftIntegrations([]), [draftScope?.id]); // another customer: its own integrations
+
   const loadingChat = !!chatId && chat?.id !== chatId;
   const pendingHere = pending && pending.chat === chatId ? pending.text : null;
   const locked = !!chat;
@@ -113,6 +127,17 @@ export function ChatPage() {
     }
   }
 
+  // # integrations: before the first question part of the new chat, then of this chat's next questions.
+  async function setChosenIntegrations(ids: string[]) {
+    if (!chat) return setDraftIntegrations(ids);
+    try {
+      const s = await chatApi.setIntegrations(chat.id, ids);
+      setChat((c) => (c && c.id === s.id ? { ...c, integration_ids: s.integration_ids } : c));
+    } catch (e) {
+      setError(errorText(e));
+    }
+  }
+
   async function send(text: string) {
     if (pending || loadingChat) return;
     const from = chatId;
@@ -120,7 +145,8 @@ export function ChatPage() {
     setError(null);
     try {
       if (!chat) {
-        const ex = await chatApi.create(draftScope?.id ?? null, text, draftGeneral);
+        const chosen = draftScope?.id && integrations?.tenant === draftScope.id ? draftIntegrations : [];
+        const ex = await chatApi.create(draftScope?.id ?? null, text, draftGeneral, chosen);
         if (shown.current === from) {
           setChat({ ...ex.chat, scope_available: true, messages: [ex.question, ex.answer] });
           navigate(`/chat/${ex.chat.id}`);
@@ -150,6 +176,7 @@ export function ChatPage() {
     setError(null);
     setDraftScope(scopes[0] ?? null); // every new chat starts on the first option (all your customers, when you have several)
     setDraftGeneral(true);
+    setDraftIntegrations([]);
 
     navigate("/chat");
   }
@@ -225,8 +252,10 @@ export function ChatPage() {
         <div className="chat-bottom">
           <Composer scopes={scopes} scope={scope} locked={locked} disabled={!!pending || loadingChat || !!unavailable} disabledReason={unavailable}
             onScope={setDraftScope} onSend={send}
-            useGeneral={chat ? chat.use_general !== false : draftGeneral} onUseGeneral={setUseGeneral} />
-          <div className="muted small chat-disclaimer">Mentis answers only from the documents in use. Check the sources before acting.</div>
+            useGeneral={chat ? chat.use_general !== false : draftGeneral} onUseGeneral={setUseGeneral}
+            integrations={integrations && integrations.tenant === integrationTenant ? integrations.items : []}
+            selected={chat ? chat.integration_ids ?? [] : draftIntegrations} onIntegrations={setChosenIntegrations} />
+          <div className="muted small chat-disclaimer">Mentis answers only from the documents in use and the integrations chosen with #. Check the sources before acting.</div>
         </div>
       </main>
       {sharing && chat && (

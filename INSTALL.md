@@ -4,7 +4,7 @@
 
 ## Requirements
 
-- Linux host with Docker Engine and the Docker Compose plugin.
+- Linux host with Docker Engine and the Docker Compose plugin, version 2.17 or later (`docker compose version`): the api image is built with a second build context for the integration plugins.
 - At least 4 vCPU and 12 GB RAM (the embedding model alone uses about 3 GB); 16 GB recommended. About 10 GB of free disk for images and the model.
 - The `worker` container (document processing) is limited to 2 CPUs and 3 GB RAM by default; change `MENTIS_WORKER_CPUS` / `MENTIS_WORKER_MEMORY` in `.env`.
 
@@ -140,6 +140,20 @@ Parser: `MENTIS_PARSER=standard` (default). To try Docling in the lab, set `MENT
 The `api` container calls the LLM providers configured in **AI providers**. It needs outbound HTTPS to cloud providers (`api.anthropic.com`, `api.openai.com`). For a model server on the same host (Ollama, vLLM), use `http://host.docker.internal:<port>/v1` as Base URL; for one in another compose project, put it on a shared Docker network and use its service name.
 
 Retrieval tuning in `.env`: `MENTIS_CHAT_PASSAGES` (default 8) and `MENTIS_CHAT_MIN_SCORE` (default 0.3), then `docker compose up -d api`.
+
+## Integrations
+
+The integration plugins in `plugins/` (ServiceNow, Jira, CrowdStrike, Microsoft Defender, Trend Vision One) are installed into the `api` image at build time. They are off until a super-admin enables them in **Integrations**; tenant admins then configure them for their customers.
+
+The `api` container needs outbound HTTPS to each customer's systems: the ServiceNow instance or Jira site (on-premise Jira Data Center may need a route or VPN from the VPS), `api.crowdstrike.com` (or the customer's region), `login.microsoftonline.com` and `api*.securitycenter.microsoft.com`, `api*.xdr.trendmicro.com`. Customers that restrict API access by source IP must allow the VPS's public address.
+
+Check what is installed:
+
+```bash
+docker compose exec api python -c "from app.connectors import registry; print(sorted(registry.connectors()))"
+```
+
+Plugin tests run from a checkout, without services: `python -m pytest plugins/` (Python 3.12 and pytest).
 
 ## Backup
 

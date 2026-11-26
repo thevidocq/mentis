@@ -14,6 +14,21 @@ With a customer selected, Mentis searches that customer's documentation **plus t
 
 Next to the customer, the **Knowledge Base** chip is on by default (✓). To answer only from the customer's documents, tap it and confirm **Turn off for this chat**: the chip shows crossed out and the following questions of that chat ignore the knowledge base. Tap it again to turn it back on. A new chat always starts with it on. (A customer can also turn the knowledge base off for all its chats in its Settings.)
 
+## Live data from the customer's tools (#)
+
+In a chat on **one customer**, Mentis can also read the customer's ticketing and EDR tools (ServiceNow, Jira, CrowdStrike, Microsoft Defender, Trend Vision One), if its tenant admin connected them.
+
+1. Type `#` (or click **Integrations** under the box) and pick one or more of the customer's integrations. The chip shows what is chosen; click it again to change the choice for the next questions.
+2. Ask as usual, for example *What is the status of INC0012345?*, *Open alerts on WS-042?* or *Is there a procedure for the alert WB-14-20261126-00003?*
+3. Ticket numbers (INC…, SOC-123), alert ids and similar are looked up directly; for host names, IP addresses and searches the AI model decides which lookups help.
+
+The answer cites the records like documents: their numbers open the **Sources** panel, marked *live*, with **Open in ServiceNow** (or the product) and further links, for example the device or the IP page. The record's id in the answer is a link too, and when the answer does not link a record it cites, an **Open:** line under the answer does. Only links to the records found are clickable: any other address in an answer is shown as plain text.
+
+- Everything is **read only**: Mentis never changes a ticket, a device or an alert.
+- Data is read at the moment of the question. Lookups that fail or find nothing are named in a short line in italics under the answer, for example *CrowdStrike (EU) timed out*.
+- With **All my customers**, or on the General Knowledge Base alone, there are no integrations: start a chat on one customer.
+- Each lookup is in the audit log (which integration and which ticket, host or alert; never the answer).
+
 ## Read the answer
 
 - Each answer sits in a light frame. The small line above it says **which customer** it refers to. With All customers, an answer covering several customers names each one.
@@ -63,4 +78,4 @@ The chat fills the screen. The ☰ button at the top left opens the history; **+
 - **The answer could not be generated**: the AI model or the document search did not respond. Click **Retry**. If it keeps failing, tell your administrator: the technical cause is in the super-admin's Logs.
 - **This customer is no longer available**: the customer was disabled, deleted or removed from your account. Start a new chat.
 - **This answer is hidden**: the answer used the documentation of a customer that is no longer assigned to you. Your question stays; the answer, its sources and suggestions do not.
-- The `#` **Integrations** button (live data from ticketing, EDR and SIEM) is not available yet.
+- **Integrations** is greyed out: the chat is on several customers, or the customer has no integration yet (ask your tenant admin).

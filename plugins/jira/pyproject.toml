@@ -1,0 +1,16 @@
+[project]
+name = "mentis-jira"
+version = "1.0.0"
+description = "Mentis connector: Jira Cloud and Data Center (read-only)"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.entry-points."mentis.connectors"]
+jira = "mentis_jira:connector"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["mentis_jira*"]

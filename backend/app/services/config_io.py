@@ -1,8 +1,9 @@
 """Export and import of the platform configuration as JSON.
 
-What travels: platform settings (SMTP, embedding, retention, syslog), AI providers and tenants
-(name, status, settings, chosen LLM by provider name).
-What never travels: secrets (passwords, API keys), users, documents, chats, logs.
+What travels: platform settings (SMTP, embedding, retention, syslog), AI providers, the enabled
+integration plugins and tenants (name, status, settings, chosen LLM by provider name, integrations
+without their credentials).
+What never travels: secrets (passwords, API keys, client secrets), users, documents, chats, logs.
 Use it to move a configuration between lab and production or to keep it under version control;
 use backup.sh for disaster recovery.
 """
@@ -13,9 +14,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import __version__
-from app.models import LlmProvider, PlatformSetting, Tenant
+from app.connectors import registry
+from app.connectors import schema as connector_schema
+from app.models import Integration, LlmProvider, PlatformSetting, Tenant
 from app.models.base import utcnow
 from app.models.tenant import DEFAULT_TENANT_SETTINGS
+from app.services import integrations as integration_svc
 from app.services import llm_config, mail, retention, syslog
 from app.services import tenants as tenant_svc
 
@@ -89,10 +93,13 @@ def export_config(db: Session, tenant_ids: set | None = None) -> dict:
             "llm_fallback": by_id.get(str(s.get("llm_fallback_id"))) if s.get("llm_fallback_id") else None,
             "checker": by_id.get(str(s.get("checker_provider_id"))) if s.get("checker_provider_id") else None,
             "answer_check": s.get("answer_check", "warn"),
+            "integrations": [{"name": i.name, "plugin": i.plugin, "config": dict(i.config or {}), "enabled": i.enabled}
+                             for i in db.scalars(select(Integration).where(Integration.tenant_id == t.id).order_by(Integration.name))],
         })
     data = {"format": FORMAT, "mentis_version": __version__, "exported_at": utcnow().isoformat(), "tenants": tenants}
     if tenant_ids is None:
-        data["platform"] = {"smtp": smtp, "embedding": emb, "retention": ret, "syslog": syslog.get_config(db)}
+        data["platform"] = {"smtp": smtp, "embedding": emb, "retention": ret, "syslog": syslog.get_config(db),
+                            "integrations": {"enabled": sorted(integration_svc.enabled_plugins(db))}}
         data["llm_providers"] = [{"name": p.name, **{f: getattr(p, f) for f in _PROVIDER_FIELDS}} for p in providers]
     return data
 
@@ -150,6 +157,17 @@ def _check(data: dict) -> None:
     for t in data.get("tenants", []):
         if t.get("answer_check", "warn") not in ("warn", "hide", "off"):
             raise ImportError_(f"Tenant {t.get('name')}: answer_check must be warn, hide or off.")
+        items = t.get("integrations", [])
+        if not isinstance(items, list) or len(items) > 100:
+            raise ImportError_(f"Tenant {t.get('name')}: integrations must be a list.")
+        for i in items:
+            if (not isinstance(i, dict) or not _str_max(i.get("name"), 80) or not i["name"].strip()
+                    or not _str_max(i.get("plugin"), 64) or not isinstance(i.get("config", {}), dict)
+                    or not isinstance(i.get("enabled", True), bool)):
+                raise ImportError_(f"Tenant {t.get('name')}: every integration needs name, plugin and a config object.")
+    enabled = (platform.get("integrations") or {}).get("enabled", [])
+    if not isinstance(platform.get("integrations", {}), dict) or not isinstance(enabled, list) or any(not _str_max(n, 64) for n in enabled):
+        raise ImportError_("The integrations section is malformed.")
 
 
 def import_config(db: Session, data: dict, apply: bool) -> list[str]:
@@ -226,6 +244,18 @@ def import_config(db: Session, data: dict, apply: bool) -> list[str]:
             if same and not any(p.is_default for p in same):
                 same[0].is_default = True
 
+    if "integrations" in platform:
+        installed = registry.connectors()
+        wanted = set(platform["integrations"].get("enabled", []))
+        missing = sorted(wanted - set(installed))
+        if missing:
+            plan.append(f"Integration plugins not installed here, skipped: {', '.join(missing)}")
+        wanted &= set(installed)
+        if wanted != integration_svc.enabled_plugins(db):
+            plan.append(f"Enable integration plugins: {', '.join(sorted(wanted)) or 'none'}")
+            if apply:
+                integration_svc.set_enabled_plugins(db, wanted)
+
     tenants = {t.name.lower(): t for t in db.scalars(select(Tenant))}
     for t in data.get("tenants", []):
         name = t["name"].strip()
@@ -274,7 +304,44 @@ def import_config(db: Session, data: dict, apply: bool) -> list[str]:
                     else:
                         merged[field] = settings[field]
             cur.settings = merged
+        if (cur is not None and not cur.is_global) or (cur is None and not t.get("general")):
+            _import_integrations(db, cur, name, t.get("integrations", []), plan, apply)
     if apply:
         db.commit()
         syslog.forwarder.reload(None)
     return plan
+
+
+def _import_integrations(db: Session, tenant: Tenant | None, name: str, items: list, plan: list[str], apply: bool) -> None:
+    """Integrations of one tenant, matched by name. Credentials never travel: a new integration is
+    added disabled, to enable after entering them; one whose address changes loses its stored ones."""
+    current = {} if tenant is None or tenant.id is None else {
+        i.name: i for i in db.scalars(select(Integration).where(Integration.tenant_id == tenant.id))}
+    for item in items:
+        c = registry.get(item["plugin"])
+        label = f"Tenant {name}: integration {item['name']}"
+        if c is None:
+            plan.append(f"{label}: plugin {item['plugin']} not installed here, skipped")
+            continue
+        config, _, problem = connector_schema.split(c, {k: v for k, v in item.get("config", {}).items()
+                                                        if k not in connector_schema.secret_keys(c)}, require=False)
+        if problem:
+            plan.append(f"{label}: skipped ({problem})")
+            continue
+        cur = current.get(item["name"].strip())
+        if cur is None:
+            plan.append(f"{label}: add (disabled; enter the credentials, then enable it)")
+            if apply and tenant is not None:
+                db.add(Integration(tenant_id=tenant.id, plugin=item["plugin"], name=item["name"].strip(), config=config, enabled=False))
+        elif cur.plugin != item["plugin"]:
+            plan.append(f"{label}: different type here, skipped")
+        elif cur.config != config:
+            try:
+                moved = {o.lower() for o in c.origins(cur.config or {})} != {o.lower() for o in c.origins(config)}
+            except Exception:  # noqa: BLE001
+                moved = True
+            plan.append(f"{label}: update" + (" (new address: credentials to enter again)" if moved and cur.secrets_enc else ""))
+            if apply:
+                cur.config = config
+                if moved:
+                    integration_svc.instances.store_secrets(cur, {})

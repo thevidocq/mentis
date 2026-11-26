@@ -1,6 +1,6 @@
 # Your role as tenant admin
 
-You administer the customers ticked on your account (or all of them, if you have **All customers**): their documentation, settings, LLM and users. You do not see the other customers of the platform.
+You administer the customers ticked on your account (or all of them, if you have **All customers**): their documentation, integrations, settings, LLM and users. You do not see the other customers of the platform.
 
 ## Several customers
 
@@ -12,6 +12,7 @@ If you administer more than one customer, the **customer selector** at the top o
 - **Users**: invite and manage tenant admins and analysts of your customers.
 - **Settings**: decide how answers use your documentation.
 - **LLM**: choose which AI model answers for your customer, and a fallback (when the super-admin allows it).
+- **Integrations**: connect the customer's ticketing and EDR tools (ServiceNow, Jira, CrowdStrike, Microsoft Defender, Trend Vision One), read only; analysts use them in the chat with `#`.
 - **General Knowledge Base**: if you can manage it, pick it in the customer selector to upload general knowledge (no customer context); every new version needs approval. Everyone reads it in the chat anyway.
 - **Chat**: test the answers analysts get about your customers. `@` lists your customers; **All my customers** searches all of them.
 
@@ -19,4 +20,4 @@ Analysts ask questions about your customer in the chat and get answers with cita
 
 ## Coming next
 
-- **Integrations**: read-only connections to ticketing, EDR and SIEM tools.
+- **SIEM integrations** (Microsoft Sentinel, Splunk).

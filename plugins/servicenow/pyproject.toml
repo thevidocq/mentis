@@ -1,0 +1,16 @@
+[project]
+name = "mentis-servicenow"
+version = "1.0.0"
+description = "Mentis connector: ServiceNow (read-only)"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.entry-points."mentis.connectors"]
+servicenow = "mentis_servicenow:connector"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["mentis_servicenow*"]

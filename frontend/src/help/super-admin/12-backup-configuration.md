@@ -51,8 +51,9 @@ If the vector index archive is lost or damaged, restore anyway and use **Embeddi
 - platform settings: email, embedding, retention, syslog
 - AI providers
 - tenants, with their status, settings and chosen LLM
+- the enabled integration types, and each customer's integrations (address and options)
 
-It **never** contains passwords, API keys, users, documents, chats or logs.
+It **never** contains passwords, API keys, integration credentials, users, documents, chats or logs. Imported integrations are added turned off, until the tenant admin enters their credentials.
 
 **Import…** reads such a file and first shows the changes it would make. Click **Apply** to make them. Import only adds and updates: tenants and providers that are not in the file are left alone. Afterwards, enter the API keys of any new AI provider.
 

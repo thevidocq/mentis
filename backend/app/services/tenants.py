@@ -55,12 +55,13 @@ def delete_tenant(db: Session, tenant: Tenant) -> None:
     Documents, versions, pages, chunks and stored files go, and every chat scoped to it.
     Tenant admins of this tenant only are deleted with their chats; admins of other tenants too
     just lose this one. Pending invitations lose it, and are deleted when nothing is left.
-    Integrations will be added by their block. Log events are kept (retention applies).
+    Its integrations (and their encrypted secrets) go too. Log events are kept (retention applies).
     """
-    from app.models import Chat, ChatMessage
+    from app.models import Chat, ChatMessage, Integration
     from app.services.versions import delete_tenant_documents
 
     delete_tenant_documents(db, tenant.id)
+    db.execute(delete(Integration).where(Integration.tenant_id == tenant.id))
     admins = list(db.scalars(select(User).where(User.id.in_(select(user_tenants.c.user_id).where(user_tenants.c.tenant_id == tenant.id)))))
     only_here = [u.id for u in admins if u.tenant_ids == {tenant.id}]
     gone = (Chat.scope_tenant_id == tenant.id) | Chat.user_id.in_(only_here)
