@@ -7,7 +7,7 @@ every open session is closed and the event is logged.
 import logging
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -72,11 +72,21 @@ def find_valid(db: Session, token: str) -> tuple[PasswordReset, User] | None:
     return row, user
 
 
-def apply(db: Session, row: PasswordReset, user: User, password: str) -> None:
-    user.password_hash = hash_password(password)
+def apply(db: Session, row: PasswordReset, user: User, password: str) -> bool:
+    """False if the link was used meanwhile (two submits in parallel): the password stays as it is."""
+    password_hash = hash_password(password)
+    # Claimed in the database, not on the loaded row: parallel submits would otherwise all pass.
+    claimed = db.execute(
+        update(PasswordReset).where(PasswordReset.id == row.id, PasswordReset.used_at.is_(None))
+        .values(used_at=utcnow()).execution_options(synchronize_session=False)
+    ).rowcount == 1
+    if not claimed:
+        db.rollback()
+        return False
+    user.password_hash = password_hash
     user.password_changed_at = utcnow()
     user.failed_logins, user.locked_until = 0, None
-    row.used_at = utcnow()
     db.execute(delete(PasswordReset).where(PasswordReset.user_id == user.id, PasswordReset.id != row.id))
     db.commit()
     sessions.revoke_all_sessions(db, user)
+    return True
