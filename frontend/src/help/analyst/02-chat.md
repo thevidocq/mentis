@@ -17,13 +17,21 @@ Next to the customer, the **Knowledge Base** chip is on by default (✓). To ans
 ## Read the answer
 
 - The labels above the answer say **which customer** it refers to. With All customers, an answer covering several customers names each one.
-- Every statement ends with a number like **1**: click it to open the source.
-- **Sources** under the answer is closed by default and says how many documents and sections were used. Open it to see each document (with its version) and the cited sections; click a section to read the exact passage. The customer is shown only when the answer mixes customers or uses the General Knowledge Base.
+- Every statement ends with a number like **1**: click it to open the **Sources** panel on the right, on that passage.
+- The **Sources** bar under the answer says how many documents and sections were used; click it to open the panel. The panel lists each document (with its version) and the cited sections; click a section to read the exact passage. The customer is shown only when the answer mixes customers or uses the General Knowledge Base. Close it with **×** or **Esc**. On a phone the panel fills the screen.
 - A customer's own procedure wins over the General Knowledge Base; when they differ, the answer says so.
 - **Not found**: if the documentation in use does not cover the question, Mentis says so and does not guess. Ask your tenant admin to add the missing procedure.
 - Under the answer: up to three **suggested questions** (one click asks them), thumbs up / thumbs down buttons to rate the answer, copy, and the name of the AI model that wrote it.
 
 > Always check the source before acting on a contact or a time. Answers come only from the documents, but the documents can be out of date.
+
+## Share a chat
+
+**Share** at the top right of a chat (on a phone, the share icon next to **+**) creates a link to send to a colleague, for example at a shift change.
+
+- The link opens the chat **read-only**, with its sources. Only colleagues **signed in to Mentis** can open it, and only if they see the chat's customer; for an *All customers* chat, every customer it searched. Answers that used a customer they do not see stay hidden, with their questions.
+- Copy the link when you create it: for security Mentis does not keep it. **New link** creates another one and the old one stops working; **Revoke link** stops it. A link expires after 30 days, or when the chat is deleted.
+- Whoever opens it cannot add questions or see your ratings. Creating, revoking and opening links is in the audit log.
 
 ## On a phone
 

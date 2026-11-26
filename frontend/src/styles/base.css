@@ -82,8 +82,12 @@ tr:last-child td { border-bottom: 0; }
 /* Shell with left menu */
 .shell { min-height: 100%; display: flex; flex-wrap: wrap; }
 .sidebar { flex: 0 0 var(--sidebar-w); width: var(--sidebar-w); max-width: 100%; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
-.sidebar-block { padding: 14px 16px; border-bottom: 1px solid var(--border); }
-.brand { display: flex; align-items: center; gap: 10px; padding: 18px 16px; border-bottom: 1px solid var(--border); }
+.sidebar-block { padding: 14px 20px; border-bottom: 1px solid var(--border); }
+/* Context of the menu (Platform, or the tenant with its selector): label and control well apart. */
+.sidebar-context { display: flex; flex-direction: column; gap: 10px; padding: 18px 20px 20px; }
+.sidebar-context-title { font-size: 15px; }
+.sidebar-context .customer-select-btn { min-height: 42px; padding: 0 14px; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 0 20px; height: var(--head-h); box-sizing: border-box; border-bottom: 1px solid var(--border); }
 .brand-name { font-weight: 700; letter-spacing: 3px; font-size: 16px; }
 .eyebrow { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
 .nav { flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 10px 8px; }
@@ -99,7 +103,7 @@ tr:last-child td { border-bottom: 0; }
 .main { flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column; }
 /* Desktop pages keep a readable width (like Equalizer), centered in the space next to the menu:
    never stretched across wide monitors. The header is part of the page, not a full-width bar. */
-:root { --page-max: 1200px; --page-max-wide: 1560px; --sidebar-w: 280px; }
+:root { --page-max: 1200px; --page-max-wide: 1560px; --sidebar-w: 320px; --head-h: 72px; }
 .page-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 32px 40px 8px; width: 100%; max-width: var(--page-max); margin: 0 auto; }
 .page-body { padding: 16px 40px 40px; display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: var(--page-max); margin: 0 auto; }
 .page-head.wide, .page-body.wide { max-width: var(--page-max-wide); } /* data-heavy tables (Logs) */

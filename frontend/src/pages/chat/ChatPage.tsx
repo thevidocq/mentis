@@ -8,6 +8,8 @@ import { chatApi } from "./chatApi";
 import { ChatSidebar } from "./ChatSidebar";
 import { Composer } from "./Composer";
 import { AssistantMessage, Thinking, UserMessage } from "./MessageView";
+import { ShareDialog } from "./ShareDialog";
+import { SourcesPanel } from "./Sources";
 import "./chat.css";
 
 export function ChatPage() {
@@ -20,11 +22,14 @@ export function ChatPage() {
   const [draftScope, setDraftScope] = useState<ScopeOption | null>(null);
   const [draftGeneral, setDraftGeneral] = useState(true); // on by default; turned off only explicitly
   const [chat, setChat] = useState<ChatFull | null>(null);
+  // Sources panel on the right: the answer whose sources are shown, and the section in focus.
+  const [sources, setSources] = useState<{ messageId: string; focus: number | null } | null>(null);
   const [pending, setPending] = useState<{ text: string; chat: string | undefined } | null>(null); // question waiting for its answer
   const [error, setError] = useState<string | null>(null);
   const end = useRef<HTMLDivElement>(null);
   const [drawer, setDrawer] = useState(false);
-  useEffect(() => setDrawer(false), [chatId]);
+  const [sharing, setSharing] = useState(false);
+  useEffect(() => { setDrawer(false); setSources(null); }, [chatId]); // another chat: close the menu and the sources panel
 
   const refreshList = useCallback((q: string) => chatApi.list(q).then(setChats).catch(() => undefined), []);
 
@@ -117,10 +122,15 @@ export function ChatPage() {
   const messages = chat?.messages ?? [];
   const scopeLabel = scope?.id ? scope.name : "all customers";
 
+  const sourcesMessage = sources ? messages.find((m) => m.id === sources.messageId && m.role === "assistant") : undefined;
+
   return (
     <div className={`shell chat-shell${drawer ? " drawer-open" : ""}`}>
       <MobileBar title={chat?.title ?? "New chat"} onMenu={() => setDrawer(true)}
-        right={<button className="icon-btn" style={{ border: 0 }} aria-label="New chat" onClick={newChat}><Icon name="plus" size={20} /></button>} />
+        right={<>
+          {chat && <button className="icon-btn" style={{ border: 0 }} aria-label="Share chat" onClick={() => setSharing(true)}><Icon name="share" size={19} /></button>}
+          <button className="icon-btn" style={{ border: 0 }} aria-label="New chat" onClick={newChat}><Icon name="plus" size={20} /></button>
+        </>} />
       <div className="drawer-backdrop" onClick={() => setDrawer(false)} aria-hidden="true" />
       <ChatSidebar chats={chats} query={query} onQuery={setQuery} onNew={() => { newChat(); setDrawer(false); }} onClose={() => setDrawer(false)}
         onRename={async (id, title) => {
@@ -140,6 +150,11 @@ export function ChatPage() {
             <span className={`pill${scope.id ? " accent" : ""}`} title={locked ? "Customer locked for this chat" : "Customer for this chat"}>
               {locked && <Icon name="lock" size={12} />} {scope.name}
             </span>
+          )}
+          {chat && (
+            <button className="btn btn-sm chat-share-btn" onClick={() => setSharing(true)} title="Share a read-only link with colleagues">
+              <Icon name="share" size={15} />{chat.shared ? "Shared" : "Share"}
+            </button>
           )}
         </header>
         <div className="chat-scroll">
@@ -163,6 +178,8 @@ export function ChatPage() {
               m.role === "user" ? <UserMessage key={m.id} m={m} /> : (
                 <AssistantMessage key={m.id} m={m} busy={!!pending || !!unavailable} onFollowup={send}
                   onFeedback={(v) => feedback(m, v)}
+                  sourcesOpen={sources?.messageId === m.id}
+                  onSources={(n) => setSources({ messageId: m.id, focus: n })}
                   onRetry={i === messages.length - 1 && messages[i - 1] ? () => send(messages[i - 1].content) : undefined} />
               ))}
             {pendingHere && <><UserMessage m={{ content: pendingHere }} /><Thinking scope={scopeLabel} /></>}
@@ -177,6 +194,13 @@ export function ChatPage() {
           <div className="muted small chat-disclaimer">Mentis answers only from the documents in use. Check the sources before acting.</div>
         </div>
       </main>
+      {sharing && chat && (
+        <ShareDialog chatId={chat.id} onClose={() => setSharing(false)}
+          onChange={(shared) => setChat((c) => (c && c.id === chat.id ? { ...c, shared } : c))} />
+      )}
+      {sourcesMessage && (
+        <SourcesPanel key={sourcesMessage.id} citations={sourcesMessage.citations} focus={sources?.focus ?? null} onClose={() => setSources(null)} />
+      )}
     </div>
   );
 }

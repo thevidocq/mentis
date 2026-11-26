@@ -46,6 +46,7 @@ One chat = one customer scope, locked at the first message; integrations are cho
 - History items show title and `@customer`; the active chat has rename and delete icons.
 - Header: chat title and customer badge (lock icon once locked). The LLM that wrote each answer is shown under it, with latency.
 - Chats are private to their user. Analysts and tenant admins chat on their own customers; super-admins have no chat.
+- **Sharing by link** (owner only): read-only, for signed-in tenant admins and analysts who see the chat's customer (for an "All customers" chat, every customer of the owner, since an answer can draw on passages it does not cite). Answers citing a customer the viewer does not see are left out with their question; the owner's ratings are not shown. One active link per chat: a new one revokes the old; only its hash is stored; it expires after `MENTIS_CHAT_SHARE_DAYS` (30), with the chat, or when the owner is disabled. Created, revoked, viewed and denied views are audited (`chat.shared`, `chat.share_revoked`, `chat.share_viewed`, `chat.share_denied`).
 
 **`@` customer scope**
 
@@ -66,7 +67,7 @@ One chat = one customer scope, locked at the first message; integrations are cho
 - Citations: documents as [1], [2] (document, version, page/sheet/slide); live integration data as [A], [B] (source, object, read time).
 - If the documentation does not cover the question: "Not found in <customer> documentation", never an invented procedure. With no passage above the score threshold the LLM is not called at all; the model can also flag not-found itself.
 - Passages go to the LLM as numbered, untrusted data blocks labelled with their customer; citation numbers not among them are dropped.
-- Sources under the answer are compact: one closed line ("Sources · 1 document · 8 sections"), opened into one block per document (version) with its cited sections in number order. The customer badge appears only when the answer mixes customers or uses General. A click on [n] opens the panel on that section.
+- Sources under the answer are one compact line ("Sources · 1 document · 8 sections"). A click opens the **Sources panel on the right** of the chat (full screen on a phone): one block per document (version) with its cited sections in number order. The customer badge appears only when the answer mixes customers or uses General. A click on [n] opens the panel on that section.
 - The last turns of the chat are sent as context; short follow-ups also reuse the previous question for retrieval.
 
 **Suggested follow-ups**
@@ -174,7 +175,7 @@ Admin areas use a left menu with the logo top-left; content takes the full width
 **UI rules**
 
 - Three themes: Light, Medium, Dark, chosen in the account page.
-- Clear but not heavy separators between sidebar blocks and sections.
+- Clear but not heavy separators between sidebar blocks and sections. The sidebar (320 px) brand row and the page/chat header share one height (72 px), so their bottom borders form one line. The admin sidebar's context block reads **Tenant** (with the count when there are several) above the tenant switcher.
 - One icon family: inline SVG, same stroke width, round caps and joins, `currentColor`. No emoji or text symbols as icons.
 - Edit (pencil) and delete (trash) icons wherever names and items can change.
 - Logo: "M" icon on teal + MENTIS wordmark, no tagline (`assets/logo/`).

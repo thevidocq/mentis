@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { ChatMessage } from "../../api/types";
 import { Icon } from "../../components/Icon";
 import { Markdown } from "../../components/Markdown";
-import { Sources } from "./Sources";
+import { SourcesBar } from "./Sources";
 
 export function UserMessage({ m }: { m: Pick<ChatMessage, "content"> }) {
   return <div className="msg-user"><div className="bubble">{m.content}</div></div>;
@@ -10,18 +10,18 @@ export function UserMessage({ m }: { m: Pick<ChatMessage, "content"> }) {
 
 interface Props {
   m: ChatMessage;
-  onFollowup: (q: string) => void;
-  onFeedback: (value: 1 | -1 | null) => void;
+  onFollowup?: (q: string) => void;   // absent: read-only (a shared chat)
+  onFeedback?: (value: 1 | -1 | null) => void;
   onRetry?: () => void;
   busy: boolean;
+  onSources: (n: number | null) => void; // open the sources panel (on section n)
+  sourcesOpen: boolean;
 }
 
-export function AssistantMessage({ m, onFollowup, onFeedback, onRetry, busy }: Props) {
-  const [open, setOpen] = useState<number | null>(null);
-  const [expanded, setExpanded] = useState(false);
+export function AssistantMessage({ m, onFollowup, onFeedback, onRetry, busy, onSources, sourcesOpen }: Props) {
   const [copied, setCopied] = useState(false);
-  // [n] in the text: open the sources on that section (or close it on a second click).
-  const toggle = (n: number) => { setExpanded(true); setOpen((o) => (o === n ? null : n)); };
+  // [n] in the text: open the sources panel on that section.
+  const toggle = (n: number) => onSources(n);
 
   if (m.status === "error") {
     return (
@@ -50,9 +50,9 @@ export function AssistantMessage({ m, onFollowup, onFeedback, onRetry, busy }: P
         <Markdown source={m.content} cite={cite} />
       </div>
       {m.citations.length > 0 && (
-        <Sources citations={m.citations} expanded={expanded} onExpand={setExpanded} openN={open} onOpen={setOpen} />
+        <SourcesBar citations={m.citations} active={sourcesOpen} onOpen={() => onSources(null)} />
       )}
-      {m.followups.length > 0 && (
+      {m.followups.length > 0 && onFollowup && (
         <div className="followups">
           {m.followups.map((f) => (
             <button key={f} type="button" className="followup" disabled={busy} onClick={() => onFollowup(f)}>
@@ -62,10 +62,12 @@ export function AssistantMessage({ m, onFollowup, onFeedback, onRetry, busy }: P
         </div>
       )}
       <div className="answer-foot">
-        <button className={`icon-btn${m.feedback === 1 ? " on" : ""}`} style={{ border: 0 }} aria-label="Helpful" aria-pressed={m.feedback === 1}
-          onClick={() => onFeedback(m.feedback === 1 ? null : 1)}><Icon name="thumbUp" size={15} /></button>
-        <button className={`icon-btn${m.feedback === -1 ? " on" : ""}`} style={{ border: 0 }} aria-label="Not helpful" aria-pressed={m.feedback === -1}
-          onClick={() => onFeedback(m.feedback === -1 ? null : -1)}><Icon name="thumbDown" size={15} /></button>
+        {onFeedback && <>
+          <button className={`icon-btn${m.feedback === 1 ? " on" : ""}`} style={{ border: 0 }} aria-label="Helpful" aria-pressed={m.feedback === 1}
+            onClick={() => onFeedback(m.feedback === 1 ? null : 1)}><Icon name="thumbUp" size={15} /></button>
+          <button className={`icon-btn${m.feedback === -1 ? " on" : ""}`} style={{ border: 0 }} aria-label="Not helpful" aria-pressed={m.feedback === -1}
+            onClick={() => onFeedback(m.feedback === -1 ? null : -1)}><Icon name="thumbDown" size={15} /></button>
+        </>}
         <button className="icon-btn" style={{ border: 0 }} aria-label="Copy answer"
           onClick={() => { navigator.clipboard?.writeText(m.content).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }).catch(() => undefined); }}>
           <Icon name={copied ? "check" : "copy"} size={15} />

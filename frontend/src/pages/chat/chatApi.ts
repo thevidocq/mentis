@@ -1,5 +1,5 @@
 import { api } from "../../api/client";
-import type { ChatFull, ChatMessage, ChatSummary, Exchange, ScopeOption } from "../../api/types";
+import type { ChatFull, ChatMessage, ChatSummary, Exchange, ScopeOption, SharedChat, ShareState } from "../../api/types";
 
 export const chatApi = {
   scopes: () => api<ScopeOption[]>("/chats/scopes"),
@@ -13,6 +13,10 @@ export const chatApi = {
   remove: (id: string) => api<void>(`/chats/${id}`, { method: "DELETE" }),
   feedback: (chatId: string, msgId: string, value: 1 | -1 | null) =>
     api<ChatMessage>(`/chats/${chatId}/messages/${msgId}/feedback`, { method: "POST", body: { value } }),
+  shareState: (id: string) => api<ShareState>(`/chats/${id}/share`),
+  share: (id: string) => api<ShareState>(`/chats/${id}/share`, { method: "POST" }),
+  unshare: (id: string) => api<void>(`/chats/${id}/share`, { method: "DELETE" }),
+  shared: (token: string) => api<SharedChat>(`/shared/${encodeURIComponent(token)}`),
 };
 
 // Sidebar groups, like other chat tools.

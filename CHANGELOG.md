@@ -6,6 +6,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-11-26
+
+### Added
+- **Share a chat by link**: **Share** in the chat header creates a read-only link for colleagues signed in to Mentis who see the chat's customer (for an "All customers" chat: every customer of the owner). Answers that used a customer the viewer does not see are left out with their question; the owner's ratings are not shown. One link per chat (a new one revokes the old), only its hash is stored, expiry 30 days (`MENTIS_CHAT_SHARE_DAYS`), revoked when the chat is deleted or the owner disabled. Audited: `chat.shared`, `chat.share_revoked`, `chat.share_viewed`, `chat.share_denied`. Migration 0011 (`chat_shares`). Authorization matrix and tests extended.
+- **Sources panel on the right**, like other AI chats: the Sources bar and every [n] open the cited documentation beside the chat instead of under the answer (full screen on a phone; Esc or × closes it).
+
+### Changed
+- Wider side menu (320 px); the brand row and the page/chat header have the same height, so their bottom lines are aligned.
+- Admin sidebar: the context block reads **Tenant** (was Customer), with more space around the label and the tenant switcher.
+
+### Fixed
+- `check.sh` reported "`.env` still contains CHANGE_ME placeholders" because of the comment at the top of `.env.example`: comment lines are now ignored.
+
+## [0.3.3] - 2026-11-26
+
 ### Changed
 - Desktop layout: pages are centered next to the menu (readable width: 1200 px, 860 px for forms and settings, 1560 px for Logs), and the side menu is wider (280 px).
 
