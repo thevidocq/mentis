@@ -6,6 +6,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added
+- **Integration lookups: Standard or Function calling**, per customer (Settings → Integrations for tenant admins; Tenants → LLM for super-admins). *Standard* (default) is the existing mode. *Function calling* lets the model read each result and ask for further lookups (ticket → host → alerts), up to 3 steps and 8 lookups per question, with native tool calling for Anthropic, OpenAI Chat and the Responses API (`services/llm/tools.py`, `services/integrations/tool_loop.py`). Same guards: the chat's integrations only, declared read operations, argument patterns, read-only HTTP client, audit. A model or provider without function calling falls back to Standard without reading twice (`integration.tools_unavailable`). Tenant admins change it only when the customer uses its own LLM chosen by them; `GET/PUT /tenants/{id}/integration-mode` (authorization matrix), `tenant.integration_mode` in the logs, `integration.planned` carries the mode and rounds; exported and imported with the configuration (`integration_mode`).
+### Changed
+- Answer check shown as it really runs: with no checker configured, the chat says **self-checked by <model>** (the model that wrote the answer re-read it) instead of "checked by"; the customer's LLM page (read-only view) names the model that actually checks (*None set: the model that writes the answer checks it (…)*, the customer's LLM, or the platform checker) instead of a generic "Platform default"; AI providers shows "No checker" as a warning recommending a different model for an independent check. Help updated.
+- Help: *Customer settings* explains both modes (strengths, requirements, cost, the accepted risk, who chooses, recommendation); super-admin help updated.
+
 ## [0.4.0] - 2026-11-26
 
 ### Added

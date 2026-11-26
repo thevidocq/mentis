@@ -277,3 +277,4 @@ tr.clickable:hover td { background: var(--raised); }
 .provider-table { table-layout: fixed; }
 .provider-table td.mono { overflow-wrap: anywhere; }
 .provider-table .actions { justify-content: flex-end; flex-wrap: wrap; }
+.notice-warn { border-color: color-mix(in srgb, var(--warn) 55%, var(--border)); background: color-mix(in srgb, var(--warn) 8%, var(--surface-2)); }

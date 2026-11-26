@@ -3,6 +3,7 @@ import { api, errorText } from "../../api/client";
 import type { Tenant } from "../../api/types";
 import { Icon } from "../../components/Icon";
 import { Modal } from "../../components/Modal";
+import { IntegrationModeForm } from "../integrations/IntegrationModeForm";
 import { TenantLlmForm } from "../tenant/TenantLlm";
 import { PageHead } from "../../layouts/AdminShell";
 
@@ -61,7 +62,12 @@ export function Tenants() {
         </div>
       </div>
       {editing && <TenantForm tenant={editing === "new" ? null : editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />}
-      {llmFor && <Modal title={`LLM of ${llmFor.name}`} onClose={() => setLlmFor(null)}><TenantLlmForm tenantId={llmFor.id} /></Modal>}
+      {llmFor && <Modal title={`LLM of ${llmFor.name}`} onClose={() => setLlmFor(null)}>
+        <div className="stack" style={{ gap: 20 }}>
+          <TenantLlmForm tenantId={llmFor.id} />
+          {!llmFor.is_global && <IntegrationModeForm tenantId={llmFor.id} />}
+        </div>
+      </Modal>}
       {deleting && <DeleteTenant tenant={deleting} onClose={() => setDeleting(null)} onDeleted={() => { setDeleting(null); load(); }} />}
     </>
   );

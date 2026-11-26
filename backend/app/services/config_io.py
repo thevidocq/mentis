@@ -93,6 +93,7 @@ def export_config(db: Session, tenant_ids: set | None = None) -> dict:
             "llm_fallback": by_id.get(str(s.get("llm_fallback_id"))) if s.get("llm_fallback_id") else None,
             "checker": by_id.get(str(s.get("checker_provider_id"))) if s.get("checker_provider_id") else None,
             "answer_check": s.get("answer_check", "warn"),
+            "integration_mode": s.get("integration_mode", "standard"),
             "integrations": [{"name": i.name, "plugin": i.plugin, "config": dict(i.config or {}), "enabled": i.enabled}
                              for i in db.scalars(select(Integration).where(Integration.tenant_id == t.id).order_by(Integration.name))],
         })
@@ -157,6 +158,8 @@ def _check(data: dict) -> None:
     for t in data.get("tenants", []):
         if t.get("answer_check", "warn") not in ("warn", "hide", "off"):
             raise ImportError_(f"Tenant {t.get('name')}: answer_check must be warn, hide or off.")
+        if t.get("integration_mode", "standard") not in ("standard", "tools"):
+            raise ImportError_(f"Tenant {t.get('name')}: integration_mode must be standard or tools.")
         items = t.get("integrations", [])
         if not isinstance(items, list) or len(items) > 100:
             raise ImportError_(f"Tenant {t.get('name')}: integrations must be a list.")
@@ -288,7 +291,8 @@ def import_config(db: Session, data: dict, apply: bool) -> list[str]:
                 cs.get(k, DEFAULT_TENANT_SETTINGS[k]) != settings[k] for k in DEFAULT_TENANT_SETTINGS) or any(
                 key in t and names.get(str(cs.get(field))) != t[key]
                 for key, field in (("llm", "llm_provider_id"), ("llm_fallback", "llm_fallback_id"), ("checker", "checker_provider_id"))) or (
-                "answer_check" in t and cs.get("answer_check", "warn") != t["answer_check"])
+                "answer_check" in t and cs.get("answer_check", "warn") != t["answer_check"]) or (
+                "integration_mode" in t and cs.get("integration_mode", "standard") != t["integration_mode"])
             if changed:
                 plan.append(f"Update tenant {cur.name}")
         if apply and cur is not None:
@@ -297,6 +301,8 @@ def import_config(db: Session, data: dict, apply: bool) -> list[str]:
             merged = {**(cur.settings or {}), **{k: v for k, v in settings.items() if k in DEFAULT_TENANT_SETTINGS}}
             if "answer_check" in t or "answer_check" not in merged:
                 merged["answer_check"] = t.get("answer_check", "warn")
+            if "integration_mode" in t:  # older files have none: keep the current mode
+                merged["integration_mode"] = t["integration_mode"]
             for field in ("llm_provider_id", "llm_fallback_id", "checker_provider_id"):
                 if field in settings and (settings[field] is None or isinstance(settings[field], str)):
                     if settings[field] is None:

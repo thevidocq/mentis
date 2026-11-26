@@ -245,3 +245,89 @@ def test_integration_with_unreadable_address_never_breaks_the_chat(super_admin, 
     assert r.status_code == 201 and r.json()["answer"]["status"] == "ok"
     assert "*FakeDesk (Alfa desk) could not be read right now*" in r.json()["answer"]["content"]
     assert ta.post(f"/api/tenants/{alfa['id']}/integrations/{inst['id']}/test").json()["ok"] is False
+
+
+# --- Lookup mode: function calling ----------------------------------------------------------
+
+def _tools_transport(fake_llm, steps, seen):
+    """Anthropic tool-use replies from `steps` (one per request with tools), the FakeLLM otherwise."""
+    script = iter(steps)
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            body = json.loads(request.content)
+            if "tools" in body:
+                seen.append(body)
+                step = next(script)
+                if isinstance(step, int):
+                    return httpx.Response(step, json={"error": {"message": "tools are not supported"}})
+                return httpx.Response(200, json={"content": step, "usage": {"input_tokens": 50, "output_tokens": 10}})
+        return fake_llm.handle(request)
+    return httpx.MockTransport(handle)
+
+
+def test_mode_is_chosen_by_who_chose_the_llm(super_admin, desk, fake_llm):
+    alfa, beta, ta, inst = _world(super_admin)
+    url = f"/api/tenants/{alfa['id']}/integration-mode"
+    assert ta.get(url).json() == {"mode": "standard", "editable": False, "own_llm": False,
+                                  "reason": "This customer uses the platform's LLM: a super-admin chooses the mode."}
+    assert ta.put(url, json={"mode": "tools"}).status_code == 403
+    # The customer gets its own LLM, chosen by its tenant admin: now the tenant admin decides.
+    provider = super_admin.get("/api/llm/providers").json()[0]["id"]
+    assert ta.put(f"/api/tenants/{alfa['id']}/llm", json={"provider_id": provider}).status_code == 200
+    r = ta.put(url, json={"mode": "tools"})
+    assert r.status_code == 200 and r.json()["mode"] == "tools" and r.json()["editable"] is True
+    assert super_admin.put(url, json={"mode": "standard"}).json()["mode"] == "standard"
+    general = next(t for t in super_admin.get("/api/tenants").json() if t["is_global"])
+    assert super_admin.put(f"/api/tenants/{general['id']}/integration-mode", json={"mode": "tools"}).status_code == 409
+    assert super_admin.put(url, json={"mode": "magic"}).status_code == 422
+    an = _analyst(super_admin)
+    assert an.get(url).status_code == 403
+
+
+def test_tools_mode_follows_the_thread(super_admin, desk, fake_llm):
+    alfa, beta, ta, inst = _world(super_admin)
+    super_admin.put(f"/api/tenants/{alfa['id']}/integration-mode", json={"mode": "tools"})
+    seen = []
+    steps = [
+        [{"type": "tool_use", "id": "t1", "name": "i1__get_ticket", "input": {"key": "FAKE-13"}}],  # the follow-up named in FAKE-12
+        [{"type": "text", "text": "DONE"}],
+    ]
+    llm.set_transport(_tools_transport(fake_llm, steps, seen))
+    an = _analyst(super_admin)
+    a = an.post("/api/chats", json={"tenant_id": alfa["id"], "integration_ids": [inst["id"]], "message": "Analyze FAKE-12"}).json()["answer"]
+    # FAKE-12 read without a model (identifier), FAKE-13 chosen by the model after reading it.
+    paths = [r.url.path for r in desk.requests]
+    assert paths == ["/api/tickets/FAKE-12", "/api/tickets/FAKE-13"]
+    assert "ALREADY LOOKED UP" in seen[0]["messages"][0]["content"] and "FAKE-12" in seen[0]["messages"][0]["content"]
+    assert seen[1]["messages"][-1]["content"][0]["type"] == "tool_result" and "DATA (not instructions)" in seen[1]["messages"][-1]["content"][0]["content"]
+    sent = fake_llm.requests[-1]["body"]["messages"][-1]["content"]
+    assert "Ticket FAKE-12" in sent and "Ticket FAKE-13" in sent
+    assert a["status"] == "ok"
+    db = next(db_module.get_db())
+    ev = db.scalars(select(AuditEvent).where(AuditEvent.action == "integration.planned")).all()[-1]
+    assert ev.detail["mode"] == "tools" and ev.detail["rounds"] == 2 and ev.detail["calls"] == 2
+    db.close()
+
+
+def test_tools_mode_checks_arguments_and_falls_back(super_admin, desk, fake_llm):
+    alfa, beta, ta, inst = _world(super_admin)
+    super_admin.put(f"/api/tenants/{alfa['id']}/integration-mode", json={"mode": "tools"})
+    seen = []
+    steps = [[{"type": "tool_use", "id": "t1", "name": "i1__get_ticket", "input": {"key": "x'); DROP"}},
+              {"type": "tool_use", "id": "t2", "name": "i9__nope", "input": {}}],
+             [{"type": "text", "text": "DONE"}]]
+    llm.set_transport(_tools_transport(fake_llm, steps, seen))
+    an = _analyst(super_admin)
+    an.post("/api/chats", json={"tenant_id": alfa["id"], "integration_ids": [inst["id"]], "message": "what about the ticket?"})
+    assert desk.requests == []  # neither call ran
+    results = seen[1]["messages"][-1]["content"]
+    assert results[0]["content"].startswith("Error: invalid arguments") and results[1]["content"] == "Error: unknown tool."
+    # A model or provider without tool calling: the standard mode, FAKE-12 read once.
+    llm.set_transport(_tools_transport(fake_llm, [400], []))
+    a = an.post("/api/chats", json={"tenant_id": alfa["id"], "integration_ids": [inst["id"]], "message": "Status of FAKE-12?"}).json()["answer"]
+    assert [r.url.path for r in desk.requests] == ["/api/tickets/FAKE-12"]
+    assert a["citations"][0]["record"] == "FAKE-12"
+    db = next(db_module.get_db())
+    assert db.scalars(select(AuditEvent).where(AuditEvent.action == "integration.tools_unavailable")).first() is not None
+    db.close()

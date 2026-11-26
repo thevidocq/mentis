@@ -31,7 +31,7 @@ const SECTIONS: { role: Role; title: string; text: string; empty: string }[] = [
   { role: "answers", title: "Answers", text: "The default answers for every customer unless the tenant chooses another one; a tenant can also set a fallback used when its LLM fails.",
     empty: "No model yet: the chat cannot answer until you add one." },
   { role: "checker", title: "Answer check", text: "Reads every answer and flags what is not in the sources (level 2). Customers choose in their LLM page what happens then.",
-    empty: "No checker: answers are checked by the model that wrote them (or by the customer's own LLM)." },
+    empty: "No checker: each answer is checked by the same model that wrote it (or by the customer's own LLM), which tends to confirm what it wrote. Add a different model here for an independent check." },
 ];
 
 function toForm(p: LlmProvider): Form {
@@ -140,7 +140,7 @@ export function AiProviders() {
           return (
             <section key={sec.role} className="provider-section">
               <div className="provider-section-head"><h2>{sec.title}</h2><span className="muted small">{sec.text}</span></div>
-              {rows.length === 0 ? <div className="notice muted">{sec.empty}</div> : (
+              {rows.length === 0 ? <div className={`notice${sec.role === "checker" ? " notice-warn" : " muted"}`} role={sec.role === "checker" ? "status" : undefined}>{sec.empty}</div> : (
                 <div className="table-wrap">
                   <table className="provider-table">
                     <colgroup><col style={{ width: "20%" }} /><col style={{ width: "19%" }} /><col style={{ width: "16%" }} /><col style={{ width: "17%" }} /><col style={{ width: "8%" }} /><col /></colgroup>

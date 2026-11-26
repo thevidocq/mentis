@@ -23,6 +23,8 @@ Use the pencil icon to rename a tenant or change its status.
 
 Use the brain icon to choose the AI model that answers for this customer and its fallback (see **AI providers**). The tenant admin can do the same from **LLM**, unless you untick **Tenant admins can choose the LLM of this customer** in the same window: then they only see the model in use.
 
+The same window chooses the customer's **Integration lookups**: *Standard* (default, every model) or *Function calling* (the model follows the thread from one lookup to the next; needs a model with function calling). Tenant admins change it themselves only when the customer uses its own LLM chosen by them. The two modes are explained in the tenant admin's help, *Customer settings*.
+
 ## Delete
 
 Use the trash icon and type the exact tenant name to confirm. This removes the tenant's users, pending invitations, documents, vectors and every chat about it (also analysts' chats). Integrations will be removed too once available. Logs are kept according to retention.

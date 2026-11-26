@@ -36,7 +36,7 @@ The answer cites the records like documents: their numbers open the **Sources** 
 - The small **Sources** button under the answer says how many documents and sections were used; click it to open the panel. It lists each document (with its version) and the cited sections; click a section to read the exact passage. The customer is shown only when the answer mixes customers or uses the General Knowledge Base. Close it with **×** or **Esc**. On a phone it fills the screen.
 - A customer's own procedure wins over the General Knowledge Base; when they differ, the answer says so.
 - **Not found**: if the documentation in use does not cover the question, Mentis says so and does not guess. Ask your tenant admin to add the missing procedure.
-- Under the answer: up to three **suggested questions** (one click asks them), thumbs up / thumbs down buttons to rate the answer, copy, and the name of the AI model that wrote it.
+- Under the answer: up to three **suggested questions** (one click asks them), thumbs up / thumbs down buttons to rate the answer, copy, and the name of the AI model that wrote it and of the one that checked it. *Self-checked* means no separate model checks the answers: the model that wrote the answer re-read it against its sources, a weaker check.
 
 ## The answer check
 

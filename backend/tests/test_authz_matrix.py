@@ -580,6 +580,25 @@ def _routes(w: World) -> dict[tuple[str, str], list[Probe]]:
         ("POST", "/run", {"json": {"operation": "search", "args": {"query": "x"}}}, None),
     ]:
         add(method, "/tenants/{tenant_id}/integrations/{integration_id}" + suffix, integration_route(w, method, suffix, body, skip))
+    # Lookup mode: super-admins any tenant; tenant admins read it for their customers, change it
+    # only when the customer has its own LLM (none in the world: 403); the GKB has none (409).
+    for method in ("GET", "PUT"):
+        probes = []
+        for a in ACTORS:
+            for k in "ABG":
+                path = f"{A}/tenants/{t[k]}/integration-mode"
+                if a in LOGGED_OUT:
+                    exp = 401
+                elif a in ANALYSTS:
+                    exp = 403
+                elif a == "sa":
+                    exp = 409 if method == "PUT" and k == "G" else ALLOW
+                elif not administers(a, k):
+                    exp = 404
+                else:
+                    exp = ALLOW if method == "GET" else 409 if k == "G" else 403
+                probes.append(Probe(a, method, path, exp, {"json": {"mode": "standard"}} if method == "PUT" else {}))
+        add(method, "/tenants/{tenant_id}/integration-mode", probes)
     chat_integ = []
     for a in ACTORS:
         for k in "ABG":

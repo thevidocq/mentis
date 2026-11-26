@@ -28,6 +28,7 @@ from app.services.logs import log_event
 router = APIRouter(tags=["integrations"])
 super_admin = require_roles(Role.SUPER_ADMIN)
 tenant_admin = require_roles(Role.TENANT_ADMIN)
+admins = require_roles(Role.SUPER_ADMIN, Role.TENANT_ADMIN)
 
 
 # --- Schemas -------------------------------------------------------------------
@@ -75,6 +76,10 @@ class IntegrationOut(BaseModel):
     enabled: bool
     available: bool   # plugin installed and enabled by the super-admin
     updated_at: datetime
+
+
+class ModeIn(BaseModel):
+    mode: str = Field(pattern="^(standard|tools)$")
 
 
 class RunIn(BaseModel):
@@ -279,3 +284,55 @@ def try_lookup(tenant_id: uuid.UUID, integration_id: uuid.UUID, body: RunIn, db:
     return {"ok": True, "detail": f"{len(records)} found",
             "records": [{"kind": r.kind, "id": r.id, "title": r.title, "url": r.url, "fields": r.fields, "text": r.text,
                          "updated": r.updated, "links": r.links} for r in records]}
+
+
+# --- Lookup mode (standard or function calling), per customer ----------------------------
+
+def _mode_tenant(db: Session, user: User, tenant_id: uuid.UUID) -> Tenant:
+    """Super-admins: any tenant; tenant admins: the customers they administer (404 otherwise)."""
+    if user.role == Role.SUPER_ADMIN.value:
+        t = db.get(Tenant, tenant_id)
+        if t is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Customer not found.")
+        return t
+    return _tenant(db, user, tenant_id)
+
+
+def _mode_out(t: Tenant, user: User) -> dict:
+    """The mode, and whether this user may change it: super-admins always; tenant admins only when
+    the customer uses its own LLM chosen by them (function calling depends on the model)."""
+    s = t.settings or {}
+    own_llm = bool(s.get("llm_provider_id"))
+    admin_llm = s.get("admin_can_set_llm", True)
+    editable = not t.is_global and (user.role == Role.SUPER_ADMIN.value or (own_llm and admin_llm))
+    reason = None
+    if t.is_global:
+        reason = "The General Knowledge Base has no integrations."
+    elif not editable:
+        reason = ("This customer uses the platform's LLM: a super-admin chooses the mode." if not own_llm
+                  else "The LLM of this customer is chosen by a super-admin, who also chooses the mode.")
+    from app.services.integrations.live import mode_of
+
+    return {"mode": mode_of(s), "editable": editable, "reason": reason, "own_llm": own_llm}
+
+
+@router.get("/tenants/{tenant_id}/integration-mode")
+def get_mode(tenant_id: uuid.UUID, db: Session = Depends(get_db), user: User = Depends(admins)) -> dict:
+    return _mode_out(_mode_tenant(db, user, tenant_id), user)
+
+
+@router.put("/tenants/{tenant_id}/integration-mode")
+def set_mode(tenant_id: uuid.UUID, body: ModeIn, request: Request, db: Session = Depends(get_db),
+             user: User = Depends(admins)) -> dict:
+    t = _mode_tenant(db, user, tenant_id)
+    current = _mode_out(t, user)
+    if t.is_global:
+        raise HTTPException(status.HTTP_409_CONFLICT, current["reason"])
+    if not current["editable"]:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, current["reason"])
+    if body.mode != current["mode"]:
+        t.settings = {**(t.settings or {}), "integration_mode": body.mode}
+        log_event(db, "tenant.integration_mode", actor=user, tenant_id=t.id, target=t.name, ip=client_ip(request),
+                  detail={"from": current["mode"], "to": body.mode}, commit=False)
+        db.commit()
+    return _mode_out(t, user)
