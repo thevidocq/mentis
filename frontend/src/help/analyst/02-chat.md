@@ -34,6 +34,7 @@ The chat fills the screen. The ☰ button at the top left opens the history; **+
 
 ## When something goes wrong
 
-- **The answer could not be generated**: the AI model did not respond. Click **Retry**. If it keeps failing, tell the super-admin (AI providers).
-- **This customer is no longer available**: the customer was disabled or deleted. Start a new chat.
+- **The answer could not be generated**: the AI model or the document search did not respond. Click **Retry**. If it keeps failing, tell your administrator: the technical cause is in the super-admin's Logs.
+- **This customer is no longer available**: the customer was disabled, deleted or removed from your account. Start a new chat.
+- **This answer is hidden**: the answer used the documentation of a customer that is no longer assigned to you. Your question stays; the answer, its sources and suggestions do not.
 - The `#` **Integrations** button (live data from ticketing, EDR and SIEM) is not available yet.

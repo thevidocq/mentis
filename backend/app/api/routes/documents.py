@@ -42,6 +42,7 @@ from app.services import access, jobs, retrieval, storage, versions
 from app.services.embeddings import EmbeddingError
 from app.services.vector_index import VectorIndexError
 from app.services.logs import log_event
+from app.services.public_errors import public_message
 from app.services.uploads import UploadError, check_upload, safe_filename
 
 _log = logging.getLogger("mentis.documents")
@@ -303,7 +304,7 @@ def page_image(tenant_id: uuid.UUID, version_id: uuid.UUID, index: int, db: Sess
     if page is None or not page.image_key:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No image for this page.")
     return Response(storage.get_storage().get(page.image_key), media_type="image/png",
-                    headers={"Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff"})
+                    headers={"X-Content-Type-Options": "nosniff"})
 
 
 @router.get("/versions/{version_id}/original")
@@ -378,7 +379,9 @@ def test_question(tenant_id: uuid.UUID, version_id: uuid.UUID, body: SearchIn, r
     try:
         found = retrieval.search_version(db, v, body.question)
     except (EmbeddingError, VectorIndexError) as e:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e)) from None
+        log_event(db, "document.test_question_failed", kind="system", level="error", actor=user, tenant_id=tenant.id,
+                  target=v.original_filename, detail={"error": str(e)[:300]})
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, public_message(e)) from None
     log_event(db, "document.test_question", actor=user, tenant_id=tenant.id, target=v.original_filename,
               ip=client_ip(request), detail={"version": v.version})  # the question itself is not logged
     return [PassageOut(score=p.score, page_index=p.page_index, page_label=p.page_label, heading=p.heading, text=p.text) for p in found]

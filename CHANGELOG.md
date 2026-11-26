@@ -6,6 +6,51 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-11-26
+
+Security release: authorization matrix over every API route, penetration test (report in `docs/security/pentest-v0.3.2.md`), infrastructure hardening, frontend review.
+
+### Security
+- API answers (documents, page images, originals, chats, logs, errors) are sent with `Cache-Control: no-store`: the browser no longer keeps tenant data on disk, e.g. page images were cached for an hour on shared PCs.
+- The tenant admin's current and recent customers are stored per user in the browser: on a shared PC the next user no longer starts on (or sees the order of) the previous user's customers; the old shared keys are removed.
+- Back to a Mentis tab, the app re-reads who is signed in: customers granted or removed show at once, and if another user signed in from another tab the page reloads, so no chats or customer ids of the previous user stay on screen or are used.
+- After sign-in, only a path of this app is used as the return address (no `//host` redirect).
+- Network segmentation: PostgreSQL, Qdrant, MinIO, Redis and embeddings moved to an internal network (`mentis_data`) shared only with api and worker; the web container (and any network it joins, e.g. `equalizer_edge`) can no longer reach the data stores.
+- API refuses to start in production with the built-in `dev-only-change-me` secret key or any `CHANGE_ME` placeholder secret (`MENTIS_ENV=development`/`test` allows the dev key); compose stops if a required secret is empty, so Qdrant can no longer start without an API key.
+- Containers hardened: `no-new-privileges` and `cap_drop: ALL` everywhere (data stores keep only the capabilities their entrypoint needs); web, api and worker run non-root on a read-only root filesystem with `/tmp` in tmpfs; memory/PID limits on web, api, worker, redis; healthchecks for web, qdrant, redis.
+- Web image moved from `nginx:1.27-alpine` (end of life, open nginx CVEs incl. resolver use-after-free) to `nginxinc/nginx-unprivileged:1.30-alpine` (runs as uid 101).
+- Image tags pinned: `qdrant/qdrant:v1.20.0` (was `latest`), `redis:7.4` (was `7`); Qdrant telemetry off; MinIO web console disabled.
+- Request bodies limited to 10 MB at the web proxy (100 MB only for document uploads); client body/header timeouts set.
+- Python dependency floors raised to pip-audit-clean versions (cryptography 50, python-multipart 0.0.31, Pillow 13, starlette 1.3.1, urllib3 2.8, h11 0.16, anyio, idna, certifi, protobuf, lxml, pdfminer.six); the change also refreshes the cached dependency layer of the Docker build.
+- `backup.sh` writes every file owner-only (`umask 077`) and can encrypt the backup with gpg (`MENTIS_BACKUP_GPG_RECIPIENT` or `MENTIS_BACKUP_PASSPHRASE_FILE`); `restore.sh` restores `.tar.gpg` backups.
+- `check.sh` reports `.env` permissions, leftover `CHANGE_ME` placeholders, and data services attached to other networks or publishing ports.
+- INSTALL: `chmod 600 .env` right after creating it; note on narrowing `MENTIS_TRUSTED_PROXIES` when users connect from a private LAN without a proxy.
+- Chat history: answers that used a customer no longer assigned to the user (removed from the account) are hidden, with their sources and follow-ups, also in the feedback response, and are no longer sent to the LLM as history of "All my customers" chats; citations now carry the tenant id (older ones are matched by name, unknown = hidden).
+- Service errors shown to analysts and tenant admins (chat answer, "Test a question", failed version) no longer include internal addresses or raw provider/embedding replies; the cause stays in the Logs (`document.failed` gains `cause`, new `document.test_question_failed`).
+- Tests: authorization matrix (`backend/tests/test_authz_matrix.py`) over every API route, nine actors and objects of other tenants (IDOR), with leak checks on every response; a new route without an expectation fails the test.
+- PT-01: sign-in, 2FA, password reset, invitation and setup requests are rate limited per client IP (`MENTIS_AUTH_RATE_PER_MINUTE`, default 30/min, 429 above): no unlimited password spraying, no Argon2 CPU exhaustion from one client.
+- PT-02: "Forgot password?" does the lookup and sends the email after answering, so the response time no longer reveals which emails have an account.
+- PT-03: a stored AI provider API key is only sent to the origin it was saved for: model listing with another address, editing the address without re-entering the key (422) and a configuration import that moves a provider (key dropped) can no longer send it elsewhere.
+- PT-04: PDF pages and pictures are rendered/OCR'd within a 40-million-pixel budget: a tiny PDF declaring a huge page no longer takes gigabytes of worker memory.
+- PT-05: chat answers that fail show a generic message to analysts; provider/embedding error bodies and internal addresses go to the logs only.
+- PT-06: malformed requests (NUL characters, lone surrogates, deeply nested JSON) get 4xx instead of 500, and validation errors no longer echo the submitted values (e.g. a password).
+- PT-08: upload checks: macro parts and content types are matched case-insensitively; control and bidi format characters (U+202E) are removed from file names.
+- PT-09: a passage closing tag is neutralised in any case or spacing, so a document cannot end its own passage in the prompt.
+- A stored AI provider API key is never sent to another address (model listing or a URL change requires the key again).
+- Chat search no longer matches words inside answers hidden after an access change.
+
+### Fixed
+- Chat: an answer arriving after switching to another chat was appended to that chat (and the next question went to the first one); a slow chat load could replace the chat just opened. The composer waits for the chat to load.
+- Answers, extracted text or passages containing a line like `#tag` or `| a` froze the browser tab (endless loop in the Markdown renderer); a table of separator rows only crashed the page.
+- Documents: overlapping polls on slow networks could overwrite newer data and reopen version lists just collapsed; polling now waits for each answer. Opening versions reports errors instead of failing silently; the same file can be chosen again for upload.
+- Logs: a slower answer for older filters no longer replaces the results of the newer search.
+- Chat rename and delete show the server's error in the dialog instead of failing silently; failed clipboard copies no longer raise unhandled errors.
+- Configuration import: a lost session signs out and validation errors read as text (was "[object Object]").
+- Dialogs keep keyboard focus inside and return it to the control that opened them; the customer selector closes on Tab, returns focus on Escape, announces the highlighted customer and keeps it in view.
+- Documents: the "uploaded, processing" notice now goes away when the document is ready or failed.
+- Invitations: General is ticked by default even when the customer list arrives after the form opened.
+- Embedding requests send 16 texts at a time (was 32), using less memory on small servers.
+
 ## [0.3.1] - 2026-11-26
 
 ### Added

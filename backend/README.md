@@ -23,7 +23,7 @@ tests/        pytest suite (SQLite in memory)
 cd backend
 pip install -e ".[dev,worker]"   # plus the tesseract-ocr binary for OCR tests
 pytest
-MENTIS_COOKIE_SECURE=false uvicorn app.main:app --reload   # SQLite file by default
+MENTIS_ENV=development MENTIS_COOKIE_SECURE=false uvicorn app.main:app --reload   # SQLite file, built-in dev secret
 ```
 
 New migration after changing models:

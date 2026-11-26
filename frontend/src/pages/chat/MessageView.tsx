@@ -67,7 +67,7 @@ export function AssistantMessage({ m, onFollowup, onFeedback, onRetry, busy }: P
         <button className={`icon-btn${m.feedback === -1 ? " on" : ""}`} style={{ border: 0 }} aria-label="Not helpful" aria-pressed={m.feedback === -1}
           onClick={() => onFeedback(m.feedback === -1 ? null : -1)}><Icon name="thumbDown" size={15} /></button>
         <button className="icon-btn" style={{ border: 0 }} aria-label="Copy answer"
-          onClick={() => { navigator.clipboard?.writeText(m.content).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); }}>
+          onClick={() => { navigator.clipboard?.writeText(m.content).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }).catch(() => undefined); }}>
           <Icon name={copied ? "check" : "copy"} size={15} />
         </button>
         {m.provider_name && (

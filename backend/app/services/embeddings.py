@@ -20,7 +20,15 @@ _override: Embedder | None = None
 
 
 class EmbeddingError(RuntimeError):
-    pass
+    """`public` marks a message safe to show to analysts and tenant admins (no URL, no service reply)."""
+
+    def __init__(self, message: str, public: bool = False):
+        super().__init__(message)
+        self.public = public
+
+
+class EmbeddingModelChanged(EmbeddingError):
+    """The configured model differs from the one the index was built with (a message for users)."""
 
 
 def set_embedder(embedder: Embedder | None) -> None:

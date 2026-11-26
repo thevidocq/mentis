@@ -19,6 +19,8 @@ It writes `backups/mentis-<date>/` with:
 
 > A backup contains every secret of the installation. Keep it encrypted and off the server, with the same care as the server itself.
 
+The folder and its files are readable only by the user who ran the backup. To encrypt backups with `gpg`, set `MENTIS_BACKUP_GPG_RECIPIENT` (a public key: the server cannot read its own backups) or `MENTIS_BACKUP_PASSPHRASE_FILE` (a file with a passphrase) in `.env`: the backup then becomes `backups/mentis-<date>.tar.gpg`, and `./restore.sh backups/mentis-<date>.tar.gpg` decrypts it before restoring. Keep the passphrase or private key off the server too. Details: `INSTALL.md`, section Backup.
+
 To run it every night at 02:30 and keep 14 days of backups:
 
 ```bash

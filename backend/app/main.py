@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app import __version__
+from app.api import errors
 from app.api.routes import (
     auth,
     chats,
@@ -22,6 +23,7 @@ from app.api.routes import (
     users,
 )
 from app.core.config import get_settings
+from app.core.ratelimit import RateLimiter
 
 # State-changing requests must carry this header. Browsers do not send it cross-site
 # without a CORS preflight, which this API never allows, so it blocks CSRF.
@@ -35,6 +37,8 @@ def create_app() -> FastAPI:
     docs = get_settings().api_docs
     app = FastAPI(title="Mentis API", version=__version__, docs_url="/api/docs" if docs else None,
                   redoc_url=None, openapi_url="/api/openapi.json" if docs else None)
+    app.state.auth_limiter = RateLimiter(get_settings().auth_rate_per_minute)
+    errors.install(app)
 
     @app.middleware("http")
     async def csrf_guard(request: Request, call_next):
@@ -42,6 +46,16 @@ def create_app() -> FastAPI:
             if request.headers.get(CSRF_HEADER) != "1":
                 return JSONResponse(status_code=403, content={"detail": "Missing request header."})
         return await call_next(request)
+
+    @app.middleware("http")
+    async def no_store(request: Request, call_next):
+        # API answers carry tenant data (documents, page images, chats, logs): never let the browser
+        # or a proxy keep them, so a shared PC shows nothing to the next user after sign-out.
+        response = await call_next(request)
+        if request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store"
+            response.headers.setdefault("Pragma", "no-cache")
+        return response
 
     for module in (health, setup, auth, password_reset, tenants, users, invitations, platform, documents, llm_providers, chats, logs, operations):
         app.include_router(module.router, prefix="/api")

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import client_ip, require_roles
 from app.api.schemas import Name, TenantRef
 from app.core.db import get_db
+from app.core.ratelimit import auth_rate_limit
 from app.core.security import password_problem
 from app.models import Invitation, Role, Tenant, User
 from app.services import access
@@ -119,7 +120,7 @@ def revoke_invitation(invitation_id: uuid.UUID, request: Request, db: Session = 
 
 # --- Public endpoints used by the invitee (no session) -------------------------
 
-@router.get("/accept/{token}", response_model=InviteInfo)
+@router.get("/accept/{token}", response_model=InviteInfo, dependencies=[Depends(auth_rate_limit)])
 def invitation_info(token: str, db: Session = Depends(get_db)) -> InviteInfo:
     inv = svc.find_valid(db, token)
     if inv is None:
@@ -127,7 +128,7 @@ def invitation_info(token: str, db: Session = Depends(get_db)) -> InviteInfo:
     return InviteInfo(email=inv.email, full_name=inv.full_name, role=inv.role, tenant_names=[t.name for t in _out(db, inv)["tenants"]], all_tenants=inv.all_tenants)
 
 
-@router.post("/accept/{token}", status_code=status.HTTP_201_CREATED)
+@router.post("/accept/{token}", status_code=status.HTTP_201_CREATED, dependencies=[Depends(auth_rate_limit)])
 def accept_invitation(token: str, body: InviteAccept, request: Request, db: Session = Depends(get_db)) -> dict:
     inv = svc.find_valid(db, token)
     if inv is None:

@@ -14,6 +14,7 @@ interface Form {
   model: string;
   api_key: string;
   api_key_set: boolean;
+  saved_url?: string; // address the stored key belongs to
   reasoning_effort: string;
   max_tokens: string;
   price_in: string;
@@ -24,7 +25,7 @@ interface Form {
 const EMPTY: Form = { name: "", kind: "anthropic", base_url: "", model: "", api_key: "", api_key_set: false, reasoning_effort: "", max_tokens: "", price_in: "", price_out: "", is_default: false };
 
 function toForm(p: LlmProvider): Form {
-  return { id: p.id, name: p.name, kind: p.kind, base_url: p.base_url, model: p.model, api_key: "", api_key_set: p.api_key_set,
+  return { id: p.id, name: p.name, kind: p.kind, base_url: p.base_url, saved_url: p.base_url, model: p.model, api_key: "", api_key_set: p.api_key_set,
     reasoning_effort: p.options.reasoning_effort ?? "", max_tokens: p.options.max_tokens ? String(p.options.max_tokens) : "",
     price_in: p.options.price_in != null ? String(p.options.price_in) : "", price_out: p.options.price_out != null ? String(p.options.price_out) : "", is_default: p.is_default };
 }
@@ -172,6 +173,9 @@ export function AiProviders() {
           <label className="field">API key
             <input className="input" type="password" autoComplete="new-password" value={form.api_key} onChange={(e) => set("api_key", e.target.value)}
               placeholder={form.api_key_set ? "Stored — leave empty to keep" : "Not needed for local Ollama / vLLM"} />
+            {form.api_key_set && form.saved_url && form.base_url.replace(/\/+$/, "") !== form.saved_url && !form.api_key && (
+              <span className="error small">The URL changed: enter the API key again. A stored key is never sent to a new address.</span>
+            )}
           </label>
           <ModelPicker kind={form.kind} baseUrl={form.base_url} apiKey={form.api_key} providerId={form.id} value={form.model} onChange={(v) => set("model", v)} />
           <div className="row" style={{ alignItems: "flex-end" }}>

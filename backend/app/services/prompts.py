@@ -3,6 +3,10 @@
 The SOC vertical is the default; other verticals can replace SYSTEM_RULES later.
 """
 
+import re
+
+_CLOSE_TAG = re.compile(r"<\s*/\s*passage", re.IGNORECASE)
+
 SYSTEM_RULES = """You are Mentis, an assistant for SOC analysts. You answer questions about customers' security operations procedures (escalations, contacts, SLAs, runbooks, playbooks).
 
 STRICT RULES
@@ -39,7 +43,7 @@ def passages_block(passages) -> str:
     for i, p in enumerate(passages, start=1):
         owner = "General" if p.is_general else p.tenant_name
         where = f"{p.document_name} v{p.version}, {p.page_label}" + (f", section \"{p.heading}\"" if p.heading else "")
-        text = p.text.replace("</passage", "</ passage")  # a document cannot close its own passage
+        text = _CLOSE_TAG.sub("</ passage", p.text)  # a document cannot close its own passage (any case or spacing)
         where = where.replace('"', "'")
         lines.append(f'<passage n="{i}" customer="{owner}" source="{where}">\n{text}\n</passage>')
     return "\n".join(lines)

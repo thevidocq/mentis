@@ -14,9 +14,9 @@ def chunk_text_for_embedding(chunk: Chunk) -> str:
 
 def check_model(cfg: dict) -> None:
     if cfg["indexed_model"] and cfg["indexed_model"] != cfg["model"]:
-        raise embeddings.EmbeddingError(
+        raise embeddings.EmbeddingModelChanged(
             f"The embedding model changed ({cfg['indexed_model']} → {cfg['model']}). "
-            "A super-admin must run Reindex in Embedding and Qdrant."
+            "A super-admin must run Reindex in Embedding and Qdrant.", public=True,
         )
 
 

@@ -2,8 +2,28 @@
 # Full backup of Mentis: PostgreSQL, documents (MinIO), vector index (Qdrant) and .env.
 # Run from the installation folder:  ./backup.sh [destination-folder]
 # Default destination: backups/mentis-<date>. Keep backups off the server: they contain .env (secrets).
+#
+# Encryption (optional, with gpg): set one of these in .env or in the environment. The folder is then
+# packed into backups/mentis-<date>.tar.gpg and the unencrypted copy is removed.
+#   MENTIS_BACKUP_GPG_RECIPIENT=<key id or email>   public key: this server cannot decrypt its backups
+#   MENTIS_BACKUP_PASSPHRASE_FILE=/root/.mentis-backup-pass   symmetric AES-256 with a passphrase file
 set -euo pipefail
 cd "$(dirname "$0")"
+# Every file written here is readable by the owner only.
+umask 077
+
+# Setting from the environment, else from .env (quotes and Windows line endings stripped).
+setting() {
+  local v="${!1:-}"
+  if [ -z "$v" ] && [ -f .env ]; then v="$(grep -E "^$1=" .env | tail -1 | cut -d= -f2- | tr -d "\"'\r" || true)"; fi
+  printf '%s' "$v"
+}
+GPG_RECIPIENT="$(setting MENTIS_BACKUP_GPG_RECIPIENT)"
+PASSPHRASE_FILE="$(setting MENTIS_BACKUP_PASSPHRASE_FILE)"
+if [ -n "$GPG_RECIPIENT$PASSPHRASE_FILE" ]; then
+  command -v gpg >/dev/null || { echo "Backup encryption is configured but gpg is not installed (apt install gnupg)."; exit 1; }
+  [ -z "$PASSPHRASE_FILE" ] || [ -r "$PASSPHRASE_FILE" ] || { echo "Cannot read MENTIS_BACKUP_PASSPHRASE_FILE=$PASSPHRASE_FILE"; exit 1; }
+fi
 
 DEST="${1:-backups/mentis-$(date +%Y%m%d-%H%M%S)}"
 mkdir -p "$DEST"
@@ -46,5 +66,17 @@ install -m 600 .env "$DEST/env.backup"
   echo "host=$(hostname)"
 } > "$DEST/manifest.txt"
 (cd "$DEST" && sha256sum postgres.sql.gz minio.tar.gz qdrant.tar.gz env.backup > SHA256SUMS)
+
+if [ -n "$GPG_RECIPIENT$PASSPHRASE_FILE" ]; then
+  echo "- Encrypting"
+  if [ -n "$GPG_RECIPIENT" ]; then
+    gpg_args=(--encrypt --recipient "$GPG_RECIPIENT")
+  else
+    gpg_args=(--symmetric --cipher-algo AES256 --pinentry-mode loopback --passphrase-file "$PASSPHRASE_FILE")
+  fi
+  tar -C "$(dirname "$DEST")" -cf - "$(basename "$DEST")" | gpg --batch --yes "${gpg_args[@]}" -o "$DEST.tar.gpg"
+  rm -rf "$DEST"
+  DEST="$DEST.tar.gpg"
+fi
 
 du -sh "$DEST" | awk '{print "Done: " $2 " (" $1 ")"}'

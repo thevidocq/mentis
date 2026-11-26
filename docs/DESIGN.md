@@ -21,7 +21,7 @@ Mentis is a standalone, multi-tenant web app: an AI assistant that answers SOC a
 | Analyst | Chat + account | Chat (read-only consultation) on its customers, own profile, theme, password |
 
 - Tenant admins and analysts have **assigned customers** (`user_tenants`), or `all_tenants` = every customer including future ones. General is one of the assignable customers, ticked by default. The rules live in `backend/app/services/access.py` and are re-checked on every request and every question.
-- A tenant admin grants only customers it has (all only with `all_tenants`), sees only users whose customers are all its own, and cannot change its own role or customers. Changing a user's customers revokes its sessions.
+- A tenant admin grants only customers it has (all only with `all_tenants`), sees only users whose customers are all its own, and cannot change its own role or customers. Changing a user's customers revokes its sessions. Saved answers that used a customer the user no longer has are hidden (answer, sources, follow-ups) and never sent back to the LLM as history.
 - Tenant admins see AI providers as name + model only and usage without costs.
 - In the tenant area a selector picks the customer the pages show; in the chat `@` lists only the user's customers plus "All my customers".
 - The first super-admin is created on the server (`app.cli create-admin`); the browser setup page is off by default.
@@ -201,7 +201,9 @@ PostgreSQL (users, tenants, chats, audit) | Qdrant (one collection per tenant) |
 
 - **Auth:** local login + TOTP 2FA from day one; SSO/OIDC (Entra ID) configurable later.
 - **Password reset:** "Forgot password?" emails a one-time link (60 minutes; same answer whether the email exists; at most one email every 2 minutes per user). Admins who can manage a user create a 24-hour link from Users, emailed or shown to copy when SMTP is off. The link only sets the password: 2FA is still required, every session is closed, the account is unlocked, and both events are logged. Expired links are purged.
-- **Isolation:** server-side tenant filter on every retrieval and integration call; chat tenant fixed in the database.
+- **Isolation:** server-side tenant filter on every retrieval and integration call; chat tenant fixed in the database. Errors of the LLM, embedding service and Qdrant reach analysts and tenant admins as plain messages; addresses and provider replies stay in the Logs.
+- **Rate limit:** requests usable without a session (sign-in, 2FA, password reset, invitations, setup) are limited per client IP (`MENTIS_AUTH_RATE_PER_MINUTE`, default 30/min).
+- **Secrets stay bound:** a stored provider API key is only sent to the origin it was saved for; changing the address requires the key again.
 - **Read-only:** no writes to customer systems from chat.
 - **Secrets:** encrypted at rest, write-only in the UI.
 - **Prompt injection:** document and integration content is treated as data inside the prompt, never as instructions.
@@ -213,7 +215,7 @@ PostgreSQL (users, tenants, chats, audit) | Qdrant (one collection per tenant) |
 - **Language:** everything in the repo in English: code, comments, docs, commit messages.
 - **Docs:** README, INSTALL.md, admin manual, user manual, CHANGELOG updated on every commit so another session can pick up the work.
 - **Flow:** Claude develops on branches and opens pull requests; the owner reviews and merges, tests in the lab and tags releases (first: 0.1.0).
-- **Deploy:** Docker Compose on the owner's VPS. Only the web container publishes a port (`MENTIS_WEB_PORT`); a reverse proxy with HTTPS goes in front (on the owner's VPS: the Caddy of Equalizer).
+- **Deploy:** Docker Compose on the owner's VPS. Only the web container publishes a port (`MENTIS_WEB_PORT`); a reverse proxy with HTTPS goes in front (on the owner's VPS: the Caddy of Equalizer). Data stores (PostgreSQL, Qdrant, MinIO, Redis, embeddings) sit on an internal network shared only with api and worker; web is not on it. Containers run with no-new-privileges and dropped capabilities; web, api and worker run as non-root on a read-only filesystem. The API refuses to start with missing or placeholder secrets (`MENTIS_ENV=development` allows the built-in development key).
 - **Code:** modular backend services and React components; no monolithic files.
 
 ## Roadmap and open points

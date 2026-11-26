@@ -79,6 +79,7 @@ export function Markdown({ source, breaks = false, cite }: { source: string; bre
         if (!/^\s*\|[\s\-:|]+\|\s*$/.test(lines[i])) rows.push(cells(lines[i]));
         i++;
       }
+      if (!rows.length) continue; // only separator rows: nothing to show
       const [head, ...body] = rows;
       blocks.push(
         <div className="table-wrap" key={i}>
@@ -96,7 +97,9 @@ export function Markdown({ source, breaks = false, cite }: { source: string; bre
       blocks.push(list(items, i, cite));
       continue;
     }
-    const para: string[] = [];
+    // The first line always belongs to the paragraph: "#tag" or "| a" match no block above and
+    // would otherwise never be consumed (endless loop, frozen tab).
+    const para: string[] = [lines[i++]];
     while (i < lines.length && lines[i].trim() && !/^(#|>|```|\s*\||\s*(-|\d+\.)\s)/.test(lines[i])) para.push(lines[i++]);
     blocks.push(
       <p key={i}>

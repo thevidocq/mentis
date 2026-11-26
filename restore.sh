@@ -1,12 +1,35 @@
 #!/usr/bin/env bash
 # Restore a backup made by backup.sh. Replaces ALL current data: database, documents and vector index.
-# Run from the installation folder:  ./restore.sh backups/mentis-<date> [--with-env]
+# Run from the installation folder:  ./restore.sh backups/mentis-<date>[.tar.gpg] [--with-env]
 #   --with-env  also restore .env (needed on a new server: the secret key decrypts stored passwords and keys)
+# An encrypted backup (.tar.gpg) is decrypted next to it first: with MENTIS_BACKUP_PASSPHRASE_FILE
+# (environment or .env) for a passphrase, otherwise gpg asks for the passphrase or private key.
 set -euo pipefail
 cd "$(dirname "$0")"
+umask 077
 
-SRC="${1:?Usage: ./restore.sh <backup-folder> [--with-env]}"
+SRC="${1:?Usage: ./restore.sh <backup-folder or .tar.gpg> [--with-env]}"
 WITH_ENV="${2:-}"
+if [ -f "$SRC" ]; then
+  case "$SRC" in *.gpg) ;; *) echo "Not a backup folder or a .tar.gpg file: $SRC"; exit 1 ;; esac
+  command -v gpg >/dev/null || { echo "gpg is needed to decrypt $SRC (apt install gnupg)."; exit 1; }
+  setting() {
+    local v="${!1:-}"
+    if [ -z "$v" ] && [ -f .env ]; then v="$(grep -E "^$1=" .env | tail -1 | cut -d= -f2- | tr -d "\"'\r" || true)"; fi
+    printf '%s' "$v"
+  }
+  PASSPHRASE_FILE="$(setting MENTIS_BACKUP_PASSPHRASE_FILE)"
+  WORK="$(mktemp -d "$(dirname "$SRC")/.restore-XXXXXX")"
+  trap 'rm -rf "$WORK"' EXIT
+  echo "Decrypting $SRC"
+  if [ -n "$PASSPHRASE_FILE" ]; then
+    gpg --batch --pinentry-mode loopback --passphrase-file "$PASSPHRASE_FILE" --decrypt "$SRC"
+  else
+    gpg --decrypt "$SRC"
+  fi | tar -C "$WORK" -xf -
+  SRC="$(find "$WORK" -mindepth 1 -maxdepth 1 -type d | head -1)"
+  [ -n "$SRC" ] || { echo "The archive does not contain a backup folder."; exit 1; }
+fi
 SRC="$(cd "$SRC" && pwd)"
 for f in postgres.sql.gz minio.tar.gz qdrant.tar.gz env.backup; do
   [ -f "$SRC/$f" ] || { echo "Missing $SRC/$f"; exit 1; }

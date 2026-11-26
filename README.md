@@ -51,3 +51,4 @@ The screenshots use fictional demo data.
 - [INSTALL.md](INSTALL.md): installation with Docker Compose, reverse proxy, upgrade.
 - [docs/MANUALS.md](docs/MANUALS.md): user and admin manuals (the same pages as the in-app Help).
 - [docs/DESIGN.md](docs/DESIGN.md): design, decisions and roadmap.
+- [docs/security/pentest-v0.3.2.md](docs/security/pentest-v0.3.2.md): penetration test report; the authorization matrix test (`backend/tests/test_authz_matrix.py`) checks every API route for every role on each run.

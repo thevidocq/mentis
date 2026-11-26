@@ -2,11 +2,15 @@ from dataclasses import dataclass
 
 
 class LLMError(RuntimeError):
-    """A provider failed. `retryable` means another provider may succeed (network, 5xx, timeout, 429)."""
+    """A provider failed. `retryable` means another provider may succeed (network, 5xx, timeout, 429).
 
-    def __init__(self, message: str, retryable: bool = True):
+    `public` marks a message safe to show to analysts and tenant admins (no URL, no provider reply).
+    """
+
+    def __init__(self, message: str, retryable: bool = True, public: bool = False):
         super().__init__(message)
         self.retryable = retryable
+        self.public = public
 
 
 @dataclass

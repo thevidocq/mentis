@@ -1,11 +1,43 @@
 # Mentis – Docker Compose
 # Open the app at http://127.0.0.1:8080 (MENTIS_WEB_PORT); put a reverse proxy with HTTPS in front for remote access.
 # Internal services (API, PostgreSQL, Qdrant, MinIO, Redis) publish no host port: no conflicts, nothing exposed.
+#
+# Networks:
+#   default  web, api, worker (outbound access for LLM and external embedding providers)
+#   data     internal (no outbound traffic): api, worker and the data services. The web container is not
+#            on it, so whatever reaches web (e.g. a joined reverse-proxy network) cannot reach the stores.
+#   models   embeddings only: lets the model be downloaded on first start.
+#
+# Hardening on every service: no-new-privileges, dropped capabilities; the containers that run
+# our code (web, api, worker) also run as non-root on a read-only root filesystem with tmpfs for /tmp.
+
+x-hardening: &hardening
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
 
 services:
   web:
     build: ./frontend
     restart: unless-stopped
+    <<: *hardening
+    read_only: true
+    tmpfs:
+      # nginx temp files (request bodies being proxied), pid file.
+      - /tmp:size=${MENTIS_WEB_TMP_SIZE:-512m},mode=1777
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          pids: 256
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      default: {}
     depends_on:
       - api
     ports:
@@ -17,23 +49,35 @@ services:
       context: ./backend
       target: api
     restart: unless-stopped
+    <<: *hardening
+    read_only: true
+    tmpfs:
+      # Uploads being received (spooled by the multipart parser).
+      - /tmp:size=${MENTIS_API_TMP_SIZE:-512m},mode=1777
+    deploy:
+      resources:
+        limits:
+          pids: 512
     environment: &backend-env
-      MENTIS_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      MENTIS_SECRET_KEY: ${MENTIS_SECRET_KEY}
+      MENTIS_ENV: production
+      MENTIS_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB}
+      MENTIS_SECRET_KEY: ${MENTIS_SECRET_KEY:?set MENTIS_SECRET_KEY in .env (openssl rand -hex 32)}
       MENTIS_COOKIE_SECURE: ${MENTIS_COOKIE_SECURE:-true}
       # Proxies whose X-Forwarded-For is believed: private networks (the web container, a proxy on this host).
       MENTIS_TRUSTED_PROXIES: ${MENTIS_TRUSTED_PROXIES:-127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
       MENTIS_PUBLIC_URL: ${MENTIS_PUBLIC_URL:-http://localhost}
-      MENTIS_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      MENTIS_REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}@redis:6379/0
       MENTIS_MINIO_ENDPOINT: minio:9000
       MENTIS_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
-      MENTIS_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MENTIS_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
       MENTIS_MAX_UPLOAD_MB: ${MENTIS_MAX_UPLOAD_MB:-50}
       MENTIS_QDRANT_URL: http://qdrant:6333
-      MENTIS_QDRANT_API_KEY: ${QDRANT_API_KEY}
+      # Required: without it Qdrant would accept requests without authentication.
+      MENTIS_QDRANT_API_KEY: ${QDRANT_API_KEY:?set QDRANT_API_KEY in .env}
       MENTIS_EMBEDDING_URL: ${MENTIS_EMBEDDING_URL:-http://embeddings/v1}
       MENTIS_EMBEDDING_MODEL: ${MENTIS_EMBEDDING_MODEL:-BAAI/bge-m3}
       MENTIS_WEB_SETUP: ${MENTIS_WEB_SETUP:-false}
+      MENTIS_AUTH_RATE_PER_MINUTE: ${MENTIS_AUTH_RATE_PER_MINUTE:-30}
       MENTIS_CHAT_PASSAGES: ${MENTIS_CHAT_PASSAGES:-8}
       MENTIS_CHAT_MIN_SCORE: ${MENTIS_CHAT_MIN_SCORE:-0.3}
     # Lets AI providers reach a model server on the host (e.g. Ollama at http://host.docker.internal:11434/v1).
@@ -43,6 +87,7 @@ services:
       default:
         # The web container proxies to this name: a joined network (e.g. equalizer_edge) may have its own "api".
         aliases: [mentis-api]
+      data: {}
     depends_on:
       postgres:
         condition: service_healthy
@@ -60,9 +105,19 @@ services:
       args:
         PARSER_EXTRAS: ${MENTIS_PARSER_EXTRAS:-worker}
     restart: unless-stopped
+    <<: *hardening
+    # Parses untrusted documents: read-only root filesystem, temp files (OCR, page images) in tmpfs.
+    read_only: true
+    tmpfs:
+      - /tmp:size=${MENTIS_WORKER_TMP_SIZE:-1g},mode=1777
     environment:
       <<: *backend-env
       MENTIS_PARSER: ${MENTIS_PARSER:-standard}
+      # Model caches of the optional Docling parser (there is no home folder on a read-only filesystem).
+      HOME: /tmp
+    networks:
+      default: {}
+      data: {}
     depends_on:
       api:
         condition: service_healthy
@@ -74,6 +129,7 @@ services:
         limits:
           cpus: "${MENTIS_WORKER_CPUS:-2}"
           memory: ${MENTIS_WORKER_MEMORY:-3g}
+          pids: 512
 
   # Local embeddings: Hugging Face Text Embeddings Inference (CPU) with bge-m3.
   # The model (~2.3 GB) is downloaded on first start into the embeddings-data volume.
@@ -82,6 +138,11 @@ services:
   embeddings:
     image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.6
     restart: unless-stopped
+    <<: *hardening
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER]
+    networks:
+      data: {}
+      models: {}
     # --auto-truncate: an over-long text is cut to the model limit instead of failing the whole document.
     command: ["--model-id", "${MENTIS_EMBEDDING_MODEL:-BAAI/bge-m3}", "--port", "80", "--auto-truncate"]
     volumes:
@@ -95,6 +156,10 @@ services:
   postgres:
     image: postgres:16
     restart: unless-stopped
+    <<: *hardening
+    # The entrypoint fixes the data folder ownership, then drops to the postgres user.
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID]
+    networks: [data]
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -107,10 +172,20 @@ services:
       retries: 5
 
   qdrant:
-    image: qdrant/qdrant:latest
+    # Pinned: Qdrant upgrades one minor version at a time and cannot open data of a newer version.
+    image: qdrant/qdrant:v1.20.0
     restart: unless-stopped
+    <<: *hardening
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER]
+    networks: [data]
     environment:
-      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY}
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:?set QDRANT_API_KEY in .env}
+      QDRANT__TELEMETRY_DISABLED: "true"
+    healthcheck:
+      test: ["CMD", "bash", "-c", ":> /dev/tcp/127.0.0.1/6333"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     volumes:
       - qdrant-data:/qdrant/storage
 
@@ -119,19 +194,44 @@ services:
     # pgsty/minio is the community fork: same binary, data format and MINIO_* settings.
     image: pgsty/minio:RELEASE.2026-03-25T00-00-00Z
     restart: unless-stopped
-    command: server /data --console-address ":9001"
+    <<: *hardening
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER]
+    networks: [data]
+    # No web console: Mentis only needs the S3 API (port 9000, internal network only).
+    command: server /data
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+      MINIO_BROWSER: "off"
     volumes:
       - minio-data:/data
 
   redis:
-    image: redis:7
+    image: redis:7.4
     restart: unless-stopped
-    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+    <<: *hardening
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID]
+    networks: [data]
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          pids: 256
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}"]
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
     volumes:
       - redis-data:/data
+
+networks:
+  data:
+    internal: true
+  models: {}
 
 volumes:
   embeddings-data:

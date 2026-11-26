@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState, useRef } from "react";
 import { api, errorText } from "../api/client";
 import { AdminUser, Invitation, InvitationCreated, ROLE_LABEL, Role, Tenant, TenantRef } from "../api/types";
 import { useCurrentTenant } from "../auth/currentTenant";
@@ -119,7 +119,7 @@ export function Users() {
           footer={<button className="btn btn-primary" onClick={() => setResetLink(null)}>Done</button>}>
           <p style={{ margin: 0 }}>Email is not configured: send this link to <strong>{resetLink.email}</strong> yourself. It works once, for {resetLink.hours} hours. Their authenticator app is still required to sign in.</p>
           <div className="notice mono">{resetLink.url}</div>
-          <button className="btn" onClick={() => navigator.clipboard?.writeText(resetLink.url)}>Copy link</button>
+          <button className="btn" onClick={() => navigator.clipboard?.writeText(resetLink.url).catch(() => undefined)}>Copy link</button>
         </Modal>
       )}
       {deleting && (
@@ -214,6 +214,14 @@ function InviteForm({ isSuper, canGiveAll, tenants, myTenant, onClose, onDone }:
   // General is on by default, plus the customer the tenant admin is working on.
   const general = tenants.find((t) => t.is_global)?.id;
   const [access, setAccess] = useState<Access>({ tenantIds: [general, myTenant].filter((x): x is string => !!x && x !== undefined).filter((x, i, a) => a.indexOf(x) === i), all: false });
+  // The customer list may arrive after the form opened: General is still ticked by default then.
+  const generalTicked = useRef(!!general);
+  useEffect(() => {
+    if (general && !generalTicked.current) {
+      generalTicked.current = true;
+      setAccess((a) => (a.tenantIds.includes(general) ? a : { ...a, tenantIds: [general, ...a.tenantIds] }));
+    }
+  }, [general]);
   const [result, setResult] = useState<InvitationCreated | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -246,7 +254,7 @@ function InviteForm({ isSuper, canGiveAll, tenants, myTenant, onClose, onDone }:
           <>
             <p style={{ margin: 0 }}>Email is not configured (or sending failed), so share this link with <strong>{result.email}</strong> yourself. It works once and expires in 72 hours.</p>
             <div className="notice mono">{result.invite_url}</div>
-            <button className="btn" onClick={() => navigator.clipboard?.writeText(result.invite_url ?? "")}>Copy link</button>
+            <button className="btn" onClick={() => navigator.clipboard?.writeText(result.invite_url ?? "").catch(() => undefined)}>Copy link</button>
           </>
         )}
       </Modal>
