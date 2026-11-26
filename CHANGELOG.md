@@ -30,6 +30,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 - `backup.sh` writes every file owner-only (`umask 077`) and can encrypt the backup with gpg (`MENTIS_BACKUP_GPG_RECIPIENT` or `MENTIS_BACKUP_PASSPHRASE_FILE`); `restore.sh` restores `.tar.gpg` backups.
 - `check.sh` reports `.env` permissions, leftover `CHANGE_ME` placeholders, and data services attached to other networks or publishing ports.
 - INSTALL: `chmod 600 .env` right after creating it; note on narrowing `MENTIS_TRUSTED_PROXIES` when users connect from a private LAN without a proxy.
+- Chat history: answers that used a customer no longer assigned to the user (removed from the account) are hidden, with their sources and follow-ups, also in the feedback response, and are no longer sent to the LLM as history of "All my customers" chats; citations now carry the tenant id (older ones are matched by name, unknown = hidden).
+- Service errors shown to analysts and tenant admins (chat answer, "Test a question", failed version) no longer include internal addresses or raw provider/embedding replies; the cause stays in the Logs (`document.failed` gains `cause`, new `document.test_question_failed`).
+- Tests: authorization matrix (`backend/tests/test_authz_matrix.py`) over every API route, nine actors and objects of other tenants (IDOR), with leak checks on every response; a new route without an expectation fails the test.
 
 ## [0.3.1] - 2026-11-26
 

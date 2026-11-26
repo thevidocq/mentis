@@ -18,12 +18,13 @@ from app.api.deps import client_ip, require_roles
 from app.core.db import get_db
 from app.models import Chat, ChatMessage, Role, Tenant, User
 from app.models.base import utcnow
-from app.services import access
+from app.services import access, chat_visibility
 from app.services import answer as answering
 from app.services.embeddings import EmbeddingError
 from app.services.llm import LLMError
 from app.services.vector_index import VectorIndexError
 from app.services.logs import log_event
+from app.services.public_errors import public_message
 
 router = APIRouter(prefix="/chats", tags=["chats"])
 # Super-admins manage the platform: no chat, no customer content.
@@ -105,7 +106,12 @@ def _summary(db: Session, chat: Chat) -> ChatSummary:
                        scope_name=_scope_name(db, chat), updated_at=chat.updated_at)
 
 
-def _msg(m: ChatMessage) -> MessageOut:
+def _msg(m: ChatMessage, hidden: bool = False) -> MessageOut:
+    """`hidden`: the answer used a customer no longer assigned to the user (see chat_visibility)."""
+    if hidden:
+        return MessageOut(id=m.id, role=m.role, content=chat_visibility.HIDDEN, status=m.status, citations=[],
+                          followups=[], tenants=[], provider_name=m.provider_name, model=m.model,
+                          latency_ms=m.latency_ms, feedback=m.feedback, created_at=m.created_at)
     return MessageOut(id=m.id, role=m.role, content=m.content, status=m.status, citations=m.citations or [],
                       followups=m.followups or [], tenants=m.tenants or [], provider_name=m.provider_name,
                       model=m.model, latency_ms=m.latency_ms, feedback=m.feedback, created_at=m.created_at)
@@ -144,7 +150,8 @@ def _ask(db: Session, user: User, chat: Chat, question: str, first: bool, reques
     try:
         result = answering.answer(db, chat, question, first)
     except (LLMError, EmbeddingError, VectorIndexError) as e:
-        result = answering.Answer(status="error", content=f"The answer could not be generated: {e}")
+        # The user gets a plain message; the details (addresses, provider replies) go to the logs only.
+        result = answering.Answer(status="error", content=f"The answer could not be generated: {public_message(e)}")
         log_event(db, "chat.error", kind="system", level="error", actor=user, tenant_id=chat.scope_tenant_id,
                   target=str(chat.id), detail={"error": str(e)[:300]}, commit=False)
 
@@ -217,7 +224,9 @@ def get_chat(chat_id: uuid.UUID, db: Session = Depends(get_db), user: User = Dep
     chat = _own_chat(db, user, chat_id)
     msgs = db.scalars(select(ChatMessage).where(ChatMessage.chat_id == chat.id).order_by(ChatMessage.created_at, ChatMessage.role.desc())).all()
     s = _summary(db, chat)
-    return ChatOut(**s.model_dump(), scope_available=_scope_usable(db, chat, user), messages=[_msg(m) for m in msgs])
+    vis = chat_visibility.Visibility(db, user)
+    return ChatOut(**s.model_dump(), scope_available=_scope_usable(db, chat, user),
+                   messages=[_msg(m, vis.hidden(chat, m)) for m in msgs])
 
 
 @router.post("/{chat_id}/messages", response_model=Exchange)
@@ -261,4 +270,4 @@ def feedback(chat_id: uuid.UUID, message_id: uuid.UUID, body: Feedback, db: Sess
     m.feedback = body.value
     db.commit()
     log_event(db, "chat.feedback", actor=user, tenant_id=chat.scope_tenant_id, target=str(m.id), detail={"value": body.value})
-    return _msg(m)
+    return _msg(m, chat_visibility.Visibility(db, user).hidden(chat, m))

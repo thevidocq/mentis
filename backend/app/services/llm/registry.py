@@ -138,5 +138,5 @@ def call_with_failover(primary: dict | None, fallback: dict | None, system: str,
             if not e.retryable:
                 break
     if not errors:
-        raise LLMError("No LLM is configured. A super-admin must add one in AI providers.", retryable=False)
+        raise LLMError("No LLM is configured. A super-admin must add one in AI providers.", retryable=False, public=True)
     raise LLMError("; ".join(errors))

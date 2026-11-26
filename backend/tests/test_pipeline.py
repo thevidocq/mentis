@@ -52,7 +52,7 @@ def test_index_errors_become_readable_answers(super_admin, fake_llm, monkeypatch
     an = _analyst(super_admin)
     r = an.post("/api/chats", json={"tenant_id": t["id"], "message": "brute force escalation"})
     assert r.status_code == 201 and r.json()["answer"]["status"] == "error"
-    assert "vector index" in r.json()["answer"]["content"]
+    assert "document search service is not available" in r.json()["answer"]["content"]
     r = super_admin.post(f"/api/tenants/{t['id']}/documents/versions/{v['id']}/search", json={"question": "brute force"})
     assert r.status_code == 503
 
