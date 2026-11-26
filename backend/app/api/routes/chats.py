@@ -5,6 +5,7 @@ tenant admins only on their own tenant (to check what analysts will get).
 Log events carry metadata only, never questions or answers.
 """
 
+import logging
 import uuid
 from datetime import datetime
 from typing import Annotated
@@ -168,6 +169,9 @@ def _ask(db: Session, user: User, chat: Chat, question: str, first: bool, reques
         result, check, later = check_runner.before_save(
             db, chat, question, first, result, lambda problems: answering.answer(db, chat, question, first, correction=problems))
     except (LLMError, EmbeddingError, VectorIndexError):
+        check, later = {"level2": "unavailable", "issues": [], "checker": None}, False
+    except Exception:  # noqa: BLE001 - a broken check must never lose the answer
+        _log.exception("answer check failed")
         check, later = {"level2": "unavailable", "issues": [], "checker": None}, False
 
     q = ChatMessage(chat_id=chat.id, role="user", content=question)

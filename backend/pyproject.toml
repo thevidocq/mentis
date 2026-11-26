@@ -1,6 +1,6 @@
 [project]
 name = "mentis-backend"
-version = "0.3.6"
+version = "0.3.7"
 description = "Mentis API and core services"
 requires-python = ">=3.12"
 # Minimum versions are security floors (pip-audit clean): raise them when an advisory appears.

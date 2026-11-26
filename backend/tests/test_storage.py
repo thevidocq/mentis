@@ -118,3 +118,25 @@ def test_pending_and_latest_versions_are_kept(super_admin):
     assert super_admin.post(f"/api/tenants/{t['id']}/documents/versions/{v1['id']}/restore").status_code == 200
     super_admin.put("/api/platform/retention", json={"chats_days": 365, "logs_days": 365, "versions_keep": 1})
     assert super_admin.post("/api/platform/retention/purge").json()["versions"] == 0  # v1 in use, v2 the latest
+
+
+def test_sweep_never_takes_an_upload_in_progress_for_a_leftover(super_admin, monkeypatch):
+    """An upload that commits its row and writes its files while the sweep runs keeps them."""
+    t = _tenant(super_admin)
+    store = storage.get_storage()
+    real = store.list_dirs
+    done = []
+
+    def list_dirs(prefix):
+        out = real(prefix)
+        if prefix == "tenants/" and not done:  # the sweep has started listing: an upload lands now
+            done.append(1)
+            _upload(super_admin, t["id"], "Runbook.docx", samples.docx())
+            out = real(prefix)
+        return out
+    monkeypatch.setattr(store, "list_dirs", list_dirs)
+    r = super_admin.post("/api/platform/retention/purge").json()
+    assert done and r["orphan_files"] == 0
+    monkeypatch.undo()
+    run_jobs(super_admin)
+    assert super_admin.get(f"/api/tenants/{t['id']}/documents").json()[0]["active"]

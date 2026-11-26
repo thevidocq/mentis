@@ -6,6 +6,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [0.3.7] - 2026-11-26
+
+### Fixed
+- Storage sweep: files of a document uploaded while the sweep ran could be removed as leftovers; storage is now listed before the database rows are read (READ COMMITTED snapshot per query). Test reproduces the race.
+- Answer check, Hide mode: a failure while rewriting a wrong answer showed it unchecked; it now stays hidden.
+- Answer check: any unexpected error in level 1 or 2 (or around them in the chat route) gives `level2: unavailable` and never breaks the answer.
+- Level 1: year ranges, ISO dates (now dates), number ranges and amounts with thousands separators are no longer phone numbers.
+- `history_note` is empty for hidden answers.
+- Chat polling of a pending check: 90 × 1.5 s, longer than the 120 s after which the server reports it unavailable (was 60 s: "Checking…" could stay forever).
+
 ## [0.3.6] - 2026-11-26
 
 ### Added

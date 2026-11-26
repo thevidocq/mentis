@@ -37,6 +37,17 @@ def _run_level2(cfg: dict | None, result) -> tuple[list[dict], str, object]:
     except llm.LLMError as e:
         _log.warning("answer check (level 2) not available: %s", e)
         return [], "unavailable", None
+    except Exception:  # noqa: BLE001 - a broken check must never break the chat
+        _log.exception("answer check (level 2) failed")
+        return [], "unavailable", None
+
+
+def _run_level1(result) -> list[dict]:
+    try:
+        return answer_check.level1(result.content, result.citations, result.passage_texts)
+    except Exception:  # noqa: BLE001 - same: level 1 is pure code, but never trusted to be bug-free
+        _log.exception("answer check (level 1) failed")
+        return []
 
 
 def _log_check(db: Session, chat: Chat, check: dict, cfg: dict | None, verdict, mode: str, commit: bool = True) -> None:
@@ -57,7 +68,7 @@ def before_save(db: Session, chat: Chat, question: str, first: bool, result, reg
     tenant = _tenant(db, chat)
     mode = answer_check.mode_of(tenant.settings if tenant else None)
     cfg = checker_for(db, tenant, result.used) if mode != "off" else None
-    l1 = answer_check.level1(result.content, result.citations, result.passage_texts)
+    l1 = _run_level1(result)
     if mode == "off":
         check = {"level2": "off", "issues": l1, "checker": None}
         _log_check(db, chat, check, None, None, mode, commit=False)
@@ -70,9 +81,13 @@ def before_save(db: Session, chat: Chat, question: str, first: bool, result, reg
     issues = answer_check.merge(l1, l2)
     if issues:
         problems = "; ".join(i["text"] or "no sources cited" for i in issues)[:600]
-        second = regenerate(problems)
-        if second.status == "ok":
-            l1b = answer_check.level1(second.content, second.citations, second.passage_texts)
+        try:
+            second = regenerate(problems)
+        except Exception:  # noqa: BLE001 - no second answer: the first one stays hidden
+            _log.warning("answer check: rewriting the answer failed", exc_info=True)
+            second = None
+        if second is not None and second.status == "ok":
+            l1b = _run_level1(second)
             l2b, state, verdict = _run_level2(cfg, second)
             issues_b = answer_check.merge(l1b, l2b)
             if not issues_b:

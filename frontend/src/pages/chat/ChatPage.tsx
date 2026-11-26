@@ -12,6 +12,9 @@ import { ShareDialog } from "./ShareDialog";
 import { SourcesPanel } from "./Sources";
 import "./chat.css";
 
+// Polling of a pending answer check: 90 x 1.5 s outlasts the 120 s after which the server reports it unavailable.
+const MAX_TRIES = 90;
+
 export function ChatPage() {
   const { chatId } = useParams();
   const navigate = useNavigate();
@@ -74,8 +77,8 @@ export function ChatPage() {
           if (stop || shown.current !== id) return;
           const checks = new Map(fresh.messages.map((m) => [m.id, m.check]));
           setChat((c) => (c && c.id === id ? { ...c, messages: c.messages.map((m) => (checks.has(m.id) ? { ...m, check: checks.get(m.id) } : m)) } : c));
-          if (fresh.messages.some((m) => m.check?.level2 === "pending") && ++tries < 40) tick();
-        }).catch(() => { if (!stop && ++tries < 40) tick(); });
+          if (fresh.messages.some((m) => m.check?.level2 === "pending") && ++tries < MAX_TRIES) tick();
+        }).catch(() => { if (!stop && ++tries < MAX_TRIES) tick(); });
       }, 1500);
     };
     tick();
