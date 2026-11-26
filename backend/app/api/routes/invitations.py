@@ -138,7 +138,7 @@ def accept_invitation(token: str, body: InviteAccept, request: Request, db: Sess
         raise HTTPException(422, problem)
     if rules.email_in_use(db, inv.email):
         raise HTTPException(status.HTTP_409_CONFLICT, "A user with this email already exists.")
-    if inv.role in rules.CONTENT_ROLES and not inv.all_tenants and not svc.tenants_of(db, inv):
+    if inv.role in rules.CONTENT_ROLES and not inv.all_tenants and inv.tenant_ids and not svc.tenants_of(db, inv):
         raise HTTPException(status.HTTP_409_CONFLICT, "The customers of this invitation no longer exist. Ask for a new invitation.")
     user = svc.accept(db, inv, body.password)
     log_event(db, "user.invitation_accepted", actor=user, ip=client_ip(request))

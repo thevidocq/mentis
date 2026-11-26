@@ -59,9 +59,9 @@ export function MobileBar({ title, onMenu, right }: { title: string; onMenu: () 
   );
 }
 
-export function PageHead({ title, children }: { title: string; children?: ReactNode }) {
+export function PageHead({ title, children, wide = false }: { title: string; children?: ReactNode; wide?: boolean }) {
   return (
-    <header className="page-head">
+    <header className={`page-head${wide ? " wide" : ""}`}>
       <h1>{title}</h1>
       {children}
     </header>

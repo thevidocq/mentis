@@ -36,7 +36,9 @@ function stored(userId: string | undefined): string | null {
 export function CurrentTenantProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const userId = user?.id;
-  const tenants = useMemo(() => user?.tenants ?? [], [user]);
+  // The tenant area lists what the user administers: the General Knowledge Base only for its managers
+  // (everyone reads it in the chat, which uses its own list).
+  const tenants = useMemo(() => (user?.tenants ?? []).filter((t) => !t.is_general || user?.can_manage_general), [user]);
   const [owner, setOwner] = useState(userId);
   const [id, setId] = useState<string | null>(() => stored(userId));
   const [recent, setRecent] = useState<string[]>(() => storedRecent(userId));

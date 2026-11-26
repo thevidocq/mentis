@@ -45,7 +45,8 @@ def activate(db: Session, version: DocumentVersion) -> None:
 
 def on_ready(db: Session, version: DocumentVersion) -> None:
     tenant = db.get(Tenant, version.tenant_id)
-    if tenant and (tenant.settings or {}).get("require_approval"):
+    # The General Knowledge Base reaches every customer's answers: its versions always need approval.
+    if tenant and (tenant.is_global or (tenant.settings or {}).get("require_approval")):
         version.approval = Approval.PENDING
         version.is_active = False
     else:

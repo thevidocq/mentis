@@ -5,7 +5,7 @@ import { useCurrentTenant } from "../../auth/currentTenant";
 import { PageHead } from "../../layouts/AdminShell";
 
 const OPTIONS: { key: keyof Settings; label: string; help: string }[] = [
-  { key: "include_general", label: "Include General documentation", help: "Answers also use the cross-customer knowledge base. Your own procedures win on conflict." },
+  { key: "include_general", label: "Include the General Knowledge Base", help: "Answers also use the general knowledge shared by all customers. Your own procedures win on conflict." },
   { key: "require_approval", label: "Approve new document versions before publishing", help: "A new version stays inactive until an admin approves it in the preview." },
   { key: "suggested_followups", label: "Suggested follow-up questions", help: "Show 2–3 clickable questions under each answer." },
 ];
@@ -36,7 +36,7 @@ export function TenantSettings() {
       <PageHead title="Settings" />
       <div className="page-body" style={{ maxWidth: 760 }}>
         {error && <div className="error">{error}</div>}
-        {current?.is_general && <div className="notice">General is the shared documentation. These settings apply to customers, so there is nothing to set here.</div>}
+        {current?.is_general && <div className="notice">The General Knowledge Base is shared by all customers: its documents always need approval, and the other settings apply to customers.</div>}
         {tenant && !current?.is_general && (
           <div className="card">
             <div className="card-head"><h2>{tenant.name}</h2></div>

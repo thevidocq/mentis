@@ -73,13 +73,13 @@ export function Logs() {
 
   return (
     <>
-      <PageHead title="Logs">
+      <PageHead title="Logs" wide>
         <span className="muted">{total.toLocaleString()} events</span>
         <span className="spacer" />
         <button className="btn" onClick={() => setSyslogOpen(true)}><Icon name="link" />Syslog forwarding</button>
         <a className="btn" href={`/api/logs/export?${query(f)}`} download><Icon name="download" />Export CSV</a>
       </PageHead>
-      <div className="page-body">
+      <div className="page-body wide">
         <div className="row filters">
           <select className="input" aria-label="Period" value={f.period} onChange={(e) => set("period", e.target.value)}>
             {Object.keys(PERIODS).map((p) => <option key={p}>{p}</option>)}

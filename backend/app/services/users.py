@@ -20,8 +20,9 @@ CONTENT_ROLES = {Role.TENANT_ADMIN.value, Role.ANALYST.value}
 
 
 def resolve_tenants(db: Session, role: str, tenant_ids: list[uuid.UUID] | None, all_tenants: bool) -> list[Tenant]:
-    """Validate the tenants for a role. Tenant admins and analysts need at least one tenant
-    (or all_tenants); super-admins have none."""
+    """Validate the tenants for a role. Tenant admins need at least one tenant, all_tenants or the
+    General Knowledge Base (which for them means managing it); analysts may have none (they still
+    read the GKB); super-admins have none."""
     if role not in {r.value for r in Role}:
         raise RuleError(422, "Unknown role.")
     ids = list(dict.fromkeys(tenant_ids or []))
@@ -29,13 +30,17 @@ def resolve_tenants(db: Session, role: str, tenant_ids: list[uuid.UUID] | None, 
         if ids or all_tenants:
             raise RuleError(422, "Super-admins have no customers: they manage the platform.")
         return []
-    if not ids and not all_tenants:
-        raise RuleError(422, "Choose at least one customer, or all customers.")
-    if all_tenants:
-        ids = []  # every tenant anyway; keep no explicit list
+    if not ids and not all_tenants and role == Role.TENANT_ADMIN.value:
+        raise RuleError(422, "Choose at least one customer, all customers, or the General Knowledge Base.")
     tenants = list(db.scalars(select(Tenant).where(Tenant.id.in_(ids)).order_by(Tenant.name))) if ids else []
     if len(tenants) != len(ids):
         raise RuleError(404, "Tenant not found.")
+    if role != Role.TENANT_ADMIN.value:
+        # Everyone reads the General Knowledge Base: for analysts ticking it means nothing.
+        tenants = [t for t in tenants if not t.is_global]
+    gkb = [t for t in tenants if t.is_global]
+    if all_tenants:
+        return gkb  # every customer anyway; only the explicit GKB management is kept
     return tenants
 
 
@@ -62,7 +67,7 @@ def can_manage(db: Session, actor: User, target: User) -> bool:
 
 
 def single_tenant(user: User) -> uuid.UUID | None:
-    """The tenant to record in log events: the user's only customer (General aside), else none."""
+    """The tenant to record in log events: the user's only customer (the GKB aside), else none."""
     ids = {t.id for t in user.tenants if not t.is_global}
     return next(iter(ids)) if len(ids) == 1 and not user.all_tenants else None
 

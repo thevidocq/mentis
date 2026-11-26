@@ -7,7 +7,7 @@ _Last updated: 2026-11-25. Living version: the shared design doc; this file is t
 Mentis is a standalone, multi-tenant web app: an AI assistant that answers SOC analysts from each customer's own documentation, with sources cited on every answer.
 
 - **Problem:** a SOC serving many customers has procedures, escalation matrices and runbooks spread across PDF, Word, Excel and PowerPoint, different for every customer.
-- **Answer:** one RAG index per customer tenant, plus a shared General knowledge base, queried through a chat interface.
+- **Answer:** one RAG index per customer tenant, plus a shared General Knowledge Base, queried through a chat interface.
 - **Principle:** analysts consult only. Mentis never writes to customer systems.
 - **Positioning:** the core is domain-agnostic; SOC is the first vertical pack (labels, integration catalog, system prompt). Anything SOC-specific lives in configuration or plugins, not in the core.
 - **Style:** modular code, Docker Compose first, Kubernetes later, React frontend.
@@ -17,10 +17,10 @@ Mentis is a standalone, multi-tenant web app: an AI assistant that answers SOC a
 | Role | Area | Can do |
 | --- | --- | --- |
 | Super-admin | Platform admin | Onboard, edit and delete tenants; users; configure AI providers, embeddings, retention; decide per tenant whether its admins choose the LLM; view service status and audit log. **No chat, no documents** |
-| Tenant admin | Tenant admin + chat | For each of its customers: upload, version, preview and approve documents (General too, if it has it); choose tenant LLM when allowed; configure integrations; invite and manage tenant admins and analysts within its customers; chat |
+| Tenant admin | Tenant admin + chat | For each of its customers: upload, version, preview and approve documents (the General Knowledge Base too, only with the explicit permission); choose tenant LLM when allowed; configure integrations; invite and manage tenant admins and analysts within its customers; chat |
 | Analyst | Chat + account | Chat (read-only consultation) on its customers, own profile, theme, password |
 
-- Tenant admins and analysts have **assigned customers** (`user_tenants`), or `all_tenants` = every customer including future ones. General is one of the assignable customers, ticked by default. The rules live in `backend/app/services/access.py` and are re-checked on every request and every question.
+- Tenant admins and analysts have **assigned customers** (`user_tenants`), or `all_tenants` = every customer including future ones. Everyone reads the General Knowledge Base; for a tenant admin, ticking it means "can manage the General Knowledge Base" (off by default, not implied by `all_tenants`, granted only by those who have it). The rules live in `backend/app/services/access.py` and are re-checked on every request and every question.
 - A tenant admin grants only customers it has (all only with `all_tenants`), sees only users whose customers are all its own, and cannot change its own role or customers. Changing a user's customers revokes its sessions. Saved answers that used a customer the user no longer has are hidden (answer, sources, follow-ups) and never sent back to the LLM as history.
 - Tenant admins see AI providers as name + model only and usage without costs.
 - In the tenant area a selector picks the customer the pages show; in the chat `@` lists only the user's customers plus "All my customers".
@@ -30,9 +30,9 @@ Mentis is a standalone, multi-tenant web app: an AI assistant that answers SOC a
 ## Tenancy model
 
 - **Customer tenant:** own documents, vector collection, LLM settings, integrations, users.
-- **General tenant:** flag `global`, exactly one. Included automatically in every retrieval. Managed by the tenant admins who have General among their customers (every action logged). Used in answers only for users who have it. Cannot be deleted.
-- **Precedence:** when General and customer documents disagree (escalation, SLA), the customer document wins; the answer may flag the conflict.
-- **Opt-out:** per-tenant setting "Include General documentation", default on.
+- **General Knowledge Base:** flag `global`, exactly one, named "General Knowledge Base". General knowledge only (threat-handling procedures, playbooks, best practices), never customer context. Read by every tenant admin and analyst; managed only by tenant admins with the explicit permission (every action logged); every version needs approval. Cannot be deleted.
+- **Precedence:** when the General Knowledge Base and customer documents disagree (escalation, SLA), the customer document wins; the answer may flag the conflict.
+- **Opt-out:** per-tenant setting "Include the General Knowledge Base", default on; per chat, the analyst can turn it off explicitly (the "Knowledge Base" chip, on by default, with a confirmation; `chats.use_general`).
 - **Isolation:** the tenant filter is applied server-side on every query, never left to the prompt or the frontend.
 - **Deletion:** removes documents and versions, Qdrant collection, chats, LLM and integration settings; its tenant admins lose it, and those left without a customer are deleted. Audit log is kept per retention. Confirmation requires typing the tenant name.
 
@@ -49,7 +49,7 @@ One chat = one customer scope, locked at the first message; integrations are cho
 
 **`@` customer scope**
 
-- `@` opens the user's customer list: "All my customers" / "All customers" (default, when there is more than one), each assigned active customer, then "General" (the shared documentation alone) when assigned.
+- `@` opens the user's customer list: "All my customers" / "All customers" (default, when there is more than one), each assigned active customer, then "General Knowledge Base" (the knowledge base alone).
 - The scope is fixed by the first message. Afterwards `@` shows the list greyed out with "Customer locked for this chat" and a link to start a new chat.
 - A chat started on "All customers" stays on "All customers".
 - The backend uses only the tenant stored on the chat, whatever the frontend sends.
@@ -62,7 +62,7 @@ One chat = one customer scope, locked at the first message; integrations are cho
 
 **Answers**
 
-- Every answer states which customer it refers to (and "+ General" when used).
+- Every answer states which customer it refers to (and "+ General Knowledge Base" when used).
 - Citations: documents as [1], [2] (document, version, page/sheet/slide); live integration data as [A], [B] (source, object, read time).
 - If the documentation does not cover the question: "Not found in <customer> documentation", never an invented procedure. With no passage above the score threshold the LLM is not called at all; the model can also flag not-found itself.
 - Passages go to the LLM as numbered, untrusted data blocks labelled with their customer; citation numbers not among them are dropped.
@@ -132,7 +132,7 @@ LLM is configurable per tenant; the platform default is whichever provider the s
 - Every provider: test connection, failover to the tenant's fallback provider. One platform default; each tenant can choose its own provider and fallback. API keys encrypted at rest. Models are discovered from the provider (`GET /models`) and picked from a list; presets carry no model names.
 - **Embeddings:** local by default (bge-m3, multilingual). Other providers configurable (Ollama, OpenAI-compatible endpoints).
 - **Vector DB:** Qdrant only, one collection per tenant.
-- **Retrieval:** customer chunks + General chunks (if enabled), active versions only, score threshold; customer wins on conflict.
+- **Retrieval:** customer chunks + General Knowledge Base chunks (unless turned off for the customer or the chat), active versions only, score threshold; customer wins on conflict.
 - **System prompt:** anti-hallucination rules first; answer only from retrieved sources and integration data; cite everything; per-vertical prompt (SOC default), replaceable. All prompts in English.
 
 ## Integrations
@@ -223,7 +223,7 @@ PostgreSQL (users, tenants, chats, audit) | Qdrant (one collection per tenant) |
 **0.1.0 (MVP)**
 
 1. First-run setup (creates the super-admin), auth with 2FA, roles, account page, themes.
-2. Tenants (incl. General), onboarding by email invite (SMTP settings), deletion.
+2. Tenants (incl. the General Knowledge Base), onboarding by email invite (SMTP settings), deletion.
 3. Ingestion pipeline with versioning, preview and approval.
 4. Chat with `@` lock, citations, history, titles, suggested follow-ups, answer feedback (thumbs up/down).
 5. AI providers (Anthropic default, OpenAI Chat/Responses, Ollama), local embeddings, LLM usage per tenant (tokens, estimated cost).

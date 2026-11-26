@@ -63,6 +63,8 @@ def list_tenants(db: Session = Depends(get_db), user: User = Depends(current_use
     """Super-admins see every tenant (to manage them, not their content); others only theirs."""
     if user.role == Role.SUPER_ADMIN.value:
         rows = list(db.scalars(select(Tenant).order_by(Tenant.is_global.desc(), Tenant.name)))
+    elif user.role == Role.TENANT_ADMIN.value:
+        rows = access.managed(db, user)  # what it administers and can hand out
     else:
         rows = access.tenants(db, user)
     return [_out(db, t) for t in rows]
@@ -114,7 +116,7 @@ def update_tenant(
             if body.status not in svc.STATUSES:
                 raise HTTPException(422, f"Status must be one of: {', '.join(sorted(svc.STATUSES))}.")
             if tenant.is_global and body.status != "active":
-                raise HTTPException(status.HTTP_400_BAD_REQUEST, "The General tenant is always active.")
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, "The General Knowledge Base is always active.")
             changes["status"] = [tenant.status, body.status]
             tenant.status = body.status
 
@@ -139,7 +141,7 @@ def delete_tenant(
 ) -> None:
     tenant = _get(db, tenant_id)
     if tenant.is_global:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "The General tenant cannot be deleted.")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "The General Knowledge Base cannot be deleted.")
     if body.confirm_name.strip() != tenant.name:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Type the exact tenant name to confirm.")
     name, tid = tenant.name, tenant.id

@@ -43,9 +43,10 @@ EMAILS = {
     "ta_all": "ta-every@example.com", "an_a": "an-alfa@example.com", "an_b": "an-beta@example.com",
     "an_g": "an-gen@example.com", "disabled": "off-alfa@example.com",
 }
-# Customers ticked per actor ("A", "B", "G"); ta_all has all_tenants.
+# Tenants ticked per actor ("A", "B", "G"); ta_all has all_tenants plus the General Knowledge Base
+# ticked (it manages it). an_g is an analyst without customers: like everyone, it reads the GKB.
 TICKED = {"ta_a": {"A"}, "ta_b": {"B"}, "ta_all": {"A", "B", "G"}, "an_a": {"A"}, "an_b": {"B"},
-          "an_g": {"G"}, "disabled": {"A"}}
+          "an_g": set(), "disabled": {"A"}}
 SECRET = {"A": "ALFASECRETXYZ", "B": "BETASECRETXYZ", "G": "GENERALSECRETXYZ"}
 DOC_NAME = {"A": "AlfaRunbook.docx", "B": "BetaRunbook.docx", "G": "GeneralRunbook.docx"}
 CHAT_OWNERS = ["an_a", "an_b", "an_g", "ta_a", "ta_all"]
@@ -138,7 +139,8 @@ def _build(c: TestClient, fake: FakeLLM) -> World:
     clients = {"sa": sa, "anon": new_client(c.app)}
     for actor in ["ta_a", "ta_b", "ta_all", "an_a", "an_b", "an_g", "disabled"]:
         role = "tenant_admin" if actor in TAS else "analyst"
-        kw = {"all_tenants": True} if actor == "ta_all" else {"tenant_ids": [t[k] for k in sorted(TICKED[actor])], "all_tenants": False}
+        kw = ({"all_tenants": True, "tenant_ids": [t["G"]]} if actor == "ta_all"
+              else {"tenant_ids": [t[k] for k in sorted(TICKED[actor])], "all_tenants": False})
         _invite_and_accept(sa, EMAILS[actor], role, name=f"User {actor}", **kw)
         cl = new_client(c.app)
         login(cl, EMAILS[actor])
@@ -154,6 +156,8 @@ def _build(c: TestClient, fake: FakeLLM) -> World:
     for k in "ABG":
         ver[k] = _upload(clients[uploader[k]], t[k], DOC_NAME[k], _docx(f"{SECRET[k]} escalate brute force attacks to the on-call team"))["id"]
     run_jobs(c)
+    # The General Knowledge Base always needs approval; ta_all manages it.
+    assert clients["ta_all"].post(f"/api/tenants/{t['G']}/documents/versions/{ver['G']}/approve").status_code == 200
     doc, page = {}, {}
     for k in "ABG":
         docs = clients[uploader[k]].get(f"/api/tenants/{t[k]}/documents").json()
@@ -183,7 +187,9 @@ def _build(c: TestClient, fake: FakeLLM) -> World:
     inv, inv_email = {}, {}
     for k in "ABG":
         inv_email[k] = f"pending-{k.lower()}@example.com"
-        r = sa.post("/api/invitations", json={"email": inv_email[k], "full_name": "Pending", "role": "analyst", "tenant_ids": [t[k]]})
+        # For G: a tenant admin who will manage the General Knowledge Base.
+        r = sa.post("/api/invitations", json={"email": inv_email[k], "full_name": "Pending",
+                                              "role": "tenant_admin" if k == "G" else "analyst", "tenant_ids": [t[k]]})
         inv[k] = r.json()["id"]
 
     # Disable last: its client keeps a cookie whose session no longer exists.
@@ -195,11 +201,13 @@ def _build(c: TestClient, fake: FakeLLM) -> World:
 # --- Who may see what ------------------------------------------------------------
 
 def sees(actor: str) -> set[str]:
-    return TICKED.get(actor, set()) if actor in CONTENT else set()
+    """Read access: the actor's customers plus the General Knowledge Base (everyone reads it)."""
+    return (TICKED.get(actor, set()) | {"G"}) if actor in CONTENT else set()
 
 
 def administers(actor: str, k: str) -> bool:
-    return actor in TAS and k in sees(actor)
+    """Customers it has; the GKB only when ticked explicitly."""
+    return actor in TAS and k in TICKED[actor]
 
 
 def manages(actor: str, target: str) -> bool:
@@ -210,11 +218,11 @@ def manages(actor: str, target: str) -> bool:
         return False
     if target == "ta_all":
         return actor == "ta_all"
-    return TICKED[target] <= sees(actor)
+    return TICKED[target] <= TICKED[actor]
 
 
 def manages_invitation(actor: str, k: str) -> bool:
-    return actor == "sa" or (actor in TAS and k in sees(actor))
+    return actor == "sa" or (actor in TAS and k in TICKED[actor])
 
 
 def denial(actor: str, object_level: int = 404) -> int:
@@ -311,7 +319,8 @@ def tenant_settings_route(w: World, method: str, tmpl: str, kw: dict, *, ta_deni
             elif a == "sa":
                 exp = sa_status
             elif a in TAS:
-                exp = ALLOW if ta_allowed and administers(a, k) else ta_denied
+                # Reading a tenant (analyst_reads): every tenant the admin sees, the GKB included.
+                exp = ALLOW if ta_allowed and (administers(a, k) or (analyst_reads and k in sees(a))) else ta_denied
             else:
                 exp = ALLOW if analyst_reads and k in sees(a) else analyst_denied
             out.append(Probe(a, method, path, exp, kw))
@@ -617,4 +626,6 @@ def test_world_sanity(world):
     chat = ta_all.get(f"/api/chats/{world.chat['ta_all']}").json()
     assert chat["messages"][1]["citations"], chat
     an_a = world.clients["an_a"].get(f"/api/chats/{world.chat['an_a']}").json()
-    assert SECRET["A"] in an_a["messages"][1]["content"] and SECRET["B"] not in str(an_a)
+    # Alfa's own document or the General Knowledge Base (everyone reads it), never Beta.
+    content = an_a["messages"][1]["content"]
+    assert (SECRET["A"] in content or SECRET["G"] in content) and SECRET["B"] not in str(an_a)

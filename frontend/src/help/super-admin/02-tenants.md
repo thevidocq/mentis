@@ -1,6 +1,6 @@
 # Tenants
 
-Each customer is a tenant with its own documentation, settings and admins. One special tenant, **General**, holds documentation that applies to every customer.
+Each customer is a tenant with its own documentation, settings and admins. One special tenant, the **General Knowledge Base**, holds general knowledge that applies to every customer.
 
 ## Onboard a customer
 
@@ -27,7 +27,7 @@ Use the brain icon to choose the AI model that answers for this customer and its
 
 Use the trash icon and type the exact tenant name to confirm. This removes the tenant's users, pending invitations, documents, vectors and every chat about it (also analysts' chats). Integrations will be removed too once available. Logs are kept according to retention.
 
-## The General tenant
+## The General Knowledge Base
 
-General is created at setup. It cannot be deleted or disabled and has no tenant admins: super-admins manage its documentation. Every customer's answers include it unless that customer turns it off in its settings; on conflicts, the customer's own procedure wins.
+The **General Knowledge Base** is created at setup and cannot be deleted or disabled. It holds **general knowledge only**: how to handle a type of threat, playbooks, best practices — never customer names, contacts or systems, which belong to the customer's own documents. Every tenant admin and analyst reads it in the chat; only tenant admins with **Can manage the General Knowledge Base** upload and approve its documents, and every new version needs approval. Every customer's answers include it unless the customer turns it off in its settings, or the analyst turns it off for one chat; on conflicts, the customer's own procedure wins.
 

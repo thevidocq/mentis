@@ -10,11 +10,17 @@ interface Props {
   disabledReason?: string;
   onScope: (s: ScopeOption) => void;
   onSend: (text: string) => void;
+  useGeneral: boolean;      // the General Knowledge Base is searched with the customer
+  onUseGeneral: (v: boolean) => void;
 }
 
 const AT = /(^|\s)@([^\s@]*)$/;
 
-export function Composer({ scopes, scope, locked, disabled, disabledReason, onScope, onSend }: Props) {
+export function Composer({ scopes, scope, locked, disabled, disabledReason, onScope, onSend, useGeneral, onUseGeneral }: Props) {
+  const [confirmOff, setConfirmOff] = useState(false);
+  const gkbScope = scopes.find((s) => s.is_general);
+  // Asking the knowledge base alone: no separate switch for it.
+  const showGeneral = !!gkbScope && !!scope && scope.id !== gkbScope.id;
   const [text, setText] = useState("");
   const [picker, setPicker] = useState<{ filter: string } | null>(null);
   const [hi, setHi] = useState(0);
@@ -93,6 +99,25 @@ export function Composer({ scopes, scope, locked, disabled, disabledReason, onSc
             onClick={() => { if (!locked) { setPicker(picker ? null : { filter: "" }); ta.current?.focus(); } }}>
             <Icon name={locked ? "lock" : "at"} size={14} />{scope?.name ?? "Choose customer"}
           </button>
+          {showGeneral && (
+            <span className="gkb-switch">
+              <button type="button" className={`scope-chip${useGeneral ? " on" : " off"}`} aria-pressed={useGeneral}
+                aria-label={useGeneral ? "General Knowledge Base: on" : "General Knowledge Base: off"}
+                title={useGeneral ? "Answers also use the General Knowledge Base" : "The General Knowledge Base is not used in this chat"}
+                onClick={() => (useGeneral ? setConfirmOff(!confirmOff) : onUseGeneral(true))}>
+                <Icon name={useGeneral ? "check" : "x"} size={14} />Knowledge Base
+              </button>
+              {confirmOff && (
+                <span className="gkb-confirm" role="dialog" aria-label="Turn off the General Knowledge Base">
+                  <span className="small">Answers will use only the customer's documents, without the General Knowledge Base.</span>
+                  <span className="row" style={{ gap: 6 }}>
+                    <button type="button" className="btn btn-sm" onClick={() => setConfirmOff(false)}>Keep it</button>
+                    <button type="button" className="btn btn-sm btn-danger" onClick={() => { setConfirmOff(false); onUseGeneral(false); }}>Turn off for this chat</button>
+                  </span>
+                </span>
+              )}
+            </span>
+          )}
           <button type="button" className="scope-chip" disabled title="Integrations (ticketing, EDR, SIEM): coming in a later release">
             <Icon name="hash" size={14} />Integrations<span className="muted small">soon</span>
           </button>

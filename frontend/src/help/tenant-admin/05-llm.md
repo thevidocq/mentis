@@ -17,4 +17,4 @@ Below the choice, **Usage, last 30 days** shows the questions about your custome
 
 **Chat** in the left menu opens the chat on your own customers only. Use it to check that a new document version answers as expected. Your chats are private.
 
-The **Suggested follow-up questions** and **Include General documentation** options in **Settings** change the answers immediately.
+The **Suggested follow-up questions** and **Include the General Knowledge Base** options in **Settings** change the answers immediately.

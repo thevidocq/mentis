@@ -4,7 +4,7 @@
 
 1. Open **Users** and select **Invite user**.
 2. Enter name and email and choose the role: **Analyst** (chat only) or **Tenant admin** (manages the customers).
-3. Tick the customers: only yours are listed. **General** is ticked by default; untick it if the user must not see the shared documentation. If you have **All customers**, you can also tick **All customers, including future ones**.
+3. Tick the customers: only yours are listed. Everyone reads the General Knowledge Base, nothing to tick. If you manage it, you can also tick **Can manage the General Knowledge Base** for another SOC admin.
 4. Select **Send invitation**.
 
 If email is not configured, Mentis shows the link to send yourself. Links work once and expire after 72 hours.

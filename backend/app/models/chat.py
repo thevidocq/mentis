@@ -17,6 +17,8 @@ class Chat(IdMixin, CreatedMixin, Base):
     scope_tenant_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
     title: Mapped[str] = mapped_column(String(120), default="New chat", nullable=False)
     title_locked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)  # renamed by the user
+    # The General Knowledge Base is searched with the customer unless the user turned it off.
+    use_general: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
 
 

@@ -13,9 +13,10 @@ interface Props {
   tenantId: string;
   title: string;
   previewBase: string; // e.g. "/tenant/documents/preview"
+  general?: boolean;   // the General Knowledge Base
 }
 
-export function DocumentsPage({ tenantId, title, previewBase }: Props) {
+export function DocumentsPage({ tenantId, title, previewBase, general = false }: Props) {
   const base = `/tenants/${tenantId}/documents`;
   const [docs, setDocs] = useState<DocSummary[]>([]);
   const [open, setOpen] = useState<Record<string, DocVersion[]>>({});
@@ -135,6 +136,14 @@ export function DocumentsPage({ tenantId, title, previewBase }: Props) {
         }} />
       </PageHead>
       <div className="page-body">
+        {general && (
+          <div className="notice gkb-banner" role="note">
+            <strong>General knowledge only.</strong> These documents are used in the answers of every customer: put here
+            playbooks, threat-handling procedures and best practices that apply to anyone. Never put customer names, contacts,
+            systems or other customer context here: that goes in the customer's own documents, which win when the two disagree.
+            Every new version needs approval before it is used.
+          </div>
+        )}
         <div
           className="dropzone"
           data-active={dragging}

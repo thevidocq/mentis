@@ -28,7 +28,7 @@ The screenshots use fictional demo data.
 | ![All customers](docs/screenshots/chat-all-customers.png) All customers: one answer per customer | ![Not found](docs/screenshots/chat-not-found.png) Not covered by the documents: no guessing |
 | ![Light theme](docs/screenshots/chat-light-theme.png) Follow-ups in the Light theme | ![Help](docs/screenshots/help.png) In-app help for each profile |
 | ![Tenants](docs/screenshots/tenants.png) Tenants | ![Users](docs/screenshots/users.png) Users and invitations |
-| ![General documentation](docs/screenshots/general-documentation.png) General documentation, managed by a tenant admin | ![OCR preview](docs/screenshots/document-preview-ocr.png) Preview: original next to what Mentis read |
+| ![General documentation](docs/screenshots/general-documentation.png) General Knowledge Base, managed by SOC admins | ![OCR preview](docs/screenshots/document-preview-ocr.png) Preview: original next to what Mentis read |
 | ![Slide preview](docs/screenshots/document-preview-slide.png) Slides: tables and text in images | ![AI providers](docs/screenshots/ai-providers.png) AI providers |
 | ![Add provider](docs/screenshots/ai-provider-add.png) Add a provider from a preset | ![Tenant LLM](docs/screenshots/tenant-llm.png) LLM and fallback for each customer |
 | ![LLM usage](docs/screenshots/llm-usage.png) LLM usage and cost per customer | ![Service status](docs/screenshots/service-status.png) Service status |
@@ -44,7 +44,7 @@ The screenshots use fictional demo data.
 |---|---|---|
 | ![Chat](docs/screenshots/mobile-chat.png) | ![History](docs/screenshots/mobile-history.png) | ![Menu](docs/screenshots/mobile-menu.png) |
 | ![Users](docs/screenshots/mobile-users.png) | ![Invite with several customers](docs/screenshots/mobile-invite.png) | ![Customer selector with search](docs/screenshots/mobile-customer-selector.png) |
-| ![Account](docs/screenshots/mobile-account.png) | | |
+| ![Account](docs/screenshots/mobile-account.png) | ![Knowledge Base switch](docs/screenshots/mobile-knowledge-base.png) | |
 
 ## Documentation
 

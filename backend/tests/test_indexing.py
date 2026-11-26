@@ -8,7 +8,7 @@ from qdrant_client import models
 from app.core import db as db_module
 from app.services import embeddings, retrieval, vector_index
 from tests import fake_embeddings
-from tests.conftest import PASSWORD, login, new_client, run_jobs
+from tests.conftest import PASSWORD, approve_general, login, new_client, run_jobs
 
 
 def _db():
@@ -113,10 +113,10 @@ def test_customer_and_general_search_with_isolation(super_admin):
     _upload(super_admin, alfa["id"], "A.docx", _docx("Alfa escalation goes to the Alfa duty manager"))
     _upload(super_admin, beta["id"], "B.docx", _docx("Beta escalation goes to the Beta duty manager"))
     _upload(super_admin, g["id"], "G.docx", _docx("General escalation playbook for every duty manager"))
-    run_jobs(super_admin)
+    approve_general(super_admin)
     hits = _ask([alfa["id"], g["id"]], "escalation duty manager")
     names = {h.tenant_name for h in hits}
-    assert names == {"Alfa", "General"}
+    assert names == {"Alfa", "General Knowledge Base"}
     assert any(h.is_general for h in hits)
     assert all("Beta" not in h.text for h in hits)
 

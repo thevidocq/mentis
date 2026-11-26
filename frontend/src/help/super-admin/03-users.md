@@ -8,7 +8,8 @@
     - **Tenant admin**: manages the ticked customers (documents, settings, users) and chats on them
     - **Super-admin**: platform management only (no chat, no documents)
 3. For analysts and tenant admins, choose the customers:
-    - tick one or more customers. **General** (the shared documentation) is ticked by default: untick it if the user must not see it. A tenant admin with General manages the General documents.
+    - tick one or more customers. Everyone reads the **General Knowledge Base** in the chat: nothing to tick for that.
+    - for a tenant admin of the SOC, tick **Can manage the General Knowledge Base** to let it upload and approve the general knowledge (off by default).
     - or tick **All customers, including future ones**: the user sees every customer, also those created later.
 4. Select **Send invitation**.
 

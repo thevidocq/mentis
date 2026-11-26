@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useState, useRef } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import { api, errorText } from "../api/client";
 import { AdminUser, Invitation, InvitationCreated, ROLE_LABEL, Role, Tenant, TenantRef } from "../api/types";
 import { useCurrentTenant } from "../auth/currentTenant";
@@ -30,9 +30,12 @@ export function Users() {
 
   const { current } = useCurrentTenant();
   const canGiveAll = isSuper || !!me?.all_tenants;
-  const scope = (role: Role, list: TenantRef[], all: boolean) =>
-    role === "super_admin" ? "Platform" : all ? "All customers (also future)"
-      : [...list].sort((a, b) => Number(!!b.is_general) - Number(!!a.is_general)).map((t) => t.name).join(", ") || "—";
+  const scope = (role: Role, list: TenantRef[], all: boolean) => {
+    if (role === "super_admin") return "Platform";
+    const customers = all ? "All customers (also future)" : list.filter((t) => !t.is_general).map((t) => t.name).join(", ");
+    const kb = role === "tenant_admin" && list.some((t) => t.is_general) ? "manages the Knowledge Base" : "";
+    return [customers, kb].filter(Boolean).join(" · ") || (role === "analyst" ? "Knowledge Base only" : "—");
+  };
 
   async function resetTwoFactor(u: AdminUser) {
     try {
@@ -112,7 +115,7 @@ export function Users() {
         )}
       </div>
 
-      {inviting && <InviteForm isSuper={isSuper} canGiveAll={canGiveAll} tenants={tenants} myTenant={current?.id ?? null} onClose={() => setInviting(false)} onDone={() => load()} />}
+      {inviting && <InviteForm isSuper={isSuper} canGiveAll={canGiveAll} tenants={tenants} myTenant={current && !current.is_general ? current.id : null} onClose={() => setInviting(false)} onDone={() => load()} />}
       {editing && <EditUser user={editing} isSuper={isSuper} canGiveAll={canGiveAll} isSelf={editing.id === me?.id} tenants={tenants} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />}
       {resetLink && (
         <Modal title="Password reset link" onClose={() => setResetLink(null)}
@@ -138,48 +141,70 @@ export function Users() {
 
 interface Access { tenantIds: string[]; all: boolean }
 
-/** Customers of a tenant admin or an analyst: ticks, General first and on by default, or all customers. */
-function AccessPicker({ tenants, value, onChange, canGiveAll }: {
-  tenants: Tenant[]; value: Access; onChange: (a: Access) => void; canGiveAll: boolean;
+/** Tenant ids to send: the customers (none with "all customers"), plus the General Knowledge Base
+ *  only for a tenant admin who must manage it. */
+function accessIds(access: Access, role: Role, tenants: Tenant[]): string[] {
+  const gkb = tenants.find((t) => t.is_global)?.id;
+  const customers = access.all ? [] : access.tenantIds.filter((id) => id !== gkb);
+  return role === "tenant_admin" && gkb && access.tenantIds.includes(gkb) ? [...customers, gkb] : customers;
+}
+
+/** Customers of a tenant admin or an analyst (ticks or all customers), and for a tenant admin the
+ *  permission to manage the General Knowledge Base. Everyone reads the knowledge base anyway. */
+function AccessPicker({ tenants, value, onChange, canGiveAll, role }: {
+  tenants: Tenant[]; value: Access; onChange: (a: Access) => void; canGiveAll: boolean; role: Role;
 }) {
   const [q, setQ] = useState("");
   const [onlySelected, setOnlySelected] = useState(false);
-  const many = tenants.length > 8;
+  const gkb = tenants.find((t) => t.is_global);
+  const customers = tenants.filter((t) => !t.is_global);
+  const many = customers.length > 8;
   const needle = q.trim().toLowerCase();
-  const ordered = [...tenants]
-    .sort((a, b) => Number(b.is_global) - Number(a.is_global) || a.name.localeCompare(b.name))
+  const ordered = [...customers]
+    .sort((a, b) => a.name.localeCompare(b.name))
     .filter((t) => (!needle || t.name.toLowerCase().includes(needle)) && (!onlySelected || value.tenantIds.includes(t.id)));
   const toggle = (id: string) => onChange({ ...value, tenantIds: value.tenantIds.includes(id) ? value.tenantIds.filter((x) => x !== id) : [...value.tenantIds, id] });
+  const picked = value.tenantIds.filter((id) => id !== gkb?.id).length;
   return (
-    <fieldset className="field tenant-picker">
-      <legend>Customers {value.all ? "(all)" : `(${value.tenantIds.length} selected)`}</legend>
-      {canGiveAll && (
-        <label className="check all-customers">
-          <input type="checkbox" checked={value.all} onChange={(e) => onChange({ ...value, all: e.target.checked })} />
-          <span><strong>All customers, including future ones</strong><br /><span className="muted small">New customers are added automatically.</span></span>
+    <>
+      <fieldset className="field tenant-picker">
+        <legend>Customers {value.all ? "(all)" : `(${picked} selected)`}</legend>
+        {canGiveAll && (
+          <label className="check all-customers">
+            <input type="checkbox" checked={value.all} onChange={(e) => onChange({ ...value, all: e.target.checked })} />
+            <span><strong>All customers, including future ones</strong><br /><span className="muted small">New customers are added automatically.</span></span>
+          </label>
+        )}
+        {!value.all && many && (
+          <div className="row" style={{ gap: 8, flexWrap: "nowrap" }}>
+            <input className="input" type="search" placeholder="Search customers…" aria-label="Search customers" value={q}
+              onChange={(e) => setQ(e.target.value)} style={{ flex: 1, minWidth: 0 }} />
+            <label className="check small" style={{ whiteSpace: "nowrap" }}>
+              <input type="checkbox" checked={onlySelected} onChange={(e) => setOnlySelected(e.target.checked)} />Selected only
+            </label>
+          </div>
+        )}
+        {!value.all && (
+          <div className={many ? "tenant-picker-list" : undefined}>
+            {ordered.map((t) => (
+              <label key={t.id} className="check">
+                <input type="checkbox" checked={value.tenantIds.includes(t.id)} onChange={() => toggle(t.id)} />
+                {t.name}
+              </label>
+            ))}
+            {ordered.length === 0 && <span className="muted small">No customer matches.</span>}
+          </div>
+        )}
+        <span className="muted small">Everyone reads the General Knowledge Base in the chat: no tick needed.</span>
+      </fieldset>
+      {role === "tenant_admin" && gkb && (
+        <label className="check">
+          <input type="checkbox" checked={value.tenantIds.includes(gkb.id)} onChange={() => toggle(gkb.id)} />
+          <span><strong>Can manage the General Knowledge Base</strong><br />
+            <span className="muted small">Upload and approve the general knowledge used by every customer. Give it to SOC admins only.</span></span>
         </label>
       )}
-      {!value.all && many && (
-        <div className="row" style={{ gap: 8, flexWrap: "nowrap" }}>
-          <input className="input" type="search" placeholder="Search customers…" aria-label="Search customers" value={q}
-            onChange={(e) => setQ(e.target.value)} style={{ flex: 1, minWidth: 0 }} />
-          <label className="check small" style={{ whiteSpace: "nowrap" }}>
-            <input type="checkbox" checked={onlySelected} onChange={(e) => setOnlySelected(e.target.checked)} />Selected only
-          </label>
-        </div>
-      )}
-      {!value.all && (
-        <div className={many ? "tenant-picker-list" : undefined}>
-          {ordered.map((t) => (
-            <label key={t.id} className="check">
-              <input type="checkbox" checked={value.tenantIds.includes(t.id)} onChange={() => toggle(t.id)} />
-              {t.name}{t.is_global && <span className="muted small"> · shared documentation</span>}
-            </label>
-          ))}
-          {ordered.length === 0 && <span className="muted small">No customer matches.</span>}
-        </div>
-      )}
-    </fieldset>
+    </>
   );
 }
 
@@ -200,7 +225,7 @@ function RoleAndAccess({ role, setRole, access, setAccess, tenants, isSuper, can
           {roles.map((r) => <option key={r} value={r}>{ROLE_HELP[r]}</option>)}
         </select>
       </label>
-      {role !== "super_admin" && <AccessPicker tenants={tenants} value={access} onChange={setAccess} canGiveAll={canGiveAll} />}
+      {role !== "super_admin" && <AccessPicker tenants={tenants} value={access} onChange={setAccess} canGiveAll={canGiveAll} role={role} />}
     </>
   );
 }
@@ -211,17 +236,8 @@ function InviteForm({ isSuper, canGiveAll, tenants, myTenant, onClose, onDone }:
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [role, setRole] = useState<Role>("analyst");
-  // General is on by default, plus the customer the tenant admin is working on.
-  const general = tenants.find((t) => t.is_global)?.id;
-  const [access, setAccess] = useState<Access>({ tenantIds: [general, myTenant].filter((x): x is string => !!x && x !== undefined).filter((x, i, a) => a.indexOf(x) === i), all: false });
-  // The customer list may arrive after the form opened: General is still ticked by default then.
-  const generalTicked = useRef(!!general);
-  useEffect(() => {
-    if (general && !generalTicked.current) {
-      generalTicked.current = true;
-      setAccess((a) => (a.tenantIds.includes(general) ? a : { ...a, tenantIds: [general, ...a.tenantIds] }));
-    }
-  }, [general]);
+  // The customer the tenant admin is working on is ticked; managing the knowledge base never is by default.
+  const [access, setAccess] = useState<Access>({ tenantIds: myTenant ? [myTenant] : [], all: false });
   const [result, setResult] = useState<InvitationCreated | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -234,7 +250,7 @@ function InviteForm({ isSuper, canGiveAll, tenants, myTenant, onClose, onDone }:
       const r = await api<InvitationCreated>("/invitations", {
         method: "POST",
         body: role === "super_admin" ? { email, full_name: fullName, role }
-          : { email, full_name: fullName, role, tenant_ids: access.all ? [] : access.tenantIds, all_tenants: access.all },
+          : { email, full_name: fullName, role, tenant_ids: accessIds(access, role, tenants), all_tenants: access.all },
       });
       setResult(r);
       onDone();
@@ -296,7 +312,7 @@ function EditUser({ user, isSuper, canGiveAll, isSelf, tenants, onClose, onSaved
     if (!isSelf && (role !== user.role || access.all !== user.all_tenants || access.tenantIds.slice().sort().join() !== before)) {
       body.role = role;
       if (role !== "super_admin") {
-        body.tenant_ids = access.all ? [] : access.tenantIds;
+        body.tenant_ids = accessIds(access, role, tenants);
         body.all_tenants = access.all;
       }
     }

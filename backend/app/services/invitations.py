@@ -100,7 +100,8 @@ def accept(db: Session, inv: Invitation, password: str) -> User:
         password_changed_at=utcnow(),
     )
     # Tenants deleted since the invitation are simply skipped.
-    user.tenants = _tenants(db, inv)
+    # The General Knowledge Base ticked means "manages it": tenant admins only (everyone reads it).
+    user.tenants = [t for t in _tenants(db, inv) if not t.is_global or inv.role == "tenant_admin"]
     user.all_tenants = inv.all_tenants
     db.add(user)
     inv.accepted_at = utcnow()

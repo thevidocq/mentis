@@ -6,7 +6,8 @@ export interface User {
   email: string;
   full_name: string;
   role: Role;
-  tenants: TenantRef[]; // tenant admins and analysts: the customers they see (General included)
+  tenants: TenantRef[]; // tenant admins and analysts: the customers they see, plus the General Knowledge Base (read)
+  can_manage_general?: boolean; // tenant admins who manage the General Knowledge Base
   all_tenants: boolean; // every customer, also future ones
   totp_enabled: boolean;
   preferences: { theme?: Theme };
@@ -145,6 +146,7 @@ export interface ChatSummary {
   scope_tenant_id: string | null;
   scope_name: string;
   updated_at: string;
+  use_general?: boolean; // General Knowledge Base searched with the customer
 }
 
 export interface ChatFull extends ChatSummary {
@@ -161,6 +163,7 @@ export interface Exchange {
 export interface ScopeOption {
   id: string | null;
   name: string;
+  is_general?: boolean; // the General Knowledge Base alone
 }
 
 // --- LLM providers -----------------------------------------------------------
