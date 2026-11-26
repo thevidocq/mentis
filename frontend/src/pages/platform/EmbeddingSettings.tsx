@@ -86,15 +86,15 @@ export function EmbeddingSettings() {
     }
   }
 
-  if (!state) return <PageHead title="Embedding and Qdrant" />;
+  if (!state) return <PageHead title="Embedding and Qdrant" narrow />;
   const r = state.reindex;
 
   return (
     <>
-      <PageHead title="Embedding and Qdrant">
+      <PageHead title="Embedding and Qdrant" narrow>
         {state.reindex_needed ? <span className="pill warn">Reindex needed</span> : <span className="pill ok">Index up to date</span>}
       </PageHead>
-      <div className="page-body" style={{ maxWidth: 820 }}>
+      <div className="page-body narrow">
         <p className="muted" style={{ margin: 0 }}>
           Every document chunk is turned into a vector by the embedding model and stored in Qdrant, one collection per customer.
           Any OpenAI-compatible embeddings endpoint works: the local TEI container (default), Ollama, vLLM or a cloud provider.

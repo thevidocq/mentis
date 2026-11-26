@@ -13,7 +13,7 @@ export function SmtpSettings() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => { api<Smtp>("/platform/smtp").then(setCfg).catch((e) => setMsg({ ok: false, text: errorText(e) })); }, []);
-  if (!cfg) return <PageHead title="Email (SMTP)" />;
+  if (!cfg) return <PageHead title="Email (SMTP)" narrow />;
 
   const set = <K extends keyof Smtp>(k: K, v: Smtp[K]) => setCfg({ ...cfg, [k]: v });
 
@@ -53,10 +53,10 @@ export function SmtpSettings() {
 
   return (
     <>
-      <PageHead title="Email (SMTP)">
+      <PageHead title="Email (SMTP)" narrow>
         {cfg.configured ? <span className="pill ok">Configured</span> : <span className="pill warn">Not configured</span>}
       </PageHead>
-      <div className="page-body" style={{ maxWidth: 760 }}>
+      <div className="page-body narrow">
         <p className="muted" style={{ margin: 0 }}>Used to send invitations. Without it, invitation links are shown to the admin to share manually.</p>
         <form className="card" onSubmit={save}>
           <div className="card-head"><h2>Server</h2></div>

@@ -60,8 +60,8 @@ export function Account() {
 
   return (
     <PersonalShell>
-      <PageHead title="Account" />
-      <div className="page-body" style={{ maxWidth: 760 }}>
+      <PageHead title="Account" narrow />
+      <div className="page-body narrow">
         {error && <div className="error">{error}</div>}
 
         <section className="card">

@@ -37,7 +37,7 @@ export function RetentionSettings() {
   const [confirm, setConfirm] = useState(false);
 
   useEffect(() => { api<Retention>("/platform/retention").then(setCfg).catch((e) => setMsg({ ok: false, text: errorText(e) })); }, []);
-  if (!cfg) return <PageHead title="Retention" />;
+  if (!cfg) return <PageHead title="Retention" narrow />;
 
   async function save() {
     if (!cfg) return;
@@ -62,8 +62,8 @@ export function RetentionSettings() {
 
   return (
     <>
-      <PageHead title="Retention" />
-      <div className="page-body" style={{ maxWidth: 760 }}>
+      <PageHead title="Retention" narrow />
+      <div className="page-body narrow">
         <p className="muted" style={{ margin: 0 }}>How long Mentis keeps chats and log events. Older data is deleted once a day by the worker. Documents are not affected: they stay until an admin deletes them.</p>
         <div className="card">
           <div className="card-body stack">
