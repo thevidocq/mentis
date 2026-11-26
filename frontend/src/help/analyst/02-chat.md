@@ -23,6 +23,20 @@ Next to the customer, the **Knowledge Base** chip is on by default (✓). To ans
 - **Not found**: if the documentation in use does not cover the question, Mentis says so and does not guess. Ask your tenant admin to add the missing procedure.
 - Under the answer: up to three **suggested questions** (one click asks them), thumbs up / thumbs down buttons to rate the answer, copy, and the name of the AI model that wrote it.
 
+## The answer check
+
+Under each answer, a short line says whether it matches its sources:
+
+- **✓ Matches the sources**: every value and statement was found in the cited passages.
+- **⚠ Level 1 ·** a contact, time, code or other value is **not in the sources**; it is highlighted in the answer, and when the source leaves no doubt the line shows the right value ("the source says 30 minutes").
+- **⚠ Level 2 ·** a statement is **not supported** by its sources: a model re-read the answer and the passages; the statement is highlighted.
+- **⚠ Level 1 + 2 ·** both checks found the same problem.
+- **Unverified answer**: it cites no source.
+- **Checking…**: the check is running (a second or two); the answer is already readable.
+- **Check not available**: the check could not run; verify the sources yourself.
+
+**Open source ›** opens the passage to compare. When you report a problem, say which level found it. For some customers an answer that does not match its sources is not shown at all: you get *Not found* with "did not match the sources".
+
 > Always check the source before acting on a contact or a time. Answers come only from the documents, but the documents can be out of date.
 
 ## Share a chat

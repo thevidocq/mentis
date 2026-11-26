@@ -49,6 +49,10 @@ def call_provider(cfg: dict, system: str, turns: list[Turn], timeout: float = 12
     try:
         with httpx.Client(timeout=timeout, transport=_transport) as client:
             r = client.post(url, json=body, headers=headers)
+            if r.status_code == 400 and "temperature" in body and "temperature" in r.text.lower():
+                # Some models (reasoning models) accept only their default temperature: ask again without it.
+                body.pop("temperature")
+                r = client.post(url, json=body, headers=headers)
     except httpx.TimeoutException:
         raise LLMError(f"{cfg['name']} timed out") from None
     except httpx.HTTPError as e:

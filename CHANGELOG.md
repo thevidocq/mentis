@@ -6,6 +6,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [0.3.6] - 2026-11-26
+
+### Added
+- **Answer check, against hallucinations.** Level 1 (always on, no model): phone numbers, e-mails, IPs, times, durations, percentages, dates and codes in the answer must be in the passages (normalised: "085 1112233" = "+39 085 111 2233", "30 minuti" = "30 minutes"); answers without citations are flagged. Level 2: a checker model verifies each cited statement against its passages (general LLMs with JSON verdicts; MiniCheck-style fact-checkers recognised by name). Per customer (LLM page): **Show a warning** (default), **Hide the answer** (one rewrite, then "Not found"; hidden text kept for audit only), or level 1 only.
+- Chat: the wrong value or statement is highlighted and a quiet line under the answer says which level found it (Level 1, Level 2, Level 1 + 2), with **Open source ›**; "Matches the sources", "Checking…", "Check not available". Same in shared chats. Flagged answers go back to the LLM as history with a note, so the error does not spread.
+- **AI providers**: sections **Answers** and **Answer check**; **Use for** in Add provider (technical fields under **Advanced**); one default per section, **Set as default** on the row (adding a model never changes it); **Test** of a checker plants an error and checks it is caught. Per customer: a specific checker (a customer with its own LLM is checked by that LLM unless one is chosen).
+- Logs: `chat.checked` (mode, level, issues, model, tokens). LLM usage: rows "<checker> · answer check".
+
+### Changed
+- Answers are generated with **temperature 0**; models that refuse the parameter are asked again without it.
+
+Migration 0012 (`llm_providers.role`, `chat_messages.answer_check`).
+
+
 ## [0.3.5] - 2026-11-26
 
 ### Changed

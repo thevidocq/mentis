@@ -230,6 +230,10 @@ def test_usage_per_customer_with_cost(super_admin, fake_llm):
     assert rows[("Alfa", "—")]["not_found"] == 1
     assert ("All customers", "Claude") in rows
     assert u["totals"]["questions"] == 3
+    # Answer checks (level 2, here by the answering model) are rows of their own, priced like it.
+    c = rows[("Alfa", "Claude · answer check")]
+    assert c["check"] and c["questions"] == 1 and c["cost_usd"] == pytest.approx(100 / 1e6 * 1 + 20 / 1e6 * 5)
+    assert u["totals"]["checks"] == 2 and u["totals"]["input_tokens"] == 400
     assert an.get("/api/usage").status_code == 403
     _invite_and_accept(super_admin, "ta@example.com", "tenant_admin", beta["id"])
     ta = new_client(super_admin.app)

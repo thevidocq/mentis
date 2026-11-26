@@ -1,6 +1,6 @@
 # Installing Mentis
 
-> Version 0.3.5. Release notes and upgrade commands: [docs/releases/](docs/releases/).
+> Version 0.3.6. Release notes and upgrade commands: [docs/releases/](docs/releases/).
 
 ## Requirements
 
@@ -13,7 +13,7 @@
 ```bash
 git clone https://github.com/thevidocq/mentis.git
 cd mentis
-git checkout v0.3.5        # a release; main is the development version
+git checkout v0.3.6        # a release; main is the development version
 cp .env.example .env
 chmod 600 .env             # secrets: readable by the owner only
 sed -i "s/^MENTIS_SECRET_KEY=.*/MENTIS_SECRET_KEY=$(openssl rand -hex 32)/" .env

@@ -497,6 +497,7 @@ def _routes(w: World) -> dict[tuple[str, str], list[Probe]]:
     add("POST", "/llm/providers", super_only("POST", A + "/llm/providers", kw=bogus, allowed_status=422))
     add("PUT", "/llm/providers/{provider_id}", super_only("PUT", f"{A}/llm/providers/{w.provider}", kw=bogus, allowed_status=422))
     add("POST", "/llm/providers/{provider_id}/test", super_only("POST", f"{A}/llm/providers/{w.provider}/test"))
+    add("POST", "/llm/providers/{provider_id}/default", super_only("POST", f"{A}/llm/providers/{w.provider}/default"))
     pdel = [p for p in super_only("DELETE", f"{A}/llm/providers/{w.provider}") if p.actor != "sa"]
     pdel.append(Probe("sa", "DELETE", f"{A}/llm/providers/{uuid.uuid4()}", 404))  # allowed: would delete the world's provider
     add("DELETE", "/llm/providers/{provider_id}", pdel)

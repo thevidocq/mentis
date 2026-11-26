@@ -138,6 +138,24 @@ export interface ChatMessage {
   latency_ms: number | null;
   feedback: 1 | -1 | null;
   created_at: string;
+  check?: AnswerCheck | null;
+}
+
+/** Answer check: level 1 (values in the sources) and level 2 (a model checks each statement). */
+export interface CheckIssue {
+  level: (1 | 2)[];
+  kind: "value" | "statement" | "no_citations";
+  text: string;
+  expected?: string;
+  reason?: string;
+}
+
+export interface AnswerCheck {
+  level2: "pending" | "ok" | "unavailable" | "off";
+  issues: CheckIssue[];
+  checker: { name: string; model: string } | null;
+  hidden?: boolean;
+  rewritten?: boolean;
 }
 
 export interface ChatSummary {
@@ -194,7 +212,8 @@ export interface LlmProvider {
   api_key_set: boolean;
   options: { reasoning_effort?: string; max_tokens?: number; price_in?: number; price_out?: number };
   is_default: boolean;
-  // Tenant admins receive only id, name, model and is_default.
+  role: "answers" | "checker"; // writes the answers, or checks them (one default per role)
+  // Tenant admins receive only id, name, model, is_default and role.
 }
 
 export interface LlmPreset {

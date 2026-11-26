@@ -60,6 +60,29 @@ export function ChatPage() {
 
   useEffect(() => { end.current?.scrollIntoView({ block: "end" }); }, [chat?.messages.length, pending]);
 
+  // An answer whose check (level 2) is still running: ask again until it is done (about 1-3 s).
+  const checking = !!chat?.messages.some((m) => m.check?.level2 === "pending");
+  useEffect(() => {
+    if (!checking || !chat) return;
+    const id = chat.id;
+    let tries = 0;
+    let stop = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      timer = setTimeout(() => {
+        chatApi.get(id).then((fresh) => {
+          if (stop || shown.current !== id) return;
+          const checks = new Map(fresh.messages.map((m) => [m.id, m.check]));
+          setChat((c) => (c && c.id === id ? { ...c, messages: c.messages.map((m) => (checks.has(m.id) ? { ...m, check: checks.get(m.id) } : m)) } : c));
+          if (fresh.messages.some((m) => m.check?.level2 === "pending") && ++tries < 40) tick();
+        }).catch(() => { if (!stop && ++tries < 40) tick(); });
+      }, 1500);
+    };
+    tick();
+    return () => { stop = true; clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checking, chat?.id]);
+
   const loadingChat = !!chatId && chat?.id !== chatId;
   const pendingHere = pending && pending.chat === chatId ? pending.text : null;
   const locked = !!chat;

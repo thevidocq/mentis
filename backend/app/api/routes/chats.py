@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field, StringConstraints
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
@@ -18,7 +18,8 @@ from app.api.deps import client_ip, require_roles
 from app.core.db import get_db
 from app.models import Chat, ChatMessage, ChatShare, Role, Tenant, User
 from app.models.base import utcnow
-from app.services import access, chat_visibility
+from app.services import access, answer_check, chat_visibility
+from app.services.answer_check import runner as check_runner
 from app.services import answer as answering
 from app.services.embeddings import EmbeddingError
 from app.services.llm import LLMError
@@ -48,6 +49,7 @@ class MessageOut(BaseModel):
     latency_ms: int | None
     feedback: int | None
     created_at: datetime
+    check: dict | None = None  # answer check result (see services/answer_check)
 
 
 class ChatSummary(BaseModel):
@@ -118,7 +120,8 @@ def _msg(m: ChatMessage, hidden: bool = False) -> MessageOut:
                           latency_ms=m.latency_ms, feedback=m.feedback, created_at=m.created_at)
     return MessageOut(id=m.id, role=m.role, content=m.content, status=m.status, citations=m.citations or [],
                       followups=m.followups or [], tenants=m.tenants or [], provider_name=m.provider_name,
-                      model=m.model, latency_ms=m.latency_ms, feedback=m.feedback, created_at=m.created_at)
+                      model=m.model, latency_ms=m.latency_ms, feedback=m.feedback, created_at=m.created_at,
+                      check=answer_check.public(m.check, m.created_at) if m.role == "assistant" else None)
 
 
 def _own_chat(db: Session, user: User, chat_id: uuid.UUID) -> Chat:
@@ -147,7 +150,8 @@ def _scope_usable(db: Session, chat: Chat, user: User) -> bool:
     return t is not None and t.status != "disabled" and access.sees(db, user, t.id)
 
 
-def _ask(db: Session, user: User, chat: Chat, question: str, first: bool, request: Request) -> Exchange:
+def _ask(db: Session, user: User, chat: Chat, question: str, first: bool, request: Request,
+         background: BackgroundTasks | None = None) -> Exchange:
     question = question.strip()
     if not question:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Write a question.")
@@ -159,13 +163,20 @@ def _ask(db: Session, user: User, chat: Chat, question: str, first: bool, reques
         log_event(db, "chat.error", kind="system", level="error", actor=user, tenant_id=chat.scope_tenant_id,
                   target=str(chat.id), detail={"error": str(e)[:300]}, commit=False)
 
+    # Answer check: level 1 now; level 2 now ("hide") or after the response ("warn").
+    try:
+        result, check, later = check_runner.before_save(
+            db, chat, question, first, result, lambda problems: answering.answer(db, chat, question, first, correction=problems))
+    except (LLMError, EmbeddingError, VectorIndexError):
+        check, later = {"level2": "unavailable", "issues": [], "checker": None}, False
+
     q = ChatMessage(chat_id=chat.id, role="user", content=question)
     db.add(q)
     db.flush()
     a = ChatMessage(chat_id=chat.id, role="assistant", content=result.content, status=result.status,
                     citations=result.citations, followups=result.followups, tenants=result.tenants,
                     provider_name=result.provider_name, model=result.model, latency_ms=result.latency_ms,
-                    input_tokens=result.input_tokens, output_tokens=result.output_tokens)
+                    input_tokens=result.input_tokens, output_tokens=result.output_tokens, check=check)
     db.add(a)
     if first and result.title and not chat.title_locked:
         chat.title = result.title.strip()[:120] or chat.title
@@ -178,6 +189,8 @@ def _ask(db: Session, user: User, chat: Chat, question: str, first: bool, reques
                       "input_tokens": result.input_tokens, "output_tokens": result.output_tokens})
     db.refresh(q)
     db.refresh(a)
+    if later and background is not None:
+        background.add_task(check_runner.after_save, a.id, chat.id, result)
     return Exchange(chat=_summary(db, chat), question=_msg(q), answer=_msg(a))
 
 
@@ -220,12 +233,12 @@ def list_chats(q: str | None = Query(None, max_length=200), limit: int = Query(1
 
 
 @router.post("", response_model=Exchange, status_code=status.HTTP_201_CREATED)
-def new_chat(body: NewChat, request: Request, db: Session = Depends(get_db), user: User = Depends(readers)) -> Exchange:
+def new_chat(body: NewChat, request: Request, background: BackgroundTasks, db: Session = Depends(get_db), user: User = Depends(readers)) -> Exchange:
     _check_scope(db, user, body.tenant_id)
     chat = Chat(user_id=user.id, scope_tenant_id=body.tenant_id, use_general=body.use_general)
     db.add(chat)
     db.flush()
-    return _ask(db, user, chat, body.message, True, request)
+    return _ask(db, user, chat, body.message, True, request, background)
 
 
 @router.get("/{chat_id}", response_model=ChatOut)
@@ -241,13 +254,13 @@ def get_chat(chat_id: uuid.UUID, db: Session = Depends(get_db), user: User = Dep
 
 
 @router.post("/{chat_id}/messages", response_model=Exchange)
-def ask(chat_id: uuid.UUID, body: NewMessage, request: Request, db: Session = Depends(get_db), user: User = Depends(readers)) -> Exchange:
+def ask(chat_id: uuid.UUID, body: NewMessage, request: Request, background: BackgroundTasks, db: Session = Depends(get_db), user: User = Depends(readers)) -> Exchange:
     chat = _own_chat(db, user, chat_id)
     # The scope is the chat's own; the request cannot change it.
     if not _scope_usable(db, chat, user):
         raise HTTPException(status.HTTP_409_CONFLICT, "The customer of this chat is no longer available. Start a new chat.")
     _check_scope(db, user, chat.scope_tenant_id)
-    return _ask(db, user, chat, body.message, False, request)
+    return _ask(db, user, chat, body.message, False, request, background)
 
 
 @router.patch("/{chat_id}", response_model=ChatSummary)

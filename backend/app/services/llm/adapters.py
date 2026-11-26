@@ -15,12 +15,17 @@ def build(kind: str, base_url: str, model: str, api_key: str | None, options: di
     base = base_url.rstrip("/")
     max_tokens = int(options.get("max_tokens", 1500))
     msgs = [{"role": t.role, "content": t.content} for t in turns]
+    # Grounded answers and checks want determinism: temperature 0 unless the provider sets another
+    # value; None = not sent (models that refuse the parameter, see call_provider).
+    temperature = options.get("temperature", 0)
 
     if kind == "anthropic":
         headers = {"anthropic-version": ANTHROPIC_VERSION, "content-type": "application/json"}
         if api_key:
             headers["x-api-key"] = api_key
         body = {"model": model, "max_tokens": max_tokens, "system": system, "messages": msgs}
+        if temperature is not None:
+            body["temperature"] = temperature
         return f"{base}/v1/messages", headers, body
 
     headers = {"content-type": "application/json"}
@@ -31,10 +36,15 @@ def build(kind: str, base_url: str, model: str, api_key: str | None, options: di
         # api.openai.com wants max_completion_tokens for current models; compatible servers use max_tokens.
         limit_key = "max_completion_tokens" if "api.openai.com" in base else "max_tokens"
         body = {"model": model, "messages": [{"role": "system", "content": system}, *msgs], limit_key: max_tokens}
+        if temperature is not None:
+            body["temperature"] = temperature
         return f"{base}/chat/completions", headers, body
 
     if kind == "openai_responses":
         body = {"model": model, "instructions": system, "input": msgs, "max_output_tokens": max_tokens}
+        # Reasoning models on the Responses API refuse temperature: sent only when set explicitly.
+        if "temperature" in options and options["temperature"] is not None:
+            body["temperature"] = options["temperature"]
         effort = options.get("reasoning_effort")
         if effort:
             body["reasoning"] = {"effort": effort}

@@ -6,7 +6,17 @@ import { PageHead } from "../../layouts/AdminShell";
 import { useAuth } from "../../auth/AuthContext";
 import { UsageTable, useUsage } from "../platform/Usage";
 
-interface Choice { provider_id: string | null; fallback_id: string | null; editable?: boolean; admin_can_set_llm?: boolean }
+type CheckMode = "warn" | "hide" | "off";
+interface Choice {
+  provider_id: string | null; fallback_id: string | null; checker_id: string | null; answer_check: CheckMode;
+  editable?: boolean; admin_can_set_llm?: boolean;
+}
+
+const MODES: [CheckMode, string, string][] = [
+  ["warn", "Show a warning", "The analyst sees the answer with what is not in the sources highlighted."],
+  ["hide", "Hide the answer", "An answer that does not match the sources is written again once, then replaced by \"Not found\"."],
+  ["off", "Don't check with a model", "Only level 1 runs: contacts, times and codes are still compared with the sources."],
+];
 
 // The tenant's LLM and fallback. Used by the tenant admin page and by the super-admin Tenants list.
 export function TenantLlmForm({ tenantId, onSaved }: { tenantId: string; onSaved?: () => void }) {
@@ -21,13 +31,17 @@ export function TenantLlmForm({ tenantId, onSaved }: { tenantId: string; onSaved
   }, [tenantId]);
 
   if (!providers || !choice) return msg ? <div className="error">{msg.text}</div> : null;
-  const def = providers.find((p) => p.is_default);
+  const answering = providers.filter((p) => (p.role ?? "answers") === "answers");
+  const checkers = providers.filter((p) => p.role === "checker");
+  const def = answering.find((p) => p.is_default);
+  const defChecker = checkers.find((p) => p.is_default);
 
   async function save() {
     setMsg(null);
     try {
       if (!choice) return;
-      setChoice(await api<Choice>(`/tenants/${tenantId}/llm`, { method: "PUT", body: { provider_id: choice.provider_id, fallback_id: choice.fallback_id } }));
+      setChoice(await api<Choice>(`/tenants/${tenantId}/llm`, { method: "PUT", body: {
+        provider_id: choice.provider_id, fallback_id: choice.fallback_id, checker_id: choice.checker_id, answer_check: choice.answer_check } }));
       setMsg({ ok: true, text: "Saved." });
       onSaved?.();
     } catch (e) {
@@ -35,7 +49,23 @@ export function TenantLlmForm({ tenantId, onSaved }: { tenantId: string; onSaved
     }
   }
 
-  if (providers.length === 0) {
+  const checkChoice = (
+    <div className="stack" style={{ gap: 8 }}>
+      <strong>Answer check</strong>
+      <span className="muted small">Every answer is checked against its sources. When an answer does not match them:</span>
+      <div className="mode-options" role="radiogroup" aria-label="Answer check">
+        {MODES.map(([m, title, text]) => (
+          <button key={m} type="button" role="radio" aria-checked={choice.answer_check === m} className={`role-card${choice.answer_check === m ? " on" : ""}`}
+            onClick={() => setChoice({ ...choice, answer_check: m })}>
+            <span className="role-radio" aria-hidden="true" />
+            <span><strong>{title}{m === "warn" && <span className="pill accent" style={{ marginLeft: 8 }}>recommended</span>}</strong><span className="muted small">{text}</span></span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
+  if (answering.length === 0) {
     return <div className="notice">No AI provider is configured yet. A super-admin must add one in <strong>AI providers</strong>.</div>;
   }
   async function setAdminCanSet(value: boolean) {
@@ -58,6 +88,12 @@ export function TenantLlmForm({ tenantId, onSaved }: { tenantId: string; onSaved
         <div className="notice">The super-admin chooses the LLM of this customer.</div>
         <div><span className="muted small">LLM for answers</span><br /><strong>{name(choice.provider_id) ?? `Platform default${def ? ` (${label(def)})` : ""}`}</strong></div>
         <div><span className="muted small">Fallback</span><br /><strong>{name(choice.fallback_id) ?? "None"}</strong></div>
+        <div><span className="muted small">Model that checks the answers</span><br /><strong>{name(choice.checker_id) ?? "Platform default"}</strong></div>
+        {checkChoice}
+        <div className="row">
+          <button className="btn btn-primary" onClick={save}>Save</button>
+          {msg && <span className={msg.ok ? "muted" : "error"} role="status">{msg.text}</span>}
+        </div>
       </div>
     );
   }
@@ -72,18 +108,26 @@ export function TenantLlmForm({ tenantId, onSaved }: { tenantId: string; onSaved
       <label className="field">LLM for answers
         <select className="input" value={choice.provider_id ?? ""} onChange={(e) => setChoice({ ...choice, provider_id: e.target.value || null })}>
           <option value="">Platform default{def ? ` (${label(def)})` : ""}</option>
-          {providers.map((p) => <option key={p.id} value={p.id}>{label(p)}</option>)}
+          {answering.map((p) => <option key={p.id} value={p.id}>{label(p)}</option>)}
         </select>
       </label>
       <label className="field">Fallback when it fails
         <select className="input" value={choice.fallback_id ?? ""} onChange={(e) => setChoice({ ...choice, fallback_id: e.target.value || null })}>
           <option value="">None</option>
-          {providers.map((p) => <option key={p.id} value={p.id}>{label(p)}</option>)}
+          {answering.map((p) => <option key={p.id} value={p.id}>{label(p)}</option>)}
+        </select>
+      </label>
+      <label className="field">Model that checks the answers
+        <select className="input" value={choice.checker_id ?? ""} onChange={(e) => setChoice({ ...choice, checker_id: e.target.value || null })}>
+          <option value="">{choice.provider_id ? "The LLM for answers chosen above" : defChecker ? `Platform default (${label(defChecker)})` : "Platform default (the model that writes the answer)"}</option>
+          {checkers.map((p) => <option key={p.id} value={p.id}>{label(p)}</option>)}
         </select>
       </label>
       <span className="muted small">
         Use an internal model (gpt-oss, Ollama) when this customer's documents must not reach a cloud provider; in that case leave the fallback empty or internal too.
+        With its own LLM, the answers of this customer are also checked by that LLM unless you choose a checker.
       </span>
+      {checkChoice}
       <div className="row">
         <button className="btn btn-primary" onClick={save}>Save</button>
         {msg && <span className={msg.ok ? "muted" : "error"} role="status">{msg.text}</span>}

@@ -1,4 +1,6 @@
-"""LLM usage per customer and provider, from the chat.answered log events (metadata only).
+"""LLM usage per customer and provider, from the chat.answered and chat.checked log events (metadata only).
+
+Answer checks (level 2) are rows of their own, "<checker> · answer check": one per checked answer.
 
 Usage follows log retention: events older than the log retention period are gone.
 """
@@ -22,7 +24,7 @@ def _price(providers: dict[str, LlmProvider], name: str | None) -> tuple[float |
 
 def usage(db: Session, since: datetime, until: datetime, tenant_ids: set[uuid.UUID] | None = None) -> dict:
     """Rows per (customer, provider). tenant_ids restricts to those customers (tenant admins)."""
-    stmt = select(AuditEvent).where(AuditEvent.action == "chat.answered", AuditEvent.ts >= since, AuditEvent.ts < until)
+    stmt = select(AuditEvent).where(AuditEvent.action.in_(("chat.answered", "chat.checked")), AuditEvent.ts >= since, AuditEvent.ts < until)
     if tenant_ids is not None:
         stmt = stmt.where(AuditEvent.tenant_id.in_(tenant_ids))
     names = {t.id: t.name for t in db.scalars(select(Tenant))}
@@ -30,14 +32,20 @@ def usage(db: Session, since: datetime, until: datetime, tenant_ids: set[uuid.UU
     rows: dict[tuple, dict] = {}
     for e in db.scalars(stmt):
         d = e.detail or {}
+        check = e.action == "chat.checked"
+        if check and not d.get("provider"):
+            continue  # level 1 only: no model was called
         customer = "All customers" if e.tenant_id is None else names.get(e.tenant_id, "Deleted customer")
-        key = (customer, d.get("provider") or "—")
+        label = f"{d['provider']} · answer check" if check else (d.get("provider") or "—")
+        key = (customer, label)
         r = rows.setdefault(key, {"customer": customer, "tenant_id": str(e.tenant_id) if e.tenant_id else None,
-                                  "provider": key[1], "questions": 0, "answered": 0, "not_found": 0, "errors": 0,
-                                  "input_tokens": 0, "output_tokens": 0, "latency_total": 0, "latency_n": 0})
+                                  "provider": label, "price_of": d.get("provider"), "check": check, "questions": 0, "answered": 0,
+                                  "not_found": 0, "errors": 0, "input_tokens": 0, "output_tokens": 0,
+                                  "latency_total": 0, "latency_n": 0})
         r["questions"] += 1
         status = d.get("status")
-        r["answered" if status == "ok" else "not_found" if status == "not_found" else "errors"] += 1
+        if not check:
+            r["answered" if status == "ok" else "not_found" if status == "not_found" else "errors"] += 1
         r["input_tokens"] += d.get("input_tokens") or 0
         r["output_tokens"] += d.get("output_tokens") or 0
         if d.get("latency_ms"):
@@ -45,7 +53,7 @@ def usage(db: Session, since: datetime, until: datetime, tenant_ids: set[uuid.UU
             r["latency_n"] += 1
     out = []
     for r in rows.values():
-        pin, pout = _price(providers, r["provider"])
+        pin, pout = _price(providers, r.pop("price_of"))
         cost = None
         if pin is not None or pout is not None:
             cost = round(r["input_tokens"] / 1e6 * (pin or 0) + r["output_tokens"] / 1e6 * (pout or 0), 4)
@@ -53,7 +61,9 @@ def usage(db: Session, since: datetime, until: datetime, tenant_ids: set[uuid.UU
         total = r.pop("latency_total")
         out.append({**r, "avg_latency_ms": round(total / n) if n else None, "cost_usd": cost})
     out.sort(key=lambda r: (-r["questions"], r["customer"]))
-    totals = {k: sum(r[k] for r in out) for k in ("questions", "answered", "not_found", "errors", "input_tokens", "output_tokens")}
+    totals = {k: sum(r[k] for r in out if not r["check"]) for k in ("questions", "answered", "not_found", "errors")}
+    totals["checks"] = sum(r["questions"] for r in out if r["check"])
+    totals.update({k: sum(r[k] for r in out) for k in ("input_tokens", "output_tokens")})
     costs = [r["cost_usd"] for r in out if r["cost_usd"] is not None]
     totals["cost_usd"] = round(sum(costs), 4) if costs else None
     return {"rows": out, "totals": totals}

@@ -151,3 +151,19 @@
   .answer-card { padding: 14px 14px 8px; }
 }
 .composer-send { margin-left: auto; }
+
+/* Answer check: quiet lines under the answer, the level that found each problem */
+.check-notes { display: flex; flex-direction: column; gap: 4px; }
+.check-line { display: flex; align-items: baseline; gap: 6px; font-size: 12px; color: var(--muted); line-height: 1.5; }
+.check-line svg { align-self: center; flex-shrink: 0; }
+.check-line.warn svg { color: color-mix(in srgb, var(--warn) 80%, var(--muted)); }
+.check-line.ok svg { color: color-mix(in srgb, var(--ok) 80%, var(--muted)); }
+.check-level { flex-shrink: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.3px; color: color-mix(in srgb, var(--warn) 70%, var(--muted)); }
+.check-line.muted .check-level { color: var(--muted); }
+.check-level::after { content: " ·"; color: var(--muted); font-weight: 400; }
+.check-reason { opacity: 0.8; }
+.check-open { border: 0; background: none; padding: 0; font: inherit; font-size: 12px; color: var(--accent-text); cursor: pointer; white-space: nowrap; }
+.check-open:hover { text-decoration: underline; }
+.check-spin { width: 11px; height: 11px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--accent-text) 25%, transparent); border-top-color: var(--accent-text); animation: spin 0.9s linear infinite; align-self: center; flex-shrink: 0; }
+@keyframes spin { to { transform: rotate(360deg); } }
+mark.check-mark { background: color-mix(in srgb, var(--warn) 11%, transparent); color: inherit; border-bottom: 1px solid color-mix(in srgb, var(--warn) 55%, transparent); border-radius: 2px; padding: 0 1px; }

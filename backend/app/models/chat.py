@@ -39,3 +39,5 @@ class ChatMessage(IdMixin, CreatedMixin, Base):
     input_tokens: Mapped[int | None] = mapped_column(Integer)
     output_tokens: Mapped[int | None] = mapped_column(Integer)
     feedback: Mapped[int | None] = mapped_column(Integer)  # 1 | -1
+    # Answer check (services/answer_check): status, issues found by level 1 (values) and level 2 (judge).
+    check: Mapped[dict | None] = mapped_column("answer_check", JSON)  # "check" is an SQL keyword
