@@ -15,11 +15,13 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Query,
     Request,
     UploadFile,
     status,
 )
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
+from starlette.background import BackgroundTask
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -38,7 +40,7 @@ from app.models import (
     VersionStatus,
 )
 from app.models.base import utcnow
-from app.services import access, doc_overview, jobs, retrieval, storage, versions
+from app.services import access, doc_export, doc_overview, jobs, retrieval, storage, versions
 from app.services.embeddings import EmbeddingError
 from app.services.vector_index import VectorIndexError
 from app.services.logs import log_event
@@ -160,6 +162,14 @@ def _stored(key: str) -> bytes:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Document storage is not reachable. Try again later.") from None
 
 
+def _attachment(name: str) -> str:
+    """Content-Disposition for a download: an ASCII name plus the exact UTF-8 one."""
+    from urllib.parse import quote
+
+    ascii_name = name.encode("ascii", "replace").decode().replace('"', "").replace("?", "_")
+    return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(name, safe='')}"
+
+
 def _vout(v: DocumentVersion) -> VersionOut:
     return VersionOut.model_validate(v, from_attributes=True)
 
@@ -263,6 +273,24 @@ def overview(tenant_id: uuid.UUID, db: Session = Depends(get_db), user: User = D
     return doc_overview.build(db, _tenant(db, user, tenant_id))
 
 
+@router.get("/export")
+def export_all(tenant_id: uuid.UUID, request: Request, format: str = Query(pattern="^(original|md|json)$"),
+               db: Session = Depends(get_db), user: User = Depends(admins)) -> StreamingResponse:
+    """Every document in use of the customer as a ZIP: originals, Markdown or JSON, plus manifest.json."""
+    tenant = _tenant(db, user, tenant_id)
+    try:
+        bundle = doc_export.zip_all(db, tenant, format, _stored, get_settings().export_max_mb * 1_000_000)
+    except doc_export.ExportError as e:
+        raise HTTPException(e.status, str(e)) from None
+    log_event(db, "documents.exported", actor=user, tenant_id=tenant.id, target=tenant.name, ip=client_ip(request),
+              detail={"format": format, "documents": bundle.count, "not_included": bundle.skipped})
+    f = bundle.file
+    return StreamingResponse(iter(lambda: f.read(256 * 1024), b""), media_type="application/zip",
+                             headers={"Content-Disposition": _attachment(doc_export.zip_name(tenant, format)),
+                                      "X-Content-Type-Options": "nosniff"},
+                             background=BackgroundTask(f.close))
+
+
 @router.get("/{document_id}", response_model=DocumentDetail)
 def get_document(tenant_id: uuid.UUID, document_id: uuid.UUID, db: Session = Depends(get_db), user: User = Depends(admins)) -> DocumentDetail:
     tenant = _tenant(db, user, tenant_id)
@@ -343,6 +371,30 @@ def download_original(tenant_id: uuid.UUID, version_id: uuid.UUID, request: Requ
         "Content-Disposition": f'attachment; filename="{ascii_name}"',
         "X-Content-Type-Options": "nosniff",
     })
+
+
+@router.get("/versions/{version_id}/export")
+def export_version(tenant_id: uuid.UUID, version_id: uuid.UUID, request: Request, format: str = Query(pattern="^(md|json)$"),
+                   db: Session = Depends(get_db), user: User = Depends(admins)) -> Response:
+    """One version as Markdown or JSON (the text Mentis read; JSON also has the indexed passages)."""
+    import json
+
+    tenant = _tenant(db, user, tenant_id)
+    v = _version(db, tenant, version_id)
+    try:
+        doc_export.readable(v)
+    except doc_export.ExportError as e:
+        raise HTTPException(e.status, str(e)) from None
+    doc = db.get(Document, v.document_id)
+    name = f"{doc_export.stem(doc.name)} v{v.version}.{format}"
+    if format == "md":
+        body, media = doc_export.markdown(db, tenant, doc, v).encode(), "text/markdown; charset=utf-8"
+    else:
+        body = json.dumps(doc_export.as_json(db, tenant, doc, v), ensure_ascii=False, indent=1).encode()
+        media = "application/json"
+    log_event(db, "document.exported", actor=user, tenant_id=tenant.id, target=doc.name, ip=client_ip(request),
+              detail={"version": v.version, "format": format})
+    return Response(body, media_type=media, headers={"Content-Disposition": _attachment(name), "X-Content-Type-Options": "nosniff"})
 
 
 def _transition(action: str, tenant_id: uuid.UUID, version_id: uuid.UUID, request: Request, db: Session, user: User) -> VersionOut:

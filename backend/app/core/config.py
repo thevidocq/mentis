@@ -62,6 +62,8 @@ class Settings(BaseSettings):
 
     # Upload limits.
     max_upload_mb: int = 50
+    # Download all documents as a ZIP: originals are capped (the ZIP is built in /tmp, a tmpfs).
+    export_max_mb: int = 300
     # Uncompressed size limit for DOCX/PPTX/XLSX (zip containers), against zip bombs.
     max_unzipped_mb: int = 300
     # Parsing limits per version.

@@ -547,6 +547,7 @@ def _routes(w: World) -> dict[tuple[str, str], list[Probe]]:
     D = A + "/tenants/{t}/documents"
     add("GET", "/tenants/{tenant_id}/documents", tenant_route(w, "GET", D, obj=False))
     add("GET", "/tenants/{tenant_id}/documents/overview", tenant_route(w, "GET", D + "/overview", obj=False))
+    add("GET", "/tenants/{tenant_id}/documents/export", tenant_route(w, "GET", D + "/export?format=md", obj=False))
     add("POST", "/tenants/{tenant_id}/documents", tenant_route(
         w, "POST", D, lambda k, o: {"files": {"file": ("x.docx", b"not a document", "application/octet-stream")}}, obj=False, allowed_status=422))
     add("GET", "/tenants/{tenant_id}/documents/{document_id}", tenant_route(w, "GET", D + "/{doc}"))
@@ -555,6 +556,7 @@ def _routes(w: World) -> dict[tuple[str, str], list[Probe]]:
     V = D + "/versions/{ver}"
     add("GET", "/tenants/{tenant_id}/documents/versions/{version_id}", tenant_route(w, "GET", V))
     add("GET", "/tenants/{tenant_id}/documents/versions/{version_id}/pages", tenant_route(w, "GET", V + "/pages"))
+    add("GET", "/tenants/{tenant_id}/documents/versions/{version_id}/export", tenant_route(w, "GET", V + "/export?format=json"))
     add("GET", "/tenants/{tenant_id}/documents/versions/{version_id}/pages/{index}/image", tenant_route(w, "GET", V + "/pages/{page}/image"))
     add("GET", "/tenants/{tenant_id}/documents/versions/{version_id}/original", tenant_route(w, "GET", V + "/original"))
     add("POST", "/tenants/{tenant_id}/documents/versions/{version_id}/approve", tenant_route(w, "POST", V + "/approve", allowed_status=409))

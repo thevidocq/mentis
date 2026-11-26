@@ -176,7 +176,7 @@ Admin areas use a left menu with the logo top-left; content takes the full width
 
 | Area | Menu | Key content |
 | --- | --- | --- |
-| Tenant admin | Documents, Integrations, LLM, Users, Settings | Document browser (list + selected document with preview, text read, versions, test a question); integrations: add/edit (schema form), Test, Try a lookup, turn off, delete |
+| Tenant admin | Documents, Integrations, LLM, Users, Settings | Document browser (list + selected document with preview, text read, versions, test a question; download as original, Markdown or JSON; all documents in use as a ZIP in one of those formats); integrations: add/edit (schema form), Test, Try a lookup, turn off, delete |
 | Platform admin | Tenants, Users, AI providers, Integrations, Embedding and Qdrant, Retention, Service status, Logs | Tenant table with edit/delete (delete confirmed by typing the name; General locked) |
 | Service status | (platform admin) | Summary + per-service state, latency, detail: API, frontend, workers, PostgreSQL, Qdrant, MinIO, embeddings, each LLM provider, each integration |
 | Account | (every user) | Profile with edit, theme picker, password change, 2FA status |

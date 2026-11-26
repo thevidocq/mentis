@@ -135,6 +135,10 @@ More workers in parallel: `MENTIS_WORKER_REPLICAS=3` in `.env`, then `docker com
 
 Parser: `MENTIS_PARSER=standard` (default). To try Docling in the lab, set `MENTIS_PARSER=docling` and `MENTIS_PARSER_EXTRAS=worker,docling` in `.env`, then `docker compose up -d --build worker` (large download: PyTorch and models).
 
+### Downloads
+
+Tenant admins can download one document, or every document in use of a customer as a ZIP, as originals, Markdown or JSON. A ZIP of originals is limited to `MENTIS_EXPORT_MAX_MB` (default 300) and is built in the api's `/tmp` (`MENTIS_API_TMP_SIZE`, default 512m): raise both together. Markdown and JSON are small and not limited.
+
 ## Chat and LLM
 
 The `api` container calls the LLM providers configured in **AI providers**. It needs outbound HTTPS to cloud providers (`api.anthropic.com`, `api.openai.com`). For a model server on the same host (Ollama, vLLM), use `http://host.docker.internal:<port>/v1` as Base URL; for one in another compose project, put it on a shared Docker network and use its service name.

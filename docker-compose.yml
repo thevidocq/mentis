@@ -81,6 +81,7 @@ services:
       MENTIS_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MENTIS_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
       MENTIS_MAX_UPLOAD_MB: ${MENTIS_MAX_UPLOAD_MB:-50}
+      MENTIS_EXPORT_MAX_MB: ${MENTIS_EXPORT_MAX_MB:-300}
       MENTIS_QDRANT_URL: http://qdrant:6333
       # Required: without it Qdrant would accept requests without authentication.
       MENTIS_QDRANT_API_KEY: ${QDRANT_API_KEY:?set QDRANT_API_KEY in .env}

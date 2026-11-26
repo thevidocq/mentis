@@ -4,6 +4,7 @@ import { api, apiUpload, errorText } from "../../api/client";
 import type { DocSummary } from "../../api/types";
 import { Icon } from "../../components/Icon";
 import { DocDetail } from "./DocDetail";
+import { DownloadMenu } from "./DownloadMenu";
 import { DocList } from "./DocList";
 import { DocOverview } from "./DocOverview";
 import { isBusy } from "./status";
@@ -26,6 +27,7 @@ export function DocumentsPage({ tenantId, title, scopeName = "this customer", ge
   const [refreshKey, setRefreshKey] = useState(0);
   const [uploads, setUploads] = useState<{ name: string; error?: string; done?: boolean }[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [params, setParams] = useSearchParams();
   const input = useRef<HTMLInputElement>(null);
@@ -104,6 +106,10 @@ export function DocumentsPage({ tenantId, title, scopeName = "this customer", ge
         data-drag={dragging} onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop}>
         <header className="doc-list-head">
           <h1>{title} {docs && <span className="muted">{docs.length}</span>}</h1>
+          {!!docs?.length && (
+            <DownloadMenu label="All" compact title="Download every document in use (ZIP)" onError={(m) => setExportError(m)}
+              paths={{ original: `${base}/export?format=original`, md: `${base}/export?format=md`, json: `${base}/export?format=json` }} />
+          )}
           <button className="btn btn-primary" onClick={() => input.current?.click()}><Icon name="plus" />Upload</button>
           <input ref={input} type="file" accept={ACCEPT} multiple hidden onChange={(e) => {
             const files = e.target.files ? Array.from(e.target.files) : [];
@@ -128,6 +134,7 @@ export function DocumentsPage({ tenantId, title, scopeName = "this customer", ge
           </div>
         )}
         {loadError && <div className="error doc-error" role="alert">{loadError}</div>}
+        {exportError && <div className="error doc-error" role="alert">{exportError}</div>}
         <DocList docs={docs ?? []} selected={doc?.id ?? null} onSelect={(id) => select(id)} onOverview={() => select(null)} />
         <div className="doc-drop-hint muted small">Drop files here · PDF, DOCX, PPTX, XLSX · the same file name adds a new version</div>
       </aside>

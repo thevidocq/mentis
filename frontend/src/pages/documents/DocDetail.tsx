@@ -4,7 +4,18 @@ import type { DocPage, DocSummary, DocVersion } from "../../api/types";
 import { Icon } from "../../components/Icon";
 import { Markdown } from "../../components/Markdown";
 import { Modal } from "../../components/Modal";
+import { DownloadMenu, type ExportFormat } from "./DownloadMenu";
 import { dateText, isBusy, sizeText, unitText, versionState } from "./status";
+
+/** Download paths of a version: the original always; Markdown and JSON once it has been read. */
+function versionPaths(base: string, v: DocVersion): Partial<Record<ExportFormat, string>> {
+  const read = v.status === "ready";
+  return {
+    original: `${base}/versions/${v.id}/original`,
+    md: read ? `${base}/versions/${v.id}/export?format=md` : undefined,
+    json: read ? `${base}/versions/${v.id}/export?format=json` : undefined,
+  };
+}
 
 type Tab = "preview" | "text" | "versions" | "test";
 type Action = "approve" | "reject" | "restore" | "retry";
@@ -84,7 +95,6 @@ export function DocDetail({ base, doc, refreshKey, onChanged, onDeleted, onBack,
   const latest = doc.latest;
   const pageIdx = pages.findIndex((p) => p.index === current);
   const page = pages[pageIdx] ?? null;
-  const original = `/api${base}/versions/${shown.id}/original`;
 
   return (
     <section className="doc-detail" aria-label={doc.name}>
@@ -104,7 +114,8 @@ export function DocDetail({ base, doc, refreshKey, onChanged, onDeleted, onBack,
           e.target.value = "";
           if (f) onNewVersion(f, doc.id);
         }} />
-        <a className="icon-btn" href={original} aria-label={`Download v${shown.version}`} title="Download original"><Icon name="download" /></a>
+        <DownloadMenu title={`Download v${shown.version}`} onError={setError} paths={versionPaths(base, shown)}
+          unavailable="Available once the version has been read" />
         <div className="menu-wrap">
           <button className="icon-btn" aria-label="More actions" aria-expanded={menu} onClick={(e) => { e.stopPropagation(); setMenu((m) => !m); }}><Icon name="more" /></button>
           {menu && (
@@ -156,7 +167,7 @@ export function DocDetail({ base, doc, refreshKey, onChanged, onDeleted, onBack,
             <div className="doc-pad">
               <div className="doc-versions">
                 {versions.map((v) => (
-                  <VersionRow key={v.id} v={v} base={base} shown={v.id === shown.id} onAct={act}
+                  <VersionRow key={v.id} v={v} base={base} shown={v.id === shown.id} onAct={act} onError={setError}
                     onView={() => { setShownId(v.id); setTab("preview"); }} />
                 ))}
               </div>
@@ -218,7 +229,9 @@ function NotReady({ v, onRetry }: { v: DocVersion; onRetry: () => void }) {
   );
 }
 
-function VersionRow({ v, base, shown, onAct, onView }: { v: DocVersion; base: string; shown: boolean; onAct: (v: DocVersion, a: Action) => void; onView: () => void }) {
+function VersionRow({ v, base, shown, onAct, onView, onError }: {
+  v: DocVersion; base: string; shown: boolean; onAct: (v: DocVersion, a: Action) => void; onView: () => void; onError: (message: string | null) => void;
+}) {
   const st = versionState(v);
   const canRestore = v.status === "ready" && !v.is_active && (v.approval === "not_required" || v.approval === "approved");
   return (
@@ -238,7 +251,8 @@ function VersionRow({ v, base, shown, onAct, onView }: { v: DocVersion; base: st
         </>}
         {canRestore && <button className="btn btn-sm" onClick={() => onAct(v, "restore")}><Icon name="restore" />Make active</button>}
         {v.status === "failed" && <button className="btn btn-sm" onClick={() => onAct(v, "retry")}><Icon name="refresh" />Retry</button>}
-        <a className="icon-btn" aria-label={`Download v${v.version}`} title="Download original" href={`/api${base}/versions/${v.id}/original`}><Icon name="download" /></a>
+        <DownloadMenu title={`Download v${v.version}`} onError={onError} paths={versionPaths(base, v)}
+          unavailable="Available once the version has been read" />
       </span>
     </div>
   );
