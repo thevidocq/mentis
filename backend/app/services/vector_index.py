@@ -17,7 +17,11 @@ _override: QdrantClient | None = None
 
 
 class VectorIndexError(RuntimeError):
-    pass
+    """`public` marks a message safe to show to analysts and tenant admins."""
+
+    def __init__(self, message: str, public: bool = False):
+        super().__init__(message)
+        self.public = public
 
 
 def set_client(client: QdrantClient | None) -> None:
@@ -49,7 +53,8 @@ def ensure_collection(tenant_id, dim: int) -> str:
     if c.collection_exists(name):
         size = c.get_collection(name).config.params.vectors.size
         if size != dim:
-            raise VectorIndexError(f"The embedding model changed (vector size {size} → {dim}). Reindex from Embedding and Qdrant.")
+            raise VectorIndexError(f"The embedding model changed (vector size {size} → {dim}). Reindex from Embedding and Qdrant.",
+                                   public=True)
         return name
     c.create_collection(name, vectors_config=models.VectorParams(size=dim, distance=models.Distance.COSINE))
     for key in ("document_id", "version_id"):

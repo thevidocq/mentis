@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models import Chat, ChatMessage, Role, Tenant, User
-from app.services import access, llm, prompts, retrieval
+from app.services import access, chat_visibility, llm, prompts, retrieval
 from app.services.llm_config import providers_for
 
 HISTORY_TURNS = 6
@@ -67,9 +67,11 @@ def _history(db: Session, chat: Chat) -> list[ChatMessage]:
     rows = db.scalars(select(ChatMessage).where(ChatMessage.chat_id == chat.id)
                       .order_by(ChatMessage.created_at.desc(), ChatMessage.role).limit(HISTORY_TURNS * 2)).all()
     rows = list(reversed(rows))
+    # Answers that used a customer no longer assigned to the user never go back to the LLM.
+    vis = chat_visibility.Visibility(db, db.get(User, chat.user_id))
     turns: list[ChatMessage] = []
     for q, a in zip(rows, rows[1:], strict=False):
-        if q.role == "user" and a.role == "assistant" and a.status != "error":
+        if q.role == "user" and a.role == "assistant" and a.status != "error" and not vis.hidden(chat, a):
             turns += [q, a]
     return turns[-HISTORY_TURNS:]
 
@@ -123,7 +125,7 @@ def _cited(answer_text: str, passages) -> tuple[str, list[dict]]:
     for n in order:
         p = passages[n - 1]
         citations.append({
-            "n": n, "tenant": "General" if p.is_general else p.tenant_name, "is_general": p.is_general,
+            "n": n, "tenant": "General" if p.is_general else p.tenant_name, "tenant_id": str(p.tenant_id), "is_general": p.is_general,
             "document": p.document_name, "version": p.version, "page": p.page_label, "heading": p.heading,
             "text": p.text[:600],
         })

@@ -14,6 +14,7 @@ from app.models import Chunk, DocumentVersion, VersionPage, VersionStatus
 from app.models.base import utcnow
 from app.services import embeddings, indexing, storage, vector_index, versions
 from app.services.logs import log_event
+from app.services.public_errors import public_message
 
 _log = logging.getLogger("mentis.worker")
 
@@ -93,16 +94,15 @@ def ingest_version(version_id: str) -> None:
         db.commit()
         _log.exception("ingestion failed for version %s", version_id)
         log_event(db, "document.failed", kind="system", level="error", tenant_id=version.tenant_id,
-                  target=version.original_filename, detail={"version": version.version, "error": version.error})
+                  target=version.original_filename, detail={"version": version.version, "error": version.error, "cause": str(e)[:500]})
     finally:
         db.close()
 
 
 def _user_message(e: Exception) -> str:
-    if isinstance(e, embeddings.EmbeddingError):
-        return f"Indexing failed: {e}"
-    if isinstance(e, vector_index.VectorIndexError):
-        return f"Indexing failed: {e}"
+    # Shown to tenant admins: no service address or raw reply (the log event keeps the cause).
+    if isinstance(e, embeddings.EmbeddingError | vector_index.VectorIndexError):
+        return f"Indexing failed: {public_message(e)}"
     text = str(e) or e.__class__.__name__
     if "password" in text.lower() or "encrypt" in text.lower():
         return "The file is password-protected."

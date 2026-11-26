@@ -21,7 +21,7 @@ Mentis is a standalone, multi-tenant web app: an AI assistant that answers SOC a
 | Analyst | Chat + account | Chat (read-only consultation) on its customers, own profile, theme, password |
 
 - Tenant admins and analysts have **assigned customers** (`user_tenants`), or `all_tenants` = every customer including future ones. General is one of the assignable customers, ticked by default. The rules live in `backend/app/services/access.py` and are re-checked on every request and every question.
-- A tenant admin grants only customers it has (all only with `all_tenants`), sees only users whose customers are all its own, and cannot change its own role or customers. Changing a user's customers revokes its sessions.
+- A tenant admin grants only customers it has (all only with `all_tenants`), sees only users whose customers are all its own, and cannot change its own role or customers. Changing a user's customers revokes its sessions. Saved answers that used a customer the user no longer has are hidden (answer, sources, follow-ups) and never sent back to the LLM as history.
 - Tenant admins see AI providers as name + model only and usage without costs.
 - In the tenant area a selector picks the customer the pages show; in the chat `@` lists only the user's customers plus "All my customers".
 - The first super-admin is created on the server (`app.cli create-admin`); the browser setup page is off by default.
@@ -201,7 +201,7 @@ PostgreSQL (users, tenants, chats, audit) | Qdrant (one collection per tenant) |
 
 - **Auth:** local login + TOTP 2FA from day one; SSO/OIDC (Entra ID) configurable later.
 - **Password reset:** "Forgot password?" emails a one-time link (60 minutes; same answer whether the email exists; at most one email every 2 minutes per user). Admins who can manage a user create a 24-hour link from Users, emailed or shown to copy when SMTP is off. The link only sets the password: 2FA is still required, every session is closed, the account is unlocked, and both events are logged. Expired links are purged.
-- **Isolation:** server-side tenant filter on every retrieval and integration call; chat tenant fixed in the database.
+- **Isolation:** server-side tenant filter on every retrieval and integration call; chat tenant fixed in the database. Errors of the LLM, embedding service and Qdrant reach analysts and tenant admins as plain messages; addresses and provider replies stay in the Logs.
 - **Read-only:** no writes to customer systems from chat.
 - **Secrets:** encrypted at rest, write-only in the UI.
 - **Prompt injection:** document and integration content is treated as data inside the prompt, never as instructions.
