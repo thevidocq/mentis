@@ -13,8 +13,12 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM nginx:1.27-alpine
+# Unprivileged variant of the official image: nginx runs as uid 101 (port 8080, temp files and pid
+# in /tmp), so the container works with a read-only root filesystem and no capabilities.
+# 1.30 is the maintained stable branch (1.27 no longer gets security fixes).
+FROM nginxinc/nginx-unprivileged:1.30-alpine
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY security-headers.conf /etc/nginx/snippets/security-headers.conf
+COPY proxy-api.conf /etc/nginx/snippets/proxy-api.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 8080

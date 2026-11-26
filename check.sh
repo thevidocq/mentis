@@ -21,6 +21,7 @@ api_get() {
 
 ok()   { printf '  \033[32mOK\033[0m    %s\n' "$1"; }
 bad()  { printf '  \033[31mFAIL\033[0m  %s\n' "$1"; fail=1; }
+warn() { printf '  \033[33mWARN\033[0m  %s\n' "$1"; }
 
 echo "Mentis check"
 echo
@@ -62,6 +63,24 @@ echo
 echo "Web:"
 curl -fsS --max-time 5 "$WEB_URL/" 2>/dev/null | grep -q '<div id="root">' && ok "frontend served at $WEB_URL" || bad "frontend not reachable at $WEB_URL"
 curl -fsS --max-time 5 "$WEB_URL/api/health" >/dev/null 2>&1 && ok "API reachable through the web proxy" || bad "web proxy to API not working"
+
+echo
+echo "Security:"
+if [ -f .env ]; then
+  mode=$(stat -c '%a' .env 2>/dev/null)
+  case "$mode" in 600|400) ok ".env readable by its owner only ($mode)" ;; *) warn ".env permissions are $mode: run  chmod 600 .env" ;; esac
+  grep -q 'CHANGE_ME' .env && bad ".env still contains CHANGE_ME placeholders" || ok "no CHANGE_ME placeholders in .env"
+fi
+# Data services must stay on the internal network only (not on the web container's networks).
+for svc in postgres qdrant minio redis embeddings; do
+  id=$(docker compose ps -q "$svc" 2>/dev/null | head -1)
+  [ -n "$id" ] || continue
+  nets=$(docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' "$id")
+  extra=$(for n in $nets; do case "$n" in *_data|*_models) ;; *) printf '%s ' "$n" ;; esac; done)
+  [ -z "$extra" ] && ok "$svc: isolated from the web and proxy networks" || bad "$svc: also on network(s) $extra"
+  ports=$(docker inspect -f '{{range $p, $b := .NetworkSettings.Ports}}{{if $b}}{{$p}} {{end}}{{end}}' "$id")
+  [ -z "$ports" ] || bad "$svc: publishes host port(s) $ports"
+done
 
 echo
 if [ "$fail" -eq 0 ]; then echo "All checks passed."; else echo "Some checks failed. See: docker compose logs --tail=100"; fi
