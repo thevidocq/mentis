@@ -58,7 +58,9 @@ export function Login() {
       const user = await api<User>("/auth/totp/verify", { method: "POST", body: { challenge, code } });
       setUser(user);
       const from = (location.state as { from?: string } | null)?.from;
-      navigate(from && from !== "/login" ? from : homePath(user), { replace: true });
+      // Only a path of this app ("/x", never "//host" or "/\host"): no redirect off-site after sign-in.
+      const safe = !!from && /^\/(?![/\\])/.test(from) && from !== "/login";
+      navigate(safe ? from : homePath(user), { replace: true });
     } catch (err) {
       setError(errorText(err));
       if (errorText(err).includes("expired")) setStep("credentials");

@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { api, errorText } from "../../api/client";
 import type { Tenant } from "../../api/types";
 import { Icon } from "../../components/Icon";
@@ -57,10 +57,12 @@ export function Logs() {
 
   useEffect(() => { const t = setTimeout(() => setF((x) => ({ ...x, q })), 300); return () => clearTimeout(t); }, [q]);
 
+  const seq = useRef(0); // typing in the search box: an older, slower answer must not replace a newer one
   const load = useCallback((off: number) => {
+    const mine = ++seq.current;
     api<{ items: LogRow[]; total: number }>(`/logs?${query(f, { limit: PAGE, offset: off })}`)
-      .then((r) => { setRows(r.items); setTotal(r.total); setOffset(off); setError(null); })
-      .catch((e) => setError(errorText(e)));
+      .then((r) => { if (mine === seq.current) { setRows(r.items); setTotal(r.total); setOffset(off); setError(null); } })
+      .catch((e) => { if (mine === seq.current) setError(errorText(e)); });
   }, [f]);
 
   useEffect(() => { load(0); }, [load]);

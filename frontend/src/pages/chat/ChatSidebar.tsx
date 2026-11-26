@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
+import { errorText } from "../../api/client";
 import { type ChatSummary } from "../../api/types";
 import { homePath, useAuth } from "../../auth/AuthContext";
 import { Icon } from "../../components/Icon";
@@ -23,7 +24,18 @@ export function ChatSidebar({ chats, query, onQuery, onNew, onRename, onDelete, 
   const [renaming, setRenaming] = useState<ChatSummary | null>(null);
   const [title, setTitle] = useState("");
   const [deleting, setDeleting] = useState<ChatSummary | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   if (!user) return null;
+
+  // Rename and delete: keep the dialog open with the reason when the server refuses.
+  async function run(action: () => Promise<void>, done: () => void) {
+    setBusy(true);
+    setError(null);
+    try { await action(); done(); } catch (e) { setError(errorText(e)); } finally { setBusy(false); }
+  }
+  const closeRename = () => { setRenaming(null); setError(null); };
+  const closeDelete = () => { setDeleting(null); setError(null); };
 
   return (
     <aside className="sidebar chat-sidebar">
@@ -62,22 +74,24 @@ export function ChatSidebar({ chats, query, onQuery, onNew, onRename, onDelete, 
       <SidebarFooter />
 
       {renaming && (
-        <Modal title="Rename chat" onClose={() => setRenaming(null)}
+        <Modal title="Rename chat" onClose={closeRename}
           footer={<>
-            <button className="btn" onClick={() => setRenaming(null)}>Cancel</button>
-            <button className="btn btn-primary" disabled={!title.trim()} onClick={async () => { await onRename(renaming.id, title.trim()); setRenaming(null); }}>Save</button>
+            <button className="btn" onClick={closeRename}>Cancel</button>
+            <button className="btn btn-primary" disabled={busy || !title.trim()} onClick={() => run(() => onRename(renaming.id, title.trim()), closeRename)}>Save</button>
           </>}>
           <label className="field">Title<input className="input" autoFocus maxLength={120} value={title} onChange={(e) => setTitle(e.target.value)} /></label>
           <span className="muted small">A renamed chat keeps its title.</span>
+          {error && <div className="error" role="alert">{error}</div>}
         </Modal>
       )}
       {deleting && (
-        <Modal title="Delete chat" danger onClose={() => setDeleting(null)}
+        <Modal title="Delete chat" danger onClose={closeDelete}
           footer={<>
-            <button className="btn" onClick={() => setDeleting(null)}>Cancel</button>
-            <button className="btn btn-danger" onClick={async () => { await onDelete(deleting.id); setDeleting(null); }}>Delete</button>
+            <button className="btn" onClick={closeDelete}>Cancel</button>
+            <button className="btn btn-danger" disabled={busy} onClick={() => run(() => onDelete(deleting.id), closeDelete)}>Delete</button>
           </>}>
           <p style={{ margin: 0 }}>Delete <strong>{deleting.title}</strong> and all its messages? This cannot be undone.</p>
+          {error && <div className="error" role="alert">{error}</div>}
         </Modal>
       )}
     </aside>

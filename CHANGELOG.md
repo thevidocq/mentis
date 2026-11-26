@@ -6,6 +6,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Security
+- API answers (documents, page images, originals, chats, logs, errors) are sent with `Cache-Control: no-store`: the browser no longer keeps tenant data on disk, e.g. page images were cached for an hour on shared PCs.
+- The tenant admin's current and recent customers are stored per user in the browser: on a shared PC the next user no longer starts on (or sees the order of) the previous user's customers; the old shared keys are removed.
+- Back to a Mentis tab, the app re-reads who is signed in: customers granted or removed show at once, and if another user signed in from another tab the page reloads, so no chats or customer ids of the previous user stay on screen or are used.
+- After sign-in, only a path of this app is used as the return address (no `//host` redirect).
+
+### Fixed
+- Chat: an answer arriving after switching to another chat was appended to that chat (and the next question went to the first one); a slow chat load could replace the chat just opened. The composer waits for the chat to load.
+- Answers, extracted text or passages containing a line like `#tag` or `| a` froze the browser tab (endless loop in the Markdown renderer); a table of separator rows only crashed the page.
+- Documents: overlapping polls on slow networks could overwrite newer data and reopen version lists just collapsed; polling now waits for each answer. Opening versions reports errors instead of failing silently; the same file can be chosen again for upload.
+- Logs: a slower answer for older filters no longer replaces the results of the newer search.
+- Chat rename and delete show the server's error in the dialog instead of failing silently; failed clipboard copies no longer raise unhandled errors.
+- Configuration import: a lost session signs out and validation errors read as text (was "[object Object]").
+- Dialogs keep keyboard focus inside and return it to the control that opened them; the customer selector closes on Tab, returns focus on Escape, announces the highlighted customer and keeps it in view.
+
 ## [0.3.1] - 2026-11-26
 
 ### Added

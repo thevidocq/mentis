@@ -119,7 +119,7 @@ export function Users() {
           footer={<button className="btn btn-primary" onClick={() => setResetLink(null)}>Done</button>}>
           <p style={{ margin: 0 }}>Email is not configured: send this link to <strong>{resetLink.email}</strong> yourself. It works once, for {resetLink.hours} hours. Their authenticator app is still required to sign in.</p>
           <div className="notice mono">{resetLink.url}</div>
-          <button className="btn" onClick={() => navigator.clipboard?.writeText(resetLink.url)}>Copy link</button>
+          <button className="btn" onClick={() => navigator.clipboard?.writeText(resetLink.url).catch(() => undefined)}>Copy link</button>
         </Modal>
       )}
       {deleting && (
@@ -246,7 +246,7 @@ function InviteForm({ isSuper, canGiveAll, tenants, myTenant, onClose, onDone }:
           <>
             <p style={{ margin: 0 }}>Email is not configured (or sending failed), so share this link with <strong>{result.email}</strong> yourself. It works once and expires in 72 hours.</p>
             <div className="notice mono">{result.invite_url}</div>
-            <button className="btn" onClick={() => navigator.clipboard?.writeText(result.invite_url ?? "")}>Copy link</button>
+            <button className="btn" onClick={() => navigator.clipboard?.writeText(result.invite_url ?? "").catch(() => undefined)}>Copy link</button>
           </>
         )}
       </Modal>

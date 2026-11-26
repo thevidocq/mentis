@@ -19,7 +19,7 @@ export function ChatPage() {
   const [scopesLoaded, setScopesLoaded] = useState(false);
   const [draftScope, setDraftScope] = useState<ScopeOption | null>(null);
   const [chat, setChat] = useState<ChatFull | null>(null);
-  const [pending, setPending] = useState<string | null>(null);
+  const [pending, setPending] = useState<{ text: string; chat: string | undefined } | null>(null); // question waiting for its answer
   const [error, setError] = useState<string | null>(null);
   const end = useRef<HTMLDivElement>(null);
   const [drawer, setDrawer] = useState(false);
@@ -36,36 +36,49 @@ export function ChatPage() {
     return () => clearTimeout(t);
   }, [query, refreshList]);
 
+  // The chat on screen. An answer or a chat load that arrives after the user moved to another chat
+  // must not land in (or replace) the one now shown: the next question would go to the wrong chat.
+  const shown = useRef<string | undefined>(chatId);
+  shown.current = chatId;
+
   useEffect(() => {
     setError(null);
     if (!chatId) { setChat(null); return; }
     if (chat?.id === chatId) return;
-    chatApi.get(chatId).then(setChat).catch(() => { setChat(null); navigate("/chat", { replace: true }); });
+    setChat(null);
+    chatApi.get(chatId)
+      .then((c) => { if (shown.current === chatId) setChat(c); })
+      .catch(() => { if (shown.current === chatId) navigate("/chat", { replace: true }); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatId]);
 
   useEffect(() => { end.current?.scrollIntoView({ block: "end" }); }, [chat?.messages.length, pending]);
 
+  const loadingChat = !!chatId && chat?.id !== chatId;
+  const pendingHere = pending && pending.chat === chatId ? pending.text : null;
   const locked = !!chat;
   const scope: ScopeOption | null = chat ? { id: chat.scope_tenant_id, name: chat.scope_name } : draftScope;
   const unavailable = chat && !chat.scope_available ? "This customer is no longer available. Start a new chat." : undefined;
 
   async function send(text: string) {
-    if (pending) return;
-    setPending(text);
+    if (pending || loadingChat) return;
+    const from = chatId;
+    setPending({ text, chat: from });
     setError(null);
     try {
       if (!chat) {
         const ex = await chatApi.create(draftScope?.id ?? null, text);
-        setChat({ ...ex.chat, scope_available: true, messages: [ex.question, ex.answer] });
-        navigate(`/chat/${ex.chat.id}`);
+        if (shown.current === from) {
+          setChat({ ...ex.chat, scope_available: true, messages: [ex.question, ex.answer] });
+          navigate(`/chat/${ex.chat.id}`);
+        }
       } else {
         const ex = await chatApi.ask(chat.id, text);
-        setChat((c) => (c ? { ...c, ...ex.chat, messages: [...c.messages, ex.question, ex.answer] } : c));
+        setChat((c) => (c && c.id === ex.chat.id ? { ...c, ...ex.chat, messages: [...c.messages, ex.question, ex.answer] } : c));
       }
       refreshList(query);
     } catch (e) {
-      setError(errorText(e));
+      if (shown.current === from) setError(errorText(e));
     } finally {
       setPending(null);
     }
@@ -117,7 +130,7 @@ export function ChatPage() {
         </header>
         <div className="chat-scroll">
           <div className="chat-thread">
-            {messages.length === 0 && !pending && (
+            {messages.length === 0 && !pendingHere && !loadingChat && (
               <div className="chat-empty">
                 <span style={{ color: "var(--accent-text)" }}><Icon name="chat" size={36} /></span>
                 <h2>Ask about a customer's procedures</h2>
@@ -138,13 +151,13 @@ export function ChatPage() {
                   onFeedback={(v) => feedback(m, v)}
                   onRetry={i === messages.length - 1 && messages[i - 1] ? () => send(messages[i - 1].content) : undefined} />
               ))}
-            {pending && <><UserMessage m={{ content: pending }} /><Thinking scope={scopeLabel} /></>}
+            {pendingHere && <><UserMessage m={{ content: pendingHere }} /><Thinking scope={scopeLabel} /></>}
             {error && <div className="answer-error" role="alert"><Icon name="alert" /><div style={{ flex: 1 }}>{error}</div></div>}
             <div ref={end} />
           </div>
         </div>
         <div className="chat-bottom">
-          <Composer scopes={scopes} scope={scope} locked={locked} disabled={!!pending || !!unavailable} disabledReason={unavailable}
+          <Composer scopes={scopes} scope={scope} locked={locked} disabled={!!pending || loadingChat || !!unavailable} disabledReason={unavailable}
             onScope={setDraftScope} onSend={send} />
           <div className="muted small chat-disclaimer">Mentis answers only from the documents in use. Check the sources before acting.</div>
         </div>

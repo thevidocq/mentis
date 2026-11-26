@@ -303,7 +303,7 @@ def page_image(tenant_id: uuid.UUID, version_id: uuid.UUID, index: int, db: Sess
     if page is None or not page.image_key:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No image for this page.")
     return Response(storage.get_storage().get(page.image_key), media_type="image/png",
-                    headers={"Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff"})
+                    headers={"X-Content-Type-Options": "nosniff"})
 
 
 @router.get("/versions/{version_id}/original")

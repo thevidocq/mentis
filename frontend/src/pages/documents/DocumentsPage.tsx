@@ -27,21 +27,33 @@ export function DocumentsPage({ tenantId, title, previewBase }: Props) {
   const [deleting, setDeleting] = useState<DocSummary | null>(null);
   const input = useRef<HTMLInputElement>(null);
 
+  // Polling and user actions both reload: only the latest reload may write, so a slow answer
+  // never overwrites a newer one, and a list the user collapsed meanwhile stays collapsed.
+  const openRef = useRef(open);
+  openRef.current = open;
+  const seq = useRef(0);
   const load = useCallback(async () => {
+    const mine = ++seq.current;
     try {
       const list = await api<DocSummary[]>(base);
+      if (mine !== seq.current) return;
       setDocs(list);
       setLoadError(null); // a temporary failure clears itself at the next successful refresh
       // Refresh expanded version lists too.
-      const ids = Object.keys(open);
+      const ids = Object.keys(openRef.current);
       if (ids.length) {
-        const entries = await Promise.all(ids.map(async (id) => [id, (await api<{ versions: DocVersion[] }>(`${base}/${id}`).catch(() => ({ versions: [] }))).versions] as const));
-        setOpen(Object.fromEntries(entries));
+        const entries = await Promise.all(ids.map(async (id) => [id, (await api<{ versions: DocVersion[] }>(`${base}/${id}`).catch(() => null))?.versions] as const));
+        if (mine !== seq.current) return;
+        setOpen((cur) => {
+          const next = { ...cur };
+          for (const [id, versions] of entries) if (id in next && versions) next[id] = versions;
+          return next;
+        });
       }
     } catch (e) {
-      setLoadError(errorText(e));
+      if (mine === seq.current) setLoadError(errorText(e));
     }
-  }, [base, open]);
+  }, [base]);
 
   useEffect(() => { void load(); }, [tenantId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -49,8 +61,12 @@ export function DocumentsPage({ tenantId, title, previewBase }: Props) {
   const busy = docs.some((d) => isBusy(d.latest));
   useEffect(() => {
     if (!busy) return;
-    const id = setInterval(() => void load(), 3000);
-    return () => clearInterval(id);
+    let stop = false;
+    let timer: ReturnType<typeof setTimeout>;
+    // One request at a time: the next poll starts 3 s after the previous answer (slow networks).
+    const tick = () => { timer = setTimeout(() => void load().finally(() => { if (!stop) tick(); }), 3000); };
+    tick();
+    return () => { stop = true; clearTimeout(timer); };
   }, [busy, load]);
 
   async function uploadFiles(files: FileList | File[]) {
@@ -77,12 +93,15 @@ export function DocumentsPage({ tenantId, title, previewBase }: Props) {
 
   async function toggle(doc: DocSummary) {
     if (open[doc.id]) {
-      const { [doc.id]: _, ...rest } = open;
-      setOpen(rest);
+      setOpen(({ [doc.id]: _, ...rest }) => rest);
       return;
     }
-    const detail = await api<{ versions: DocVersion[] }>(`${base}/${doc.id}`);
-    setOpen({ ...open, [doc.id]: detail.versions });
+    try {
+      const detail = await api<{ versions: DocVersion[] }>(`${base}/${doc.id}`);
+      setOpen((cur) => ({ ...cur, [doc.id]: detail.versions }));
+    } catch (e) {
+      setError(errorText(e));
+    }
   }
 
   async function act(v: DocVersion, action: "approve" | "reject" | "restore" | "retry") {
@@ -101,7 +120,12 @@ export function DocumentsPage({ tenantId, title, previewBase }: Props) {
       <PageHead title={title}>
         <span className="muted">{docs.length} {docs.length === 1 ? "document" : "documents"} · {ready} in use</span>
         <button className="btn btn-primary spacer" onClick={() => input.current?.click()}><Icon name="upload" />Upload documents</button>
-        <input ref={input} type="file" accept={ACCEPT} multiple hidden onChange={(e) => e.target.files && void uploadFiles(e.target.files)} />
+        <input ref={input} type="file" accept={ACCEPT} multiple hidden onChange={(e) => {
+          // Copy the list, then clear the input so the same file can be chosen again (a new version).
+          const files = e.target.files ? Array.from(e.target.files) : [];
+          e.target.value = "";
+          if (files.length) void uploadFiles(files);
+        }} />
       </PageHead>
       <div className="page-body">
         <div

@@ -16,6 +16,7 @@ export function CustomerSelect({ tenants, current, recent, onSelect }: {
   const [q, setQ] = useState("");
   const [active, setActive] = useState(0);
   const box = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -44,24 +45,35 @@ export function CustomerSelect({ tenants, current, recent, onSelect }: {
     return out;
   }, [tenants, recent, q]);
   const items = rows.filter((r): r is Row => r.kind === "item");
+  const activeId = items[active]?.tenant.id;
+  // Arrow keys in a long list: keep the highlighted customer visible.
+  useEffect(() => {
+    if (open && activeId) document.getElementById(`customer-opt-${activeId}`)?.scrollIntoView({ block: "nearest" });
+  }, [open, activeId]);
+
+  function close(refocus: boolean) {
+    setOpen(false);
+    setQ("");
+    if (refocus) button.current?.focus();
+  }
 
   function pick(t: TenantRef) {
     onSelect(t.id);
-    setOpen(false);
-    setQ("");
+    close(true);
   }
 
   function key(e: KeyboardEvent) {
     if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => Math.min(a + 1, items.length - 1)); }
     else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
     else if (e.key === "Enter") { e.preventDefault(); if (items[active]) pick(items[active].tenant); }
-    else if (e.key === "Escape") setOpen(false);
+    else if (e.key === "Escape") { e.preventDefault(); close(true); }
+    else if (e.key === "Tab") close(false); // focus leaves the panel: do not leave it open behind
   }
 
   let index = -1;
   return (
     <div className="customer-select" ref={box}>
-      <button type="button" className="input customer-select-btn" aria-haspopup="listbox" aria-expanded={open} aria-label="Customer"
+      <button ref={button} type="button" className="input customer-select-btn" aria-haspopup="listbox" aria-expanded={open} aria-label="Customer"
         onClick={() => { setOpen(!open); setActive(0); }}>
         <span className="customer-select-name">{current?.name ?? "Choose a customer"}</span>
         <Icon name="chevronDown" size={14} />
@@ -69,14 +81,15 @@ export function CustomerSelect({ tenants, current, recent, onSelect }: {
       {open && (
         <div className="customer-panel">
           <input className="input" type="search" autoFocus placeholder="Search customers…" aria-label="Search customers" value={q}
+            role="combobox" aria-expanded="true" aria-controls="customer-options" aria-activedescendant={items[active] ? `customer-opt-${items[active].tenant.id}` : undefined}
             onChange={(e) => { setQ(e.target.value); setActive(0); }} onKeyDown={key} />
-          <ul role="listbox" aria-label="Customers">
+          <ul role="listbox" aria-label="Customers" id="customer-options">
             {rows.map((r, i) => {
               if (r.kind === "head") return <li key={`h${i}`} className="eyebrow customer-panel-head">{r.label}</li>;
               index += 1;
               const me = index;
               return (
-                <li key={r.tenant.id} role="option" aria-selected={current?.id === r.tenant.id}
+                <li key={r.tenant.id} id={`customer-opt-${r.tenant.id}`} role="option" aria-selected={me === active}
                   className={`${me === active ? "active" : ""}${current?.id === r.tenant.id ? " current" : ""}`}
                   onMouseEnter={() => setActive(me)} onMouseDown={(e) => { e.preventDefault(); pick(r.tenant); }}>
                   <span>{r.tenant.name}</span>

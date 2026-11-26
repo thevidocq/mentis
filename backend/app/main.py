@@ -43,6 +43,16 @@ def create_app() -> FastAPI:
                 return JSONResponse(status_code=403, content={"detail": "Missing request header."})
         return await call_next(request)
 
+    @app.middleware("http")
+    async def no_store(request: Request, call_next):
+        # API answers carry tenant data (documents, page images, chats, logs): never let the browser
+        # or a proxy keep them, so a shared PC shows nothing to the next user after sign-out.
+        response = await call_next(request)
+        if request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store"
+            response.headers.setdefault("Pragma", "no-cache")
+        return response
+
     for module in (health, setup, auth, password_reset, tenants, users, invitations, platform, documents, llm_providers, chats, logs, operations):
         app.include_router(module.router, prefix="/api")
     return app

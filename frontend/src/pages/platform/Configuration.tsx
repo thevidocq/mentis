@@ -1,15 +1,13 @@
 import { useRef, useState } from "react";
-import { ApiError, errorText } from "../../api/client";
+import { apiUpload, errorText } from "../../api/client";
 import { Icon } from "../../components/Icon";
 import { PageHead } from "../../layouts/AdminShell";
 
-async function importFile(file: File, apply: boolean): Promise<{ applied: boolean; changes: string[] }> {
+// Through apiUpload: a lost session signs out, and validation errors read as text.
+function importFile(file: File, apply: boolean): Promise<{ applied: boolean; changes: string[] }> {
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch(`/api/platform/config/import?apply=${apply}`, { method: "POST", credentials: "same-origin", headers: { "X-Mentis-Request": "1" }, body: form });
-  const data = await res.json().catch(() => null);
-  if (!res.ok) throw new ApiError(res.status, data?.detail ?? `Import failed (${res.status}).`);
-  return data;
+  return apiUpload(`/platform/config/import?apply=${apply}`, form);
 }
 
 export function Configuration() {

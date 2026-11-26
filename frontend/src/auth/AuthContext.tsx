@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import type { Theme, User } from "../api/types";
 
@@ -25,6 +25,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [needsSetup, setNeedsSetup] = useState(false);
   const [webSetup, setWebSetup] = useState(false);
+
+  const userRef = useRef<User | null>(null);
+  userRef.current = user;
 
   const setUser = useCallback((u: User | null) => {
     setUserState(u);
@@ -57,6 +60,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.addEventListener("mentis:session-lost", lost);
     return () => window.removeEventListener("mentis:session-lost", lost);
   }, []);
+
+  // Back to the tab: re-read who is signed in. Customers granted or removed (or a deleted tenant)
+  // show at once, and if another user signed in from another tab of this browser, nothing of the
+  // previous user (chats, customer, cached pages) stays on screen or is used for requests.
+  useEffect(() => {
+    const check = () => {
+      const before = userRef.current;
+      if (document.visibilityState !== "visible" || !before) return;
+      api<User>("/auth/me").then((now) => {
+        if (now.id !== before.id) window.location.replace("/");
+        else setUser(now);
+      }).catch(() => undefined); // a 401 already signs out through mentis:session-lost
+    };
+    document.addEventListener("visibilitychange", check);
+    return () => document.removeEventListener("visibilitychange", check);
+  }, [setUser]);
 
   return <Ctx.Provider value={{ user, loading, needsSetup, webSetup, refresh, setUser, logout }}>{children}</Ctx.Provider>;
 }
