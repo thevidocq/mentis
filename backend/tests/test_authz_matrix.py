@@ -508,6 +508,7 @@ def _routes(w: World) -> dict[tuple[str, str], list[Probe]]:
     # Documents
     D = A + "/tenants/{t}/documents"
     add("GET", "/tenants/{tenant_id}/documents", tenant_route(w, "GET", D, obj=False))
+    add("GET", "/tenants/{tenant_id}/documents/overview", tenant_route(w, "GET", D + "/overview", obj=False))
     add("POST", "/tenants/{tenant_id}/documents", tenant_route(
         w, "POST", D, lambda k, o: {"files": {"file": ("x.docx", b"not a document", "application/octet-stream")}}, obj=False, allowed_status=422))
     add("GET", "/tenants/{tenant_id}/documents/{document_id}", tenant_route(w, "GET", D + "/{doc}"))

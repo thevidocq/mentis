@@ -38,7 +38,7 @@ from app.models import (
     VersionStatus,
 )
 from app.models.base import utcnow
-from app.services import access, jobs, retrieval, storage, versions
+from app.services import access, doc_overview, jobs, retrieval, storage, versions
 from app.services.embeddings import EmbeddingError
 from app.services.vector_index import VectorIndexError
 from app.services.logs import log_event
@@ -247,6 +247,12 @@ async def upload(
     _enqueue(version)
     db.refresh(version)
     return _vout(version)
+
+
+@router.get("/overview")
+def overview(tenant_id: uuid.UUID, db: Session = Depends(get_db), user: User = Depends(admins)) -> dict:
+    """What answers can use today, what needs attention, recent changes (counts only, no content)."""
+    return doc_overview.build(db, _tenant(db, user, tenant_id))
 
 
 @router.get("/{document_id}", response_model=DocumentDetail)

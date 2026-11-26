@@ -4,7 +4,8 @@ import { api, apiUpload, errorText } from "../../api/client";
 import type { DocSummary } from "../../api/types";
 import { Icon } from "../../components/Icon";
 import { DocDetail } from "./DocDetail";
-import { DocList, attention } from "./DocList";
+import { DocList } from "./DocList";
+import { DocOverview } from "./DocOverview";
 import { isBusy } from "./status";
 import "./documents.css";
 
@@ -13,12 +14,13 @@ const ACCEPT = ".pdf,.docx,.pptx,.xlsx";
 interface Props {
   tenantId: string;
   title: string;
+  scopeName?: string;   // the customer's name, for the overview
   previewBase?: string; // kept for the old preview route
   general?: boolean;    // the General Knowledge Base
 }
 
 /** Document browser: the list on the left, the selected document on the right. */
-export function DocumentsPage({ tenantId, title, general = false }: Props) {
+export function DocumentsPage({ tenantId, title, scopeName = "this customer", general = false }: Props) {
   const base = `/tenants/${tenantId}/documents`;
   const [docs, setDocs] = useState<DocSummary[] | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -60,11 +62,9 @@ export function DocumentsPage({ tenantId, title, general = false }: Props) {
     setUploads((u) => (u.some((x) => x.done && finished(x.name)) ? u.filter((x) => !(x.done && finished(x.name))) : u));
   }, [docs]);
 
-  // Selected document: in the address (?doc=), else the first that needs attention, else the first.
+  // Selected document: in the address (?doc=); none = the overview.
   const wanted = params.get("doc");
-  const selected = docs?.find((d) => d.id === wanted) ?? null;
-  const fallback = docs && !wanted ? ([...docs].sort((a, b) => a.name.localeCompare(b.name)).find((d) => attention(d)) ?? [...docs].sort((a, b) => a.name.localeCompare(b.name))[0]) : null;
-  const doc = selected ?? fallback ?? null;
+  const doc = docs?.find((d) => d.id === wanted) ?? null;
   const select = (id: string | null) => setParams(id ? { doc: id } : {}, { replace: !id });
 
   async function upload(files: File[], documentId?: string) {
@@ -127,13 +127,15 @@ export function DocumentsPage({ tenantId, title, general = false }: Props) {
           </div>
         )}
         {loadError && <div className="error doc-error" role="alert">{loadError}</div>}
-        <DocList docs={docs ?? []} selected={doc?.id ?? null} onSelect={(id) => select(id)} />
+        <DocList docs={docs ?? []} selected={doc?.id ?? null} onSelect={(id) => select(id)} onOverview={() => select(null)} />
         <div className="doc-drop-hint muted small">Drop files here · PDF, DOCX, PPTX, XLSX · the same file name adds a new version</div>
       </aside>
       {doc ? (
         <DocDetail key={doc.id} base={base} doc={doc} refreshKey={refreshKey} onChanged={() => void load()}
           onDeleted={() => { select(null); void load(); }} onBack={() => select(null)}
           onNewVersion={(f, id) => void upload([f], id)} />
+      ) : docs && docs.length > 0 ? (
+        <DocOverview base={base} scope={title === "Documents" ? scopeName : title} refreshKey={refreshKey} onOpen={(id) => select(id)} />
       ) : (
         <section className="doc-detail doc-placeholder">
           {docs && docs.length === 0 && (

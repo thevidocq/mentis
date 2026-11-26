@@ -340,3 +340,20 @@ def test_new_version_by_document_id_whatever_the_file_name(super_admin):
     assert r.status_code == 422
     r = super_admin.post(f"/api/tenants/{other['id']}/documents", files=files, data={"document_id": doc["id"]})
     assert r.status_code == 404
+
+
+def test_overview(super_admin):
+    t = _tenant(super_admin)
+    _upload(super_admin, t["id"], "Runbook.docx", samples.docx())
+    _upload(super_admin, t["id"], "Scan.pdf", samples.scanned_pdf())
+    run_jobs(super_admin)
+    _upload(super_admin, t["id"], "Broken.pdf", b"%PDF-1.4 not really")
+    run_jobs(super_admin)
+    o = super_admin.get(f"/api/tenants/{t['id']}/documents/overview").json()
+    assert o["documents"] == 3 and o["in_use"] == 2 and o["needs_attention"] == 1
+    assert o["attention"][0]["document"] == "Broken.pdf" and o["attention"][0]["status"] == "failed"
+    assert o["pages"] >= 2 and o["ocr_pages"] >= 1 and o["passages"] >= 2
+    assert o["by_type"] == {"docx": 1, "pdf": 1} and o["embedding_model"]
+    assert [r["document"] for r in o["recent"]][0] == "Broken.pdf" and o["recent"][0]["uploaded_by"]
+    assert o["questions"] == {"answered": 0, "not_found": 0, "errors": 0}
+    assert o["last_indexed"] and o["oldest_in_use"]

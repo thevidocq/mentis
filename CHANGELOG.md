@@ -10,6 +10,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ### Changed
 - **Documents as a document browser**: the list on the left (search, All / In use / To review, documents needing attention grouped first with a quiet badge) and the selected document on the right: state, Approve/Reject or Retry when needed, **New version**, Download, a ⋯ menu (Rename, Versions, Delete), and the tabs Preview, Text read, Versions, Test a question; details and recent versions on the right on wide screens. On a phone: list, then the document with a back button.
+- **Documents overview** when the page opens (instead of the first document): documents in use, pages read and OCR, passages searchable, questions in chats on the customer in the last 30 days, what needs attention with Retry / Review, content by type, last indexed, oldest in use, pages to check, recent activity (`GET /tenants/{id}/documents/overview`, in the authorization matrix).
 - **Chat answers** sit in a light frame (hairline fading from the top-left corner, faint teal trail, very light shadow); the customer is a small text line, no longer a rounded badge, also in the chat header. Lighter citation numbers and follow-up chips; the Sources line under the answer is now a small button (only as wide as its text) that opens the panel on the right.
 
 ### Added
