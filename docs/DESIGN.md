@@ -213,7 +213,7 @@ PostgreSQL (users, tenants, chats, audit) | Qdrant (one collection per tenant) |
 - **Language:** everything in the repo in English: code, comments, docs, commit messages.
 - **Docs:** README, INSTALL.md, admin manual, user manual, CHANGELOG updated on every commit so another session can pick up the work.
 - **Flow:** Claude develops on branches and opens pull requests; the owner reviews and merges, tests in the lab and tags releases (first: 0.1.0).
-- **Deploy:** Docker Compose on the owner's VPS. Only the web container publishes a port (`MENTIS_WEB_PORT`); a reverse proxy with HTTPS goes in front (on the owner's VPS: the Caddy of Equalizer).
+- **Deploy:** Docker Compose on the owner's VPS. Only the web container publishes a port (`MENTIS_WEB_PORT`); a reverse proxy with HTTPS goes in front (on the owner's VPS: the Caddy of Equalizer). Data stores (PostgreSQL, Qdrant, MinIO, Redis, embeddings) sit on an internal network shared only with api and worker; web is not on it. Containers run with no-new-privileges and dropped capabilities; web, api and worker run as non-root on a read-only filesystem. The API refuses to start with missing or placeholder secrets (`MENTIS_ENV=development` allows the built-in development key).
 - **Code:** modular backend services and React components; no monolithic files.
 
 ## Roadmap and open points

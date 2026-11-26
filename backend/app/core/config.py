@@ -1,19 +1,30 @@
 """Application settings, read from environment variables."""
 
 from functools import lru_cache
+from urllib.parse import urlsplit
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+# Built-in secret for local development only: refused outside MENTIS_ENV=development/test.
+DEV_SECRET_KEY = "dev-only-change-me"
+# Values from .env.example that must be replaced before the first start.
+PLACEHOLDER = "CHANGE_ME"
+NON_PRODUCTION_ENVS = {"development", "dev", "test"}
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="MENTIS_", env_file=".env", extra="ignore")
 
+    # "production" (default) refuses placeholder secrets at startup; "development" and "test" allow them.
+    env: str = "production"
+
     # Database URL, e.g. postgresql+psycopg://user:pass@postgres:5432/mentis
     database_url: str = "sqlite:///./mentis-dev.db"
 
     # Secret used to sign short-lived MFA challenge tokens. Must be long and random in production.
-    secret_key: str = Field(default="dev-only-change-me", min_length=16)
+    secret_key: str = Field(default=DEV_SECRET_KEY, min_length=16)
 
     # Session cookie settings.
     session_cookie_name: str = "mentis_session"
@@ -74,6 +85,42 @@ class Settings(BaseSettings):
     invitation_ttl_hours: int = 72
     password_reset_ttl_minutes: int = 60          # link emailed from the sign-in page
     password_reset_admin_ttl_hours: int = 24      # link created by an admin
+
+    @model_validator(mode="after")
+    def _refuse_placeholder_secrets(self) -> "Settings":
+        problems = insecure_settings(self)
+        if problems:
+            raise ValueError(
+                "Refusing to start with insecure settings: " + "; ".join(problems)
+                + ". Generate values with: openssl rand -hex 32 (see INSTALL.md)."
+                + " For local development only, set MENTIS_ENV=development."
+            )
+        return self
+
+
+def _url_password(url: str) -> str | None:
+    try:
+        return urlsplit(url).password
+    except ValueError:
+        return None
+
+
+def insecure_settings(s: Settings) -> list[str]:
+    """Secrets that are unset or still the shipped placeholders (empty outside production)."""
+    if s.env.strip().lower() in NON_PRODUCTION_ENVS:
+        return []
+    problems = []
+    if s.secret_key == DEV_SECRET_KEY:
+        problems.append("MENTIS_SECRET_KEY is not set (built-in development value)")
+    candidates = {
+        "MENTIS_SECRET_KEY": s.secret_key,
+        "MINIO_ROOT_PASSWORD": s.minio_secret_key,
+        "QDRANT_API_KEY": s.qdrant_api_key or "",
+        "POSTGRES_PASSWORD": _url_password(s.database_url) or "",
+        "REDIS_PASSWORD": _url_password(s.redis_url) or "",
+    }
+    problems += [f"{name} is still the {PLACEHOLDER} placeholder" for name, value in candidates.items() if PLACEHOLDER in value]
+    return problems
 
 
 @lru_cache

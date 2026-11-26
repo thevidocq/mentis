@@ -6,6 +6,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Security
+- Network segmentation: PostgreSQL, Qdrant, MinIO, Redis and embeddings moved to an internal network (`mentis_data`) shared only with api and worker; the web container (and any network it joins, e.g. `equalizer_edge`) can no longer reach the data stores.
+- API refuses to start in production with the built-in `dev-only-change-me` secret key or any `CHANGE_ME` placeholder secret (`MENTIS_ENV=development`/`test` allows the dev key); compose stops if a required secret is empty, so Qdrant can no longer start without an API key.
+- Containers hardened: `no-new-privileges` and `cap_drop: ALL` everywhere (data stores keep only the capabilities their entrypoint needs); web, api and worker run non-root on a read-only root filesystem with `/tmp` in tmpfs; memory/PID limits on web, api, worker, redis; healthchecks for web, qdrant, redis.
+- Web image moved from `nginx:1.27-alpine` (end of life, open nginx CVEs incl. resolver use-after-free) to `nginxinc/nginx-unprivileged:1.30-alpine` (runs as uid 101).
+- Image tags pinned: `qdrant/qdrant:v1.20.0` (was `latest`), `redis:7.4` (was `7`); Qdrant telemetry off; MinIO web console disabled.
+- Request bodies limited to 10 MB at the web proxy (100 MB only for document uploads); client body/header timeouts set.
+- Python dependency floors raised to pip-audit-clean versions (cryptography 50, python-multipart 0.0.31, Pillow 13, starlette 1.3.1, urllib3 2.8, h11 0.16, anyio, idna, certifi, protobuf, lxml, pdfminer.six); the change also refreshes the cached dependency layer of the Docker build.
+- `backup.sh` writes every file owner-only (`umask 077`) and can encrypt the backup with gpg (`MENTIS_BACKUP_GPG_RECIPIENT` or `MENTIS_BACKUP_PASSPHRASE_FILE`); `restore.sh` restores `.tar.gpg` backups.
+- `check.sh` reports `.env` permissions, leftover `CHANGE_ME` placeholders, and data services attached to other networks or publishing ports.
+- INSTALL: `chmod 600 .env` right after creating it; note on narrowing `MENTIS_TRUSTED_PROXIES` when users connect from a private LAN without a proxy.
+
 ## [0.3.1] - 2026-11-26
 
 ### Added

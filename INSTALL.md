@@ -15,18 +15,27 @@ git clone https://github.com/thevidocq/mentis.git
 cd mentis
 git checkout v0.3.1        # a release; main is the development version
 cp .env.example .env
+chmod 600 .env             # secrets: readable by the owner only
 sed -i "s/^MENTIS_SECRET_KEY=.*/MENTIS_SECRET_KEY=$(openssl rand -hex 32)/" .env
 for k in POSTGRES_PASSWORD MINIO_ROOT_PASSWORD QDRANT_API_KEY REDIS_PASSWORD; do
   sed -i "s/^$k=.*/$k=$(openssl rand -hex 24)/" .env
 done
 nano .env                  # MENTIS_PUBLIC_URL, and MENTIS_WEB_PORT if 8080 is taken
-chmod 600 .env
 docker compose up -d --build
 docker compose logs -f embeddings    # first start downloads bge-m3 (~2.3 GB); Ctrl+C at "Ready"
 ./check.sh
 ```
 
 Only the web interface is published, on `127.0.0.1:${MENTIS_WEB_PORT}` (8080 by default). The API, PostgreSQL, Qdrant, MinIO and Redis publish no host port. Database migrations run automatically every time the API container starts.
+
+The API refuses to start while a secret is missing or still a `CHANGE_ME` placeholder (`MENTIS_SECRET_KEY`, `POSTGRES_PASSWORD`, `MINIO_ROOT_PASSWORD`, `QDRANT_API_KEY`, `REDIS_PASSWORD`); `docker compose` itself stops with "required variable ... is missing a value" when one is empty. Qdrant never runs without its API key.
+
+### Isolation
+
+- **Networks.** PostgreSQL, Qdrant, MinIO, Redis and the embeddings container are on an internal network (`mentis_data`, no outbound traffic) shared only with `api` and `worker`. The `web` container is not on it, so a network it joins (for example `equalizer_edge`) cannot reach the data stores. The embeddings container also has its own network to download the model.
+- **Containers.** Every container runs with `no-new-privileges` and without Linux capabilities (the data stores keep only those their entrypoint needs). `web` (nginx, uid 101), `api` and `worker` (uid 10001) run as non-root on a read-only filesystem with `/tmp` in memory (`MENTIS_WEB_TMP_SIZE` 512m, `MENTIS_API_TMP_SIZE` 512m, `MENTIS_WORKER_TMP_SIZE` 1g: raise them if very large uploads or OCR jobs fail with "No space left on device").
+- **Images** have fixed versions (Qdrant `v1.20.0`, Redis `7.4`, PostgreSQL `16`, nginx `1.30`). To pick up security fixes of the base images: `docker compose build --pull && docker compose pull --ignore-buildable && docker compose up -d`.
+- **Request size.** The web container accepts bodies up to 10 MB, 100 MB only for document uploads.
 
 ## Create the super-admin
 
@@ -105,7 +114,7 @@ server {
 }
 ```
 
-The real client IP in Logs comes from `X-Forwarded-For`, trusted only from private networks (`MENTIS_TRUSTED_PROXIES`).
+The real client IP in Logs comes from `X-Forwarded-For`, trusted only from private networks (`MENTIS_TRUSTED_PROXIES`): the API takes the right-most address that is not a trusted proxy, so a value forged by the client is ignored. If users reach Mentis from a private LAN **without** a proxy in between, narrow `MENTIS_TRUSTED_PROXIES` in `.env` (for example to `172.16.0.0/12,192.168.0.0/16`, Docker's ranges), otherwise those users could write any address into the logs.
 
 Browsers accept the secure session cookie on `http://127.0.0.1` and `http://localhost`. Over plain HTTP from another host name, sign-in does not stick unless `MENTIS_COOKIE_SECURE=false` (tests only).
 
@@ -138,7 +147,22 @@ Retrieval tuning in `.env`: `MENTIS_CHAT_PASSAGES` (default 8) and `MENTIS_CHAT_
 ./restore.sh backups/mentis-<date> --with-env # new server
 ```
 
-Backups contain `.env` with every secret: keep them encrypted and off the server. Nightly cron example and details: [Backup and configuration](frontend/src/help/super-admin/12-backup-configuration.md).
+Backups contain `.env` with every secret: keep them encrypted and off the server. The backup folder and its files are readable by the owner only. Nightly cron example and details: [Backup and configuration](frontend/src/help/super-admin/12-backup-configuration.md).
+
+Encrypted backups (needs `gpg`, `apt install gnupg`): set one of these in `.env`, and `./backup.sh` writes `backups/mentis-<date>.tar.gpg` and removes the unencrypted folder.
+
+```bash
+# Public key (recommended: the server cannot read its own backups). Import the public key first:
+gpg --import backup-public.asc
+echo "MENTIS_BACKUP_GPG_RECIPIENT=backup@example.com" >> .env
+# Or a passphrase file:
+( umask 077; openssl rand -base64 32 > /root/.mentis-backup-pass )
+echo "MENTIS_BACKUP_PASSPHRASE_FILE=/root/.mentis-backup-pass" >> .env
+
+./restore.sh backups/mentis-<date>.tar.gpg    # decrypts, then restores as usual
+```
+
+Keep a copy of the passphrase or private key off the server: without it the backups cannot be restored.
 
 ## Upgrade
 
