@@ -1,37 +1,34 @@
-import { DragEvent, Fragment, useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { DragEvent, useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api, apiUpload, errorText } from "../../api/client";
-import type { DocSummary, DocVersion } from "../../api/types";
+import type { DocSummary } from "../../api/types";
 import { Icon } from "../../components/Icon";
-import { Modal } from "../../components/Modal";
-import { PageHead } from "../../layouts/AdminShell";
-import { dateText, isBusy, sizeText, unitText, versionState } from "./status";
+import { DocDetail } from "./DocDetail";
+import { DocList, attention } from "./DocList";
+import { isBusy } from "./status";
+import "./documents.css";
 
 const ACCEPT = ".pdf,.docx,.pptx,.xlsx";
 
 interface Props {
   tenantId: string;
   title: string;
-  previewBase: string; // e.g. "/tenant/documents/preview"
-  general?: boolean;   // the General Knowledge Base
+  previewBase?: string; // kept for the old preview route
+  general?: boolean;    // the General Knowledge Base
 }
 
-export function DocumentsPage({ tenantId, title, previewBase, general = false }: Props) {
+/** Document browser: the list on the left, the selected document on the right. */
+export function DocumentsPage({ tenantId, title, general = false }: Props) {
   const base = `/tenants/${tenantId}/documents`;
-  const [docs, setDocs] = useState<DocSummary[]>([]);
-  const [open, setOpen] = useState<Record<string, DocVersion[]>>({});
+  const [docs, setDocs] = useState<DocSummary[] | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [uploads, setUploads] = useState<{ name: string; error?: string; done?: boolean }[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
-  const [renaming, setRenaming] = useState<DocSummary | null>(null);
-  const [deleting, setDeleting] = useState<DocSummary | null>(null);
+  const [params, setParams] = useSearchParams();
   const input = useRef<HTMLInputElement>(null);
 
-  // Polling and user actions both reload: only the latest reload may write, so a slow answer
-  // never overwrites a newer one, and a list the user collapsed meanwhile stays collapsed.
-  const openRef = useRef(open);
-  openRef.current = open;
+  // Polling and user actions both reload: only the latest reload may write.
   const seq = useRef(0);
   const load = useCallback(async () => {
     const mine = ++seq.current;
@@ -39,244 +36,115 @@ export function DocumentsPage({ tenantId, title, previewBase, general = false }:
       const list = await api<DocSummary[]>(base);
       if (mine !== seq.current) return;
       setDocs(list);
-      setLoadError(null); // a temporary failure clears itself at the next successful refresh
-      // Refresh expanded version lists too.
-      const ids = Object.keys(openRef.current);
-      if (ids.length) {
-        const entries = await Promise.all(ids.map(async (id) => [id, (await api<{ versions: DocVersion[] }>(`${base}/${id}`).catch(() => null))?.versions] as const));
-        if (mine !== seq.current) return;
-        setOpen((cur) => {
-          const next = { ...cur };
-          for (const [id, versions] of entries) if (id in next && versions) next[id] = versions;
-          return next;
-        });
-      }
+      setRefreshKey((k) => k + 1);
+      setLoadError(null);
     } catch (e) {
       if (mine === seq.current) setLoadError(errorText(e));
     }
   }, [base]);
+  useEffect(() => { void load(); }, [load]);
 
-  useEffect(() => { void load(); }, [tenantId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Poll while something is being processed.
-  const busy = docs.some((d) => isBusy(d.latest));
-
-  // An uploaded file leaves the notice once its document has finished processing (ready or failed):
-  // its status is then shown on the document itself.
-  useEffect(() => {
-    const finished = (name: string) => docs.some((d) => d.name.toLowerCase() === name.toLowerCase() && !isBusy(d.latest));
-    setUploads((u) => (u.some((x) => x.done && finished(x.name)) ? u.filter((x) => !(x.done && finished(x.name))) : u));
-  }, [docs]);
+  const busy = (docs ?? []).some((d) => isBusy(d.latest));
   useEffect(() => {
     if (!busy) return;
     let stop = false;
     let timer: ReturnType<typeof setTimeout>;
-    // One request at a time: the next poll starts 3 s after the previous answer (slow networks).
     const tick = () => { timer = setTimeout(() => void load().finally(() => { if (!stop) tick(); }), 3000); };
     tick();
     return () => { stop = true; clearTimeout(timer); };
   }, [busy, load]);
 
-  async function uploadFiles(files: FileList | File[]) {
-    const list = Array.from(files);
-    setUploads(list.map((f) => ({ name: f.name })));
-    for (let i = 0; i < list.length; i++) {
+  // An upload leaves the notice once its document has finished processing.
+  useEffect(() => {
+    const finished = (name: string) => (docs ?? []).some((d) => d.name.toLowerCase() === name.toLowerCase() && !isBusy(d.latest));
+    setUploads((u) => (u.some((x) => x.done && finished(x.name)) ? u.filter((x) => !(x.done && finished(x.name))) : u));
+  }, [docs]);
+
+  // Selected document: in the address (?doc=), else the first that needs attention, else the first.
+  const wanted = params.get("doc");
+  const selected = docs?.find((d) => d.id === wanted) ?? null;
+  const fallback = docs && !wanted ? ([...docs].sort((a, b) => a.name.localeCompare(b.name)).find((d) => attention(d)) ?? [...docs].sort((a, b) => a.name.localeCompare(b.name))[0]) : null;
+  const doc = selected ?? fallback ?? null;
+  const select = (id: string | null) => setParams(id ? { doc: id } : {}, { replace: !id });
+
+  async function upload(files: File[], documentId?: string) {
+    setUploads(files.map((f) => ({ name: f.name })));
+    let last: string | null = null;
+    for (let i = 0; i < files.length; i++) {
       const form = new FormData();
-      form.append("file", list[i]);
+      form.append("file", files[i]);
+      if (documentId) form.append("document_id", documentId);
       try {
-        await apiUpload(base, form);
+        const v = await apiUpload<{ id: string }>(base, form);
+        last = v.id;
         setUploads((u) => u.map((x, j) => (j === i ? { ...x, done: true } : x)));
       } catch (e) {
         setUploads((u) => u.map((x, j) => (j === i ? { ...x, error: errorText(e) } : x)));
       }
     }
     await load();
+    // A single new document: open it.
+    if (!documentId && files.length === 1 && last) {
+      const list = await api<DocSummary[]>(base).catch(() => null);
+      const d = list?.find((x) => x.latest.id === last);
+      if (d) select(d.id);
+    }
   }
 
   function onDrop(e: DragEvent) {
     e.preventDefault();
     setDragging(false);
-    if (e.dataTransfer.files.length) void uploadFiles(e.dataTransfer.files);
+    if (e.dataTransfer.files.length) void upload(Array.from(e.dataTransfer.files));
   }
-
-  async function toggle(doc: DocSummary) {
-    if (open[doc.id]) {
-      setOpen(({ [doc.id]: _, ...rest }) => rest);
-      return;
-    }
-    try {
-      const detail = await api<{ versions: DocVersion[] }>(`${base}/${doc.id}`);
-      setOpen((cur) => ({ ...cur, [doc.id]: detail.versions }));
-    } catch (e) {
-      setError(errorText(e));
-    }
-  }
-
-  async function act(v: DocVersion, action: "approve" | "reject" | "restore" | "retry") {
-    try {
-      await api(`${base}/versions/${v.id}/${action}`, { method: "POST" });
-      await load();
-    } catch (e) {
-      setError(errorText(e));
-    }
-  }
-
-  const ready = docs.filter((d) => d.active).length;
 
   return (
-    <>
-      <PageHead title={title}>
-        <span className="muted">{docs.length} {docs.length === 1 ? "document" : "documents"} · {ready} in use</span>
-        <button className="btn btn-primary spacer" onClick={() => input.current?.click()}><Icon name="upload" />Upload documents</button>
-        <input ref={input} type="file" accept={ACCEPT} multiple hidden onChange={(e) => {
-          // Copy the list, then clear the input so the same file can be chosen again (a new version).
-          const files = e.target.files ? Array.from(e.target.files) : [];
-          e.target.value = "";
-          if (files.length) void uploadFiles(files);
-        }} />
-      </PageHead>
-      <div className="page-body">
+    <div className={`docs-browser${wanted ? " has-selection" : ""}`}>
+      <aside className="doc-list" aria-label="Documents"
+        data-drag={dragging} onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop}>
+        <header className="doc-list-head">
+          <h1>{title} {docs && <span className="muted">{docs.length}</span>}</h1>
+          <button className="btn btn-primary" onClick={() => input.current?.click()}><Icon name="plus" />Upload</button>
+          <input ref={input} type="file" accept={ACCEPT} multiple hidden onChange={(e) => {
+            const files = e.target.files ? Array.from(e.target.files) : [];
+            e.target.value = "";
+            if (files.length) void upload(files);
+          }} />
+        </header>
         {general && (
-          <div className="notice gkb-banner" role="note">
-            <strong>General knowledge only.</strong> These documents are used in the answers of every customer: put here
-            playbooks, threat-handling procedures and best practices that apply to anyone. Never put customer names, contacts,
-            systems or other customer context here: that goes in the customer's own documents, which win when the two disagree.
-            Every new version needs approval before it is used.
+          <div className="doc-note" role="note" title="These documents are used in the answers of every customer. Never put customer names, contacts, systems or other customer context here. Every new version needs approval.">
+            <Icon name="book" size={14} /><span><strong>General knowledge only</strong>: playbooks and best practices for every customer, never customer context. New versions need approval.</span>
           </div>
         )}
-        <div
-          className="dropzone"
-          data-active={dragging}
-          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={onDrop}
-        >
-          <Icon name="upload" size={22} />
-          <strong>Drop files here</strong>
-          <span className="muted small">PDF, DOCX, PPTX, XLSX · the same file name adds a new version · macro-enabled or password-protected files are refused</span>
-        </div>
-
         {uploads.length > 0 && (
-          <div className="notice stack" style={{ gap: 4 }}>
+          <div className="doc-uploads">
             {uploads.map((u, i) => (
-              <div key={i} className="row small" style={{ gap: 8 }}>
-                <span style={{ color: u.error ? "var(--danger)" : u.done ? "var(--ok)" : "var(--muted)", display: "flex" }}>
-                  <Icon name={u.error ? "alert" : u.done ? "check" : "clock"} />
-                </span>
-                <strong>{u.name}</strong>
-                <span className={u.error ? "error" : "muted"}>{u.error ?? (u.done ? "uploaded, processing" : "uploading…")}</span>
+              <div key={i} className="doc-upload">
+                <span style={{ color: u.error ? "var(--danger)" : u.done ? "var(--ok)" : "var(--muted)", display: "flex" }}><Icon name={u.error ? "alert" : u.done ? "check" : "clock"} size={14} /></span>
+                <span className="doc-upload-name">{u.name}</span>
+                <span className={u.error ? "error" : "muted"}>{u.error ?? (u.done ? "processing" : "uploading…")}</span>
               </div>
             ))}
           </div>
         )}
-        {(error || loadError) && <div className="error" role="alert">{error ?? loadError}</div>}
-
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr><th>Document</th><th>Type</th><th>In use</th><th>Latest</th><th>Updated</th><th style={{ textAlign: "right" }}>Actions</th></tr>
-            </thead>
-            <tbody>
-              {docs.length === 0 && (
-                <tr><td colSpan={6} className="muted">No documents yet. Upload procedures, escalation matrices and runbooks.</td></tr>
-              )}
-              {docs.map((d) => {
-                const latest = versionState(d.latest);
-                const versions = open[d.id];
-                return (
-                  <Fragment key={d.id}>
-                    <tr>
-                      <td><strong>{d.name}</strong></td>
-                      <td className="muted">{d.latest.file_type.toUpperCase()}</td>
-                      <td>{d.active ? `v${d.active.version}` : <span className="muted">none</span>}</td>
-                      <td><span className={`pill ${latest.pill}`}>v{d.latest.version} · {latest.label}</span></td>
-                      <td className="muted">{dateText(d.latest.uploaded_at)}</td>
-                      <td>
-                        <div className="actions">
-                          <button className="btn btn-sm" aria-expanded={!!versions} onClick={() => void toggle(d)}>
-                            Versions ({d.versions}) <Icon name={versions ? "chevronDown" : "chevronRight"} size={14} />
-                          </button>
-                          <Link className="icon-btn" aria-label={`Preview ${d.name}`} title="Preview" to={`${previewBase}/${d.latest.id}`}><Icon name="eye" /></Link>
-                          <button className="icon-btn" aria-label={`Rename ${d.name}`} onClick={() => setRenaming(d)}><Icon name="pencil" /></button>
-                          <button className="icon-btn danger" aria-label={`Delete ${d.name}`} onClick={() => setDeleting(d)}><Icon name="trash" /></button>
-                        </div>
-                      </td>
-                    </tr>
-                    {versions && (
-                      <tr>
-                        <td colSpan={6} style={{ background: "var(--surface-2)", padding: "8px 16px 12px 32px" }}>
-                          <div className="stack" style={{ gap: 6, borderLeft: "2px solid var(--border)", paddingLeft: 14 }}>
-                            {versions.map((v) => <VersionRow key={v.id} v={v} previewBase={previewBase} base={base} onAct={act} />)}
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {renaming && <RenameModal base={base} doc={renaming} onClose={() => setRenaming(null)} onDone={() => { setRenaming(null); void load(); }} />}
-      {deleting && (
-        <Modal danger title={`Delete ${deleting.name}?`} onClose={() => setDeleting(null)}
-          footer={<><button className="btn" onClick={() => setDeleting(null)}>Cancel</button>
-            <button className="btn btn-danger" onClick={async () => {
-              try { await api(`${base}/${deleting.id}`, { method: "DELETE" }); } catch (e) { setError(errorText(e)); }
-              setDeleting(null); void load();
-            }}><Icon name="trash" />Delete document</button></>}>
-          <p style={{ margin: 0 }}>All {deleting.versions} versions, their extracted text and stored files are deleted. Answers stop using this document. This cannot be undone.</p>
-        </Modal>
+        {loadError && <div className="error doc-error" role="alert">{loadError}</div>}
+        <DocList docs={docs ?? []} selected={doc?.id ?? null} onSelect={(id) => select(id)} />
+        <div className="doc-drop-hint muted small">Drop files here · PDF, DOCX, PPTX, XLSX · the same file name adds a new version</div>
+      </aside>
+      {doc ? (
+        <DocDetail key={doc.id} base={base} doc={doc} refreshKey={refreshKey} onChanged={() => void load()}
+          onDeleted={() => { select(null); void load(); }} onBack={() => select(null)}
+          onNewVersion={(f, id) => void upload([f], id)} />
+      ) : (
+        <section className="doc-detail doc-placeholder">
+          {docs && docs.length === 0 && (
+            <div className="doc-pad doc-notready">
+              <Icon name="upload" size={26} />
+              <p><strong>Upload the first document</strong><br /><span className="muted">PDF, DOCX, PPTX or XLSX: procedures, escalation matrices, runbooks. Macro-enabled or password-protected files are refused.</span></p>
+              <button className="btn btn-primary" onClick={() => input.current?.click()}><Icon name="plus" />Upload</button>
+            </div>
+          )}
+        </section>
       )}
-    </>
-  );
-}
-
-function VersionRow({ v, previewBase, base, onAct }: {
-  v: DocVersion; previewBase: string; base: string; onAct: (v: DocVersion, a: "approve" | "reject" | "restore" | "retry") => void;
-}) {
-  const st = versionState(v);
-  const canRestore = v.status === "ready" && !v.is_active && (v.approval === "not_required" || v.approval === "approved");
-  return (
-    <div className="row small" style={{ gap: 10 }}>
-      <strong style={{ minWidth: 30 }}>v{v.version}</strong>
-      <span className={`pill ${st.pill}`}>{st.label}</span>
-      <span className="muted">{dateText(v.uploaded_at)} · {sizeText(v.size_bytes)}{v.stats?.pages ? ` · ${unitText(v.file_type, v.stats.pages)}` : ""}{v.stats?.ocr_pages ? ` · ${v.stats.ocr_pages} OCR` : ""}</span>
-      {v.note && <span className="muted">“{v.note}”</span>}
-      {v.error && <span className="error">{v.error}</span>}
-      <span className="spacer row" style={{ gap: 6 }}>
-        {v.status === "ready" && <Link className="btn btn-sm" to={`${previewBase}/${v.id}`}><Icon name="eye" />Preview</Link>}
-        {v.approval === "pending" && v.status === "ready" && <>
-          <button className="btn btn-sm btn-primary" onClick={() => onAct(v, "approve")}>Approve</button>
-          <button className="btn btn-sm" onClick={() => onAct(v, "reject")}>Reject</button>
-        </>}
-        {canRestore && <button className="btn btn-sm" onClick={() => onAct(v, "restore")}><Icon name="restore" />Make active</button>}
-        {v.status === "failed" && <button className="btn btn-sm" onClick={() => onAct(v, "retry")}><Icon name="refresh" />Retry</button>}
-        <a className="icon-btn" aria-label={`Download v${v.version}`} title="Download original" href={`/api${base}/versions/${v.id}/original`}><Icon name="download" /></a>
-      </span>
     </div>
-  );
-}
-
-function RenameModal({ base, doc, onClose, onDone }: { base: string; doc: DocSummary; onClose: () => void; onDone: () => void }) {
-  const [name, setName] = useState(doc.name);
-  const [error, setError] = useState<string | null>(null);
-  async function save() {
-    try {
-      await api(`${base}/${doc.id}`, { method: "PATCH", body: { name } });
-      onDone();
-    } catch (e) {
-      setError(errorText(e));
-    }
-  }
-  return (
-    <Modal title="Rename document" onClose={onClose}
-      footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={save} disabled={!name.trim()}>Save</button></>}>
-      <label className="field">Name<input className="input" value={name} onChange={(e) => setName(e.target.value)} autoFocus /></label>
-      <span className="muted small">New uploads with this name become new versions of this document.</span>
-      {error && <div className="error" role="alert">{error}</div>}
-    </Modal>
   );
 }

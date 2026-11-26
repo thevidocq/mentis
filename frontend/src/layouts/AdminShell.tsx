@@ -18,7 +18,7 @@ export function AdminShell({ eyebrow, title, titleControl, nav, children }: {
 }) {
   const [open, setOpen] = useState(false);
   const location = useLocation();
-  useEffect(() => setOpen(false), [location.pathname]); // close the drawer after navigating
+  useEffect(() => setOpen(false), [location.key]); // close the drawer after navigating (also to the same page)
   return (
     <div className={`shell${open ? " drawer-open" : ""}`}>
       <MobileBar title={title} onMenu={() => setOpen(true)} />

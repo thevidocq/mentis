@@ -125,7 +125,7 @@ export function ChatPage() {
   const sourcesMessage = sources ? messages.find((m) => m.id === sources.messageId && m.role === "assistant") : undefined;
 
   return (
-    <div className={`shell chat-shell${drawer ? " drawer-open" : ""}`}>
+    <div className={`shell chat-shell${drawer ? " drawer-open" : ""}${sourcesMessage ? " sources-open" : ""}`}>
       <MobileBar title={chat?.title ?? "New chat"} onMenu={() => setDrawer(true)}
         right={<>
           {chat && <button className="icon-btn" style={{ border: 0 }} aria-label="Share chat" onClick={() => setSharing(true)}><Icon name="share" size={19} /></button>}
@@ -147,8 +147,8 @@ export function ChatPage() {
         <header className="chat-head">
           <h1 className="chat-title">{chat?.title ?? "New chat"}</h1>
           {scope && (
-            <span className={`pill${scope.id ? " accent" : ""}`} title={locked ? "Customer locked for this chat" : "Customer for this chat"}>
-              {locked && <Icon name="lock" size={12} />} {scope.name}
+            <span className="chat-scope" title={locked ? "Customer locked for this chat" : "Customer for this chat"}>
+              {locked && <Icon name="lock" size={13} />}{scope.name}
             </span>
           )}
           {chat && (

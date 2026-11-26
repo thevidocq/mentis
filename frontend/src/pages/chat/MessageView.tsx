@@ -41,10 +41,11 @@ export function AssistantMessage({ m, onFollowup, onFeedback, onRetry, busy, onS
       : null;
 
   return (
-    <div className="msg-assistant">
+    <div className="msg-assistant answer-card">
       <div className="answer-meta">
-        {m.tenants.map((t) => <span key={t} className={`pill${t === "General Knowledge Base" || t.startsWith("All ") ? "" : " accent"}`}>{t}</span>)}
-        {m.status === "not_found" && <span className="pill warn">Not found</span>}
+        <span className="answer-dot" aria-hidden="true" />
+        <span>{m.tenants.join(" · ")}</span>
+        {m.status === "not_found" && <span className="answer-flag">Not found</span>}
       </div>
       <div className={m.status === "not_found" ? "answer not-found" : "answer"}>
         <Markdown source={m.content} cite={cite} />
@@ -73,7 +74,7 @@ export function AssistantMessage({ m, onFollowup, onFeedback, onRetry, busy, onS
           <Icon name={copied ? "check" : "copy"} size={15} />
         </button>
         {m.provider_name && (
-          <span className="muted small" title={m.model ?? ""}>
+          <span className="muted small answer-model" title={m.model ?? ""}>
             {m.provider_name}{m.latency_ms != null ? ` · ${(m.latency_ms / 1000).toFixed(1)} s` : ""}
           </span>
         )}

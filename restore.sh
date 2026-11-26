@@ -59,7 +59,8 @@ container() { docker compose ps -aq "$1" | head -1; }
 # Create every container (building images if missing, e.g. on a new server): the api image is used below.
 docker compose up --no-start >/dev/null
 docker compose up -d postgres minio qdrant >/dev/null
-API_IMAGE=$(docker inspect -f '{{.Image}}' "$(container api)")
+# By name (e.g. mentis-api): the image id of an old container may have been removed since.
+API_IMAGE=$(docker inspect -f '{{.Config.Image}}' "$(container api)")
 unpack() {  # service, path in the container, archive
   docker run --rm --user 0 --entrypoint sh --volumes-from "$(container "$1")" -v "$SRC":/backup:ro "$API_IMAGE" \
     -c "find '$2' -mindepth 1 -delete && tar xzf '/backup/$3' -C '$2'"

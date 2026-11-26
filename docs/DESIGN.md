@@ -67,7 +67,8 @@ One chat = one customer scope, locked at the first message; integrations are cho
 - Citations: documents as [1], [2] (document, version, page/sheet/slide); live integration data as [A], [B] (source, object, read time).
 - If the documentation does not cover the question: "Not found in <customer> documentation", never an invented procedure. With no passage above the score threshold the LLM is not called at all; the model can also flag not-found itself.
 - Passages go to the LLM as numbered, untrusted data blocks labelled with their customer; citation numbers not among them are dropped.
-- Sources under the answer are one compact line ("Sources · 1 document · 8 sections"). A click opens the **Sources panel on the right** of the chat (full screen on a phone): one block per document (version) with its cited sections in number order. The customer badge appears only when the answer mixes customers or uses General. A click on [n] opens the panel on that section.
+- Each answer sits in a light frame (hairline fading from the top-left corner, faint teal trail, very light shadow); its customer is a small text line above it, not a badge; the chat header shows the customer as quiet text after the title.
+- Sources under the answer are one small button ("Sources · 1 document · 8 sections"). A click opens the **Sources panel on the right** of the chat (full screen on a phone): one block per document (version) with its cited sections in number order. The customer badge appears only when the answer mixes customers or uses General. A click on [n] opens the panel on that section.
 - The last turns of the chat are sent as context; short follow-ups also reuse the previous question for retrieval.
 
 **Suggested follow-ups**
@@ -118,6 +119,8 @@ Uploads run as background jobs; a new version reaches answers only once indexed 
 - A failed or rejected version never replaces the active one. An upload identical (SHA-256) to the active version is refused.
 - Each version records date, uploader and an optional note.
 - Documents can be renamed and deleted (with confirmation).
+- **New version** of a selected document accepts any file name of the same type (`document_id` on upload).
+- The Documents page is a document browser: the list on the left (search; All / In use / To review; *Needs attention* grouped first), the selected document on the right with Approve/Reject or Retry when needed, New version, Download and a ⋯ menu (Rename, Versions, Delete), and the tabs Preview, Text read, Versions, Test a question; details and recent versions in a right column on wide screens. The selection is in the address (`?doc=`).
 
 ## AI layer
 
@@ -165,7 +168,7 @@ Admin areas use a left menu with the logo top-left; content takes the full width
 
 | Area | Menu | Key content |
 | --- | --- | --- |
-| Tenant admin | Documents, Integrations, LLM, Users, Settings | Document table with versions, rename/delete, upload, preview |
+| Tenant admin | Documents, Integrations, LLM, Users, Settings | Document browser (list + selected document with preview, text read, versions, test a question) |
 | Platform admin | Tenants, Users, AI providers, Embedding and Qdrant, Retention, Service status, Logs | Tenant table with edit/delete (delete confirmed by typing the name; General locked) |
 | Service status | (platform admin) | Summary + per-service state, latency, detail: API, frontend, workers, PostgreSQL, Qdrant, MinIO, embeddings, each LLM provider, each integration |
 | Account | (every user) | Profile with edit, theme picker, password change, 2FA status |

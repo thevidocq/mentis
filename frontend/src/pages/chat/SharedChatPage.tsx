@@ -27,7 +27,7 @@ export function SharedChatPage() {
         <header className="chat-head shared-head">
           <Link to="/chat" className="icon-btn" style={{ border: 0 }} aria-label="Back to your chats"><Icon name="chevronLeft" size={18} /></Link>
           <h1 className="chat-title">{chat?.title ?? "Shared chat"}</h1>
-          {chat && <span className="pill accent"><Icon name="lock" size={12} /> {chat.scope_name}</span>}
+          {chat && <span className="chat-scope"><Icon name="lock" size={13} />{chat.scope_name}</span>}
           <span className="pill" style={{ marginLeft: "auto" }}>Read-only</span>
         </header>
         <div className="chat-scroll">

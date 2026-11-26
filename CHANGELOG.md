@@ -6,6 +6,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-11-26
+
+### Changed
+- **Documents as a document browser**: the list on the left (search, All / In use / To review, documents needing attention grouped first with a quiet badge) and the selected document on the right: state, Approve/Reject or Retry when needed, **New version**, Download, a ⋯ menu (Rename, Versions, Delete), and the tabs Preview, Text read, Versions, Test a question; details and recent versions on the right on wide screens. On a phone: list, then the document with a back button.
+- **Chat answers** sit in a light frame (hairline fading from the top-left corner, faint teal trail, very light shadow); the customer is a small text line, no longer a rounded badge, also in the chat header. Lighter citation numbers and follow-up chips; the Sources line under the answer is now a small button (only as wide as its text) that opens the panel on the right.
+
+### Added
+- **New version** of a document accepts any file name of the same type (`document_id` on upload).
+- `MENTIS_EMBEDDING_BATCH_SIZE` in `.env` now reaches api and worker (texts per request to the embedding service; 4 on hosts with little RAM). INSTALL: plan at least 8 GB RAM, or add swap.
+
+### Fixed
+- On a phone the menu did not close after choosing a customer on the same page.
+- `backup.sh` failed with "No such image" when the api image id of the container it used no longer existed (after rebuilds): it now uses the running container and the image by name (`mentis-api`). Same for `restore.sh`.
+
 ## [0.3.4] - 2026-11-26
 
 ### Added

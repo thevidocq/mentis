@@ -321,3 +321,22 @@ def test_purge_removes_expired_sessions_and_old_invitations(super_admin):
     retention.purge(db)
     db = next(db_module.get_db())
     assert db.query(AuthSession).count() == 0 and db.query(Invitation).count() == 0
+
+
+def test_new_version_by_document_id_whatever_the_file_name(super_admin):
+    t, other = _tenant(super_admin), _tenant(super_admin, "Cliente Beta")
+    _upload(super_admin, t["id"], "Runbook.docx", samples.docx())
+    run_jobs(super_admin)
+    doc = super_admin.get(f"/api/tenants/{t['id']}/documents").json()[0]
+    files = {"file": ("Runbook_2026_final.docx", _docx_variant(), "application/octet-stream")}
+    r = super_admin.post(f"/api/tenants/{t['id']}/documents", files=files, data={"document_id": doc["id"]})
+    assert r.status_code == 201, r.text
+    run_jobs(super_admin)
+    docs = super_admin.get(f"/api/tenants/{t['id']}/documents").json()
+    assert len(docs) == 1 and docs[0]["name"] == "Runbook.docx" and docs[0]["versions"] == 2
+    # Another file type, or a document of another customer: refused.
+    pdf = {"file": ("Runbook.pdf", samples.native_pdf(), "application/octet-stream")}
+    r = super_admin.post(f"/api/tenants/{t['id']}/documents", files=pdf, data={"document_id": doc["id"]})
+    assert r.status_code == 422
+    r = super_admin.post(f"/api/tenants/{other['id']}/documents", files=files, data={"document_id": doc["id"]})
+    assert r.status_code == 404

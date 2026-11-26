@@ -76,6 +76,8 @@ services:
       MENTIS_QDRANT_API_KEY: ${QDRANT_API_KEY:?set QDRANT_API_KEY in .env}
       MENTIS_EMBEDDING_URL: ${MENTIS_EMBEDDING_URL:-http://embeddings/v1}
       MENTIS_EMBEDDING_MODEL: ${MENTIS_EMBEDDING_MODEL:-BAAI/bge-m3}
+      # Texts per request to the embedding service: lower it (e.g. 4) on hosts with little RAM.
+      MENTIS_EMBEDDING_BATCH_SIZE: ${MENTIS_EMBEDDING_BATCH_SIZE:-16}
       MENTIS_WEB_SETUP: ${MENTIS_WEB_SETUP:-false}
       MENTIS_AUTH_RATE_PER_MINUTE: ${MENTIS_AUTH_RATE_PER_MINUTE:-30}
       MENTIS_CHAT_PASSAGES: ${MENTIS_CHAT_PASSAGES:-8}

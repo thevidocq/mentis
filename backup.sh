@@ -30,8 +30,11 @@ mkdir -p "$DEST"
 chmod 700 "$DEST"
 DEST="$(cd "$DEST" && pwd)"
 
-container() { docker compose ps -aq "$1" | head -1; }
-API_IMAGE=$(docker inspect -f '{{.Image}}' "$(container api)")
+# The running container of a service; a stopped one only if none runs. A stopped leftover (an old
+# one-off run) can point to an image that no longer exists: "No such image" in docker run.
+container() { local id; id=$(docker compose ps -q "$1" | head -1); [ -n "$id" ] || id=$(docker compose ps -aq "$1" | head -1); echo "$id"; }
+# By name (e.g. mentis-api): the image id of an old container may have been removed since.
+API_IMAGE=$(docker inspect -f '{{.Config.Image}}' "$(container api)")
 # Copy a service's data folder with a throwaway container that mounts the same volume.
 archive() {  # service, path in the container, output file
   local rc=0
