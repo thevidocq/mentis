@@ -4,10 +4,10 @@
 
 ## What is recorded
 
-- **Audit** events: who did what. Sign-ins and failed sign-ins, 2FA, users and invitations, tenants, documents and approvals, AI provider and settings changes, chat answers, exports and imports.
-- **System** events: what the platform did by itself or what went wrong. Document processing, indexing failures, LLM errors, retention purges.
+- **Audit** events: who did what. Sign-ins and failed sign-ins, 2FA, users and invitations, tenants, documents and approvals, document downloads (`document.downloaded`, `document.exported`, `documents.exported`), AI provider and settings changes, chat answers, integrations (`integration.called` for every lookup, with integration, operation and object; `integration.created`, `.updated`, `.deleted`, `.tested`; `chat.integrations`; `platform.integrations`), exports and imports.
+- **System** events: what the platform did by itself or what went wrong. Document processing, indexing failures, LLM errors, retention purges, the choice of integration lookups (`integration.planned`, with model and tokens).
 
-Chat events carry **metadata only**: customer, model, tokens, time and number of sources. Questions and answers are never written to the logs.
+Chat events carry **metadata only**: customer, model, tokens, time and number of sources. Questions and answers are never written to the logs; integration lookups record which ticket, host, alert or user was read, never search words or results.
 
 ## Find events
 
