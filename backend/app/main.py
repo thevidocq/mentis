@@ -15,6 +15,7 @@ from app.api.routes import (
     llm_providers,
     logs,
     operations,
+    password_reset,
     platform,
     setup,
     tenants,
@@ -42,7 +43,7 @@ def create_app() -> FastAPI:
                 return JSONResponse(status_code=403, content={"detail": "Missing request header."})
         return await call_next(request)
 
-    for module in (health, setup, auth, tenants, users, invitations, platform, documents, llm_providers, chats, logs, operations):
+    for module in (health, setup, auth, password_reset, tenants, users, invitations, platform, documents, llm_providers, chats, logs, operations):
         app.include_router(module.router, prefix="/api")
     return app
 

@@ -4,6 +4,7 @@ import type { LlmKind, LlmPreset, LlmProvider } from "../../api/types";
 import { Icon } from "../../components/Icon";
 import { Modal } from "../../components/Modal";
 import { PageHead } from "../../layouts/AdminShell";
+import { ModelPicker } from "./ModelPicker";
 
 interface Form {
   id?: string;
@@ -113,7 +114,7 @@ export function AiProviders() {
         </p>
         {msg && <div className={msg.ok ? "notice" : "error"} role="status">{msg.text}</div>}
         {items && items.length === 0 && (
-          <div className="notice"><strong>No provider yet.</strong> The chat cannot answer until you add one. Start from a preset, e.g. Claude Haiku.</div>
+          <div className="notice"><strong>No provider yet.</strong> The chat cannot answer until you add one. Start from a preset (Anthropic, OpenAI, vLLM, Ollama), then load its models.</div>
         )}
         {items && items.length > 0 && (
           <div className="table-wrap">
@@ -153,7 +154,7 @@ export function AiProviders() {
             <label className="field">Start from
               <select className="input" defaultValue="" onChange={(e) => {
                 const p = presets[Number(e.target.value)];
-                if (p) setForm({ ...form, name: form.name || p.label.replace(/ \(.*\)$/, ""), kind: p.kind, base_url: p.base_url, model: p.model,
+                if (p) setForm({ ...form, name: form.name || p.label.replace(/ \(.*\)$/, ""), kind: p.kind, base_url: p.base_url, model: p.model || "",
                   reasoning_effort: p.options.reasoning_effort ?? "", max_tokens: p.options.max_tokens ? String(p.options.max_tokens) : "" });
               }}>
                 <option value="" disabled>Choose a preset…</option>
@@ -168,11 +169,11 @@ export function AiProviders() {
             </select>
           </label>
           <label className="field">Base URL<input className="input mono" value={form.base_url} onChange={(e) => set("base_url", e.target.value)} placeholder="https://api.anthropic.com" /></label>
-          <label className="field">Model<input className="input mono" value={form.model} onChange={(e) => set("model", e.target.value)} /></label>
           <label className="field">API key
             <input className="input" type="password" autoComplete="new-password" value={form.api_key} onChange={(e) => set("api_key", e.target.value)}
               placeholder={form.api_key_set ? "Stored — leave empty to keep" : "Not needed for local Ollama / vLLM"} />
           </label>
+          <ModelPicker kind={form.kind} baseUrl={form.base_url} apiKey={form.api_key} providerId={form.id} value={form.model} onChange={(v) => set("model", v)} />
           <div className="row" style={{ alignItems: "flex-end" }}>
             <label className="field" style={{ flex: 1 }}>Reasoning effort
               <select className="input" value={form.reasoning_effort} onChange={(e) => set("reasoning_effort", e.target.value)}>
@@ -181,7 +182,7 @@ export function AiProviders() {
             </label>
             <label className="field" style={{ flex: 1 }}>Max answer tokens<input className="input" type="number" min={100} max={16000} value={form.max_tokens} placeholder="1500" onChange={(e) => set("max_tokens", e.target.value)} /></label>
           </div>
-          <span className="muted small">Reasoning effort applies to the Responses API (gpt-oss, Daybreak Blue).</span>
+          <span className="muted small">Reasoning effort applies to the OpenAI Responses API.</span>
           <div className="row" style={{ alignItems: "flex-end" }}>
             <label className="field" style={{ flex: 1 }}>Price input (USD / 1M tokens)<input className="input" type="number" min={0} step="0.01" value={form.price_in} placeholder="optional" onChange={(e) => set("price_in", e.target.value)} /></label>
             <label className="field" style={{ flex: 1 }}>Price output (USD / 1M tokens)<input className="input" type="number" min={0} step="0.01" value={form.price_out} placeholder="optional" onChange={(e) => set("price_out", e.target.value)} /></label>

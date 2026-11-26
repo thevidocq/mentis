@@ -6,6 +6,42 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-26
+
+### Added
+- **Models listed by the provider**: in AI providers, **Load models** asks the provider (`GET /models`: Anthropic, OpenAI, Ollama, vLLM) which models it offers and lets you pick one from a list, newest first; **Other** allows typing a name. Presets no longer carry model names (no Claude Haiku or other fixed model).
+- **Forgot password?** on the sign-in page: a one-time link by email (60 minutes). Admins can create a 24-hour reset link from **Users** (envelope icon), emailed or shown to copy when SMTP is off. 2FA stays required, every session is closed, the account is unlocked; migration 0009 (`password_resets`).
+- **Customer selector with search**: the tenant area switcher opens a panel with **Search customers…**, General first, then the last customers used; the customer list in invitations and user edit gets a search box and **Selected only** when there are many customers.
+
+### Changed
+- **Sources under an answer are compact**: one closed line with the number of documents and sections, one block per document, sections in number order, customer badge only when the answer mixes customers or uses General.
+- **Chat header**: logo on its own row; search box with a **+** button for a new chat.
+- **Account** opens inside the usual menu (with Log out at the bottom); the separate header with Back and Sign out is gone; themes are three compact tiles also on a phone.
+- Passwords are limited to 256 characters (bounds the hashing work of a request).
+- **Docker builds reuse their cache across releases**: system packages (Tesseract) and Python dependencies are installed from a list extracted from `pyproject.toml` before the app code is copied, and `npm ci` runs on `package.json`/`package-lock.json` with the version blanked; a version bump or a code change no longer reinstalls them (the first build after this change still installs everything once).
+
+### Fixed
+- Login lockout: failed attempts are counted in the database, so parallel password or code guesses can no longer slip past the limit.
+- 2FA: a code is stored as used atomically, so the same code sent twice in parallel signs in only once.
+- 2FA: a code with non-ASCII digits or a challenge with non-ASCII characters is refused (401) instead of causing a server error.
+- Login: disabled and locked accounts take as long to answer as others, so response time no longer reveals them.
+- Invitations: an expired pending invitation from another admin no longer blocks inviting the same email again.
+- PDFs that only restrict printing or copying (no password to open) were refused as password-protected; they are now read. A PDF that needs a password fails in the worker with "The file is password-protected".
+- Excel cells formatted but never filled (often whole rows up to column XFD) turned a sheet into thousands of empty table columns, flooding chunks and answers; empty columns are now dropped.
+- A version processed late (queued again after a Redis outage, or retried) replaced a newer version already in use; it now stays inactive and can be restored.
+- Reindex requested while Redis was down gave a server error and left the state "queued", blocking every later reindex; it now answers 503 and can be requested again.
+- LLM answers with raw line breaks inside the JSON (common with local models) were shown to analysts as raw JSON; follow-ups sent as a string became one chip per letter; an answer cut by the token limit is now shown as text.
+- An LLM reply with an unexpected shape (not a JSON object, content as a list of parts) gave a server error in the chat; it is now read or reported as a provider error.
+- An API key echoed back by an LLM or embedding endpoint in an error body reached the chat, logs and status page; it is now redacted.
+- Web proxy: the API is resolved at request time under its own alias `mentis-api`; before, `docker compose up -d api` could leave the web container on the old IP (502), and joining `equalizer_edge` could send `/api/` to another stack's `api` service.
+- `restore.sh --with-env` replaced `.env` before the RESTORE confirmation (a cancelled restore kept the swapped secrets), and left the database role on its old password; on a new server it failed when the `api` container did not exist yet.
+- `backup.sh` aborted the whole backup when a MinIO file changed while being archived (GNU tar exit 1).
+- `check.sh` reported OK after a failed upgrade build (old containers still running): it now checks that the API version matches the checkout; it also read `MENTIS_WEB_PORT` wrong from a `.env` with CRLF or single quotes and ignored `MENTIS_WEB_BIND`.
+- Syslog: a collector host name that cannot be encoded (e.g. `collector..local`) stopped the forwarding thread for good and made the Test button fail with an error 500; UDP messages cut at 8000 bytes could end in half a UTF-8 character.
+- Log CSV export: cells starting with a tab or carriage return were not neutralised against spreadsheet formulas.
+- Configuration import: syslog, SMTP and embedding values and AI provider options (e.g. a price as text, which broke the usage page) were not validated, keys such as `indexed_model` were imported, a non-text tenant name gave an error 500, and the dry run reported "not found" for AI providers added by the same file.
+- `backups/` is ignored by git (backups contain `.env`); the nginx example in INSTALL.md waits 300 s for the API, like the web container.
+
 ## [0.3.0] - 2026-11-25
 
 ### Added

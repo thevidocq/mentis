@@ -5,9 +5,15 @@ set -u
 cd "$(dirname "$0")" || exit 1
 fail=0
 # Web port from .env (MENTIS_WEB_PORT), default 8080.
-env_value() { [ -f .env ] && grep -E "^$1=" .env | tail -1 | cut -d= -f2- | tr -d '"' ; }
+# Quotes and Windows line endings are stripped (a .env edited on another system).
+env_value() { [ -f .env ] && grep -E "^$1=" .env | tail -1 | cut -d= -f2- | tr -d "\"'\r" ; }
 WEB_PORT="$(env_value MENTIS_WEB_PORT)"
-WEB_URL="${MENTIS_WEB_URL:-http://127.0.0.1:${WEB_PORT:-8080}}"
+# The address the port is bound to (MENTIS_WEB_BIND, 127.0.0.1 by default); 0.0.0.0 is reachable on 127.0.0.1.
+WEB_HOST="$(env_value MENTIS_WEB_BIND)"
+case "${WEB_HOST:-}" in ""|0.0.0.0) WEB_HOST=127.0.0.1 ;; *:*) WEB_HOST="[$WEB_HOST]" ;; esac
+WEB_URL="${MENTIS_WEB_URL:-http://${WEB_HOST}:${WEB_PORT:-8080}}"
+# Version of this checkout: after an upgrade the API must report it, or the new images are not running.
+EXPECTED_VERSION="$(grep -E '^version = ' backend/pyproject.toml 2>/dev/null | head -1 | cut -d'"' -f2)"
 # The API publishes no host port: ask it from inside its container.
 api_get() {
   docker compose exec -T api python -c "import sys,urllib.request;sys.stdout.write(urllib.request.urlopen('http://127.0.0.1:8000$1',timeout=5).read().decode())" 2>/dev/null
@@ -39,6 +45,12 @@ done
 echo
 echo "API:"
 body=$(api_get /api/health) && [ -n "$body" ] && ok "health: $body" || bad "API health endpoint not answering"
+if [ -n "$body" ] && [ -n "$EXPECTED_VERSION" ]; then
+  case "$body" in
+    *"\"version\":\"$EXPECTED_VERSION\""*) ok "version $EXPECTED_VERSION (matches this checkout)" ;;
+    *) bad "API is not version $EXPECTED_VERSION of this checkout: rebuild with  docker compose up -d --build" ;;
+  esac
+fi
 setup=$(api_get /api/setup/status)
 case "$setup" in
   *'"needs_setup":true'*)  echo "  INFO  no super-admin yet: docker compose exec api python -m app.cli create-admin" ;;

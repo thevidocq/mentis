@@ -80,10 +80,11 @@ def _check_ooxml(data: bytes, file_type: str) -> None:
 
 
 def _check_pdf(data: bytes) -> None:
+    # An /Encrypt dictionary does not mean a password is needed to open the file: many PDFs only
+    # restrict printing or copying and read normally. The worker tells them apart and fails the
+    # version with "The file is password-protected." when a password is really required.
     if not data[:1024].lstrip().startswith(b"%PDF-"):
         raise UploadError("The file is not a valid PDF.")
-    if b"/Encrypt" in data[-4096:] or b"/Encrypt" in data[:4096]:
-        raise UploadError("Password-protected PDFs are not accepted.")
 
 
 def check_upload(filename: str, data: bytes) -> CheckedFile:

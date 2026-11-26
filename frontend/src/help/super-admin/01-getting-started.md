@@ -9,7 +9,7 @@ The first super-admin is created on the server with `docker compose exec api pyt
 1. **Email (SMTP)**: configure the mail server and send a test email, so invitations are delivered automatically.
 2. **Tenants**: onboard each customer.
 3. **Users**: invite the tenant admins and the analysts, ticking the customers each one sees. Give **General** to at least one tenant admin, who will upload the documents shared by all customers.
-4. **AI providers**: add at least one LLM (for example Claude Haiku) and test it. Without it the chat cannot answer.
+4. **AI providers**: add at least one LLM (choose the model from the list the provider offers) and test it. Without it the chat cannot answer.
 5. **Service status**: check that everything is operational, including the ingestion worker.
 6. **Retention** and **Logs → Syslog forwarding**: set how long data is kept and, if you have a SIEM, forward the events.
 7. On the server, schedule `./backup.sh` (see **Backup and configuration**).

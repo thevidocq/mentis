@@ -1,6 +1,6 @@
 # Installing Mentis
 
-> Version 0.2.0. Release notes and upgrade commands: [docs/releases/](docs/releases/).
+> Version 0.3.1. Release notes and upgrade commands: [docs/releases/](docs/releases/).
 
 ## Requirements
 
@@ -13,7 +13,7 @@
 ```bash
 git clone https://github.com/thevidocq/mentis.git
 cd mentis
-git checkout v0.2.0        # a release; main is the development version
+git checkout v0.3.1        # a release; main is the development version
 cp .env.example .env
 sed -i "s/^MENTIS_SECRET_KEY=.*/MENTIS_SECRET_KEY=$(openssl rand -hex 32)/" .env
 for k in POSTGRES_PASSWORD MINIO_ROOT_PASSWORD QDRANT_API_KEY REDIS_PASSWORD; do
@@ -43,7 +43,7 @@ The browser setup page is off (`MENTIS_WEB_SETUP=false`), so whoever reaches a f
 Next steps in the interface:
 1. **Email (SMTP)**: so invitations are emailed. Without it, the invitation link is shown to you to share. `MENTIS_PUBLIC_URL` must be the address users open.
 2. **Tenants**: onboard each customer.
-3. **AI providers**: add the LLM that writes the answers (preset **Claude Haiku**: paste the Anthropic API key) and click **Test**.
+3. **AI providers**: add the LLM that writes the answers (for example preset **Anthropic**: paste the API key, **Load models**, pick one) and click **Test**.
 4. **Users**: invite tenant admins and analysts, ticking their customers (or **All customers, including future ones**). Give **General** to at least one tenant admin: General documents are managed by tenant admins, not by the super-admin.
 
 ## Publish it with HTTPS
@@ -100,7 +100,7 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_read_timeout 180s;
+        proxy_read_timeout 300s;     # as long as the web container waits for the API
     }
 }
 ```

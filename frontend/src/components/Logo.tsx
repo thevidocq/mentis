@@ -10,7 +10,7 @@ export function LogoIcon({ size = 30 }: { size?: number }) {
 
 export function Brand() {
   return (
-    <div className="row" style={{ gap: 10 }}>
+    <div className="row" style={{ gap: 10, flexWrap: "nowrap" }}>
       <LogoIcon />
       <span className="brand-name">MENTIS</span>
     </div>

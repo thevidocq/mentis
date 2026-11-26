@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -61,8 +61,29 @@ def is_locked(user: User) -> bool:
 
 def register_failed_login(db: Session, user: User) -> None:
     settings = get_settings()
-    user.failed_logins += 1
+    # Incremented in the database, not on the loaded object: parallel attempts would otherwise
+    # all write the same stale count and never reach the lockout.
+    db.execute(update(User).where(User.id == user.id).values(failed_logins=User.failed_logins + 1)
+               .execution_options(synchronize_session=False))
+    db.commit()
+    db.refresh(user)
     if user.failed_logins >= settings.max_failed_logins:
         user.locked_until = utcnow() + timedelta(minutes=settings.lockout_minutes)
         user.failed_logins = 0
+        db.commit()
+
+
+def claim_totp_step(db: Session, user: User, step: int) -> bool:
+    """Record `step` as the last TOTP step used, only if it is newer than the stored one.
+
+    Atomic, so the same code sent twice in parallel is accepted once. False means replayed.
+    """
+    claimed = db.execute(
+        update(User)
+        .where(User.id == user.id, or_(User.totp_last_step.is_(None), User.totp_last_step < step))
+        .values(totp_last_step=step)
+        .execution_options(synchronize_session=False)
+    ).rowcount == 1
     db.commit()
+    db.refresh(user)
+    return claimed

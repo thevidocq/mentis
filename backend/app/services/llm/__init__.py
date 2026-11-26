@@ -6,9 +6,10 @@ from app.services.llm.registry import (
     PRESETS,
     call_provider,
     call_with_failover,
+    list_models,
     ping,
     provider_config,
     set_transport,
 )
 
-__all__ = ["KINDS", "LLMError", "LLMReply", "PRESETS", "Turn", "call_provider", "call_with_failover", "ping", "provider_config", "set_transport"]
+__all__ = ["KINDS", "LLMError", "LLMReply", "PRESETS", "Turn", "call_provider", "call_with_failover", "list_models", "ping", "provider_config", "set_transport"]

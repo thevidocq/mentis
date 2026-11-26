@@ -67,9 +67,13 @@ def send(db: Session, inv: Invitation, token: str) -> bool:
         return False
 
 
+def is_expired(inv: Invitation) -> bool:
+    return _aware(inv.expires_at) < utcnow()
+
+
 def find_valid(db: Session, token: str) -> Invitation | None:
     inv = db.scalar(select(Invitation).where(Invitation.token_hash == hash_token(token)))
-    if inv is None or inv.accepted_at is not None or _aware(inv.expires_at) < utcnow():
+    if inv is None or inv.accepted_at is not None or is_expired(inv):
         return None
     return inv
 

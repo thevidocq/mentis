@@ -64,8 +64,10 @@ def send_one(cfg: dict, line: str, timeout: float = 3) -> None:
     data = line.encode("utf-8")
     host, port = cfg["host"], int(cfg["port"])
     if cfg["protocol"] == "udp":
+        # Cut long datagrams on a character boundary: half a UTF-8 sequence is rejected by strict parsers.
+        data = data[:8000].decode("utf-8", "ignore").encode("utf-8")
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-            s.sendto(data[:8000], (host, port))
+            s.sendto(data, (host, port))
         return
     frame = f"{len(data)} ".encode() + data
     raw = socket.create_connection((host, port), timeout=timeout)
@@ -125,7 +127,7 @@ class Forwarder:
             try:
                 send_one(cfg, format_event(e, cfg.get("app_name") or "mentis"), timeout=2)
                 self.sent += 1
-            except OSError as ex:
+            except (OSError, ValueError) as ex:
                 self.dropped += 1
                 self.last_error = f"{ex.__class__.__name__}: {ex}"[:200]
             return
@@ -155,7 +157,9 @@ class Forwarder:
                     conn.sendall(f"{len(data)} ".encode() + data)
                 self.sent += 1
                 self.last_error = None
-            except OSError as ex:
+            # Not only OSError: a host name IDNA cannot encode raises UnicodeError, and an exception
+            # escaping here would end the thread while submit() keeps queueing.
+            except Exception as ex:  # noqa: BLE001
                 self.dropped += 1
                 self.last_error = f"{ex.__class__.__name__}: {ex}"[:200]
                 if conn:

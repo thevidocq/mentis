@@ -3,7 +3,8 @@
 Rules
 - Only a READY version can be active; exactly one active version per document at most.
 - When a version becomes ready: if the tenant requires approval it waits (pending), otherwise
-  it becomes active at once. A failed version never replaces the active one.
+  it becomes active at once, unless a newer version is already active. A failed version never
+  replaces the active one.
 - Approve activates; reject keeps the previous active version.
 - Restore activates an older ready version that is not pending or rejected.
 """
@@ -49,7 +50,15 @@ def on_ready(db: Session, version: DocumentVersion) -> None:
         version.is_active = False
     else:
         version.approval = Approval.NOT_REQUIRED
-        activate(db, version)
+        # A version processed late (queued again after a Redis outage, or retried) must not replace
+        # a newer version already in use: it stays inactive and can be restored.
+        newer_active = db.scalar(select(DocumentVersion.id).where(
+            DocumentVersion.document_id == version.document_id, DocumentVersion.is_active.is_(True),
+            DocumentVersion.version > version.version))
+        if newer_active is None:
+            activate(db, version)
+        else:
+            version.is_active = False
 
 
 def approve(db: Session, version: DocumentVersion, reviewer_id) -> None:

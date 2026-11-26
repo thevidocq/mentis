@@ -6,7 +6,32 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import LlmProvider, Tenant
-from app.services.llm import provider_config
+from app.services.llm import KINDS, provider_config
+
+OPTION_KEYS = {"reasoning_effort", "max_tokens", "price_in", "price_out"}
+
+
+def provider_problem(kind, base_url, options) -> str | None:
+    """Why a provider definition is invalid, or None. Shared by the AI providers page and config import."""
+    if kind not in KINDS:
+        return "Unknown provider type."
+    if not isinstance(base_url, str) or not base_url.startswith(("http://", "https://")):
+        return "The URL must start with http:// or https://."
+    if not isinstance(options, dict):
+        return "Options must be an object."
+    if options.get("reasoning_effort") not in (None, "", "minimal", "low", "medium", "high"):
+        return "Reasoning effort must be minimal, low, medium or high."
+    for k in ("price_in", "price_out"):
+        v = options.get(k)
+        if v is not None and (not isinstance(v, int | float) or isinstance(v, bool) or not 0 <= v <= 1000):
+            return "Prices are USD per million tokens, between 0 and 1000."
+    unknown = set(options) - OPTION_KEYS
+    if unknown:
+        return f"Unknown options: {', '.join(sorted(unknown))}."
+    mt = options.get("max_tokens")
+    if mt is not None and (not isinstance(mt, int) or isinstance(mt, bool) or not 100 <= mt <= 16000):
+        return "Max tokens must be between 100 and 16000."
+    return None
 
 
 def default_provider(db: Session) -> LlmProvider | None:

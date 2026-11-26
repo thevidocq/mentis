@@ -7,6 +7,8 @@ Use it to move a configuration between lab and production or to keep it under ve
 use backup.sh for disaster recovery.
 """
 
+import re
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -14,11 +16,50 @@ from app import __version__
 from app.models import LlmProvider, PlatformSetting, Tenant
 from app.models.base import utcnow
 from app.models.tenant import DEFAULT_TENANT_SETTINGS
-from app.services import retention, syslog
+from app.services import llm_config, mail, retention, syslog
 from app.services import tenants as tenant_svc
 
 FORMAT = "mentis-config/1"
 _PROVIDER_FIELDS = ("kind", "base_url", "model", "options", "is_default")
+# Platform settings that travel, per section. Anything else in a file (secrets, the embedding
+# model the index was built with, keys of a newer version) is ignored.
+_PLATFORM_KEYS = {
+    "smtp": ("host", "port", "security", "username", "from_address"),
+    "embedding": ("url", "model"),
+    "syslog": tuple(syslog.DEFAULTS),
+}
+
+
+def _int_in(v, lo: int, hi: int) -> bool:
+    return isinstance(v, int) and not isinstance(v, bool) and lo <= v <= hi
+
+
+def _str_max(v, n: int) -> bool:
+    return isinstance(v, str) and len(v) <= n
+
+
+# The same limits as the settings pages, so an imported value cannot break sending or forwarding.
+_VALID = {
+    "smtp": {
+        "host": lambda v: _str_max(v, 255), "port": lambda v: _int_in(v, 1, 65535),
+        "security": lambda v: v in mail.SECURITY_MODES, "username": lambda v: _str_max(v, 255),
+        "from_address": lambda v: _str_max(v, 320),
+    },
+    "embedding": {
+        "url": lambda v: _str_max(v, 500) and v.startswith(("http://", "https://")),
+        "model": lambda v: _str_max(v, 200) and bool(v.strip()),
+    },
+    "syslog": {
+        "enabled": lambda v: isinstance(v, bool), "host": lambda v: _str_max(v, 253),
+        "port": lambda v: _int_in(v, 1, 65535), "protocol": lambda v: v in syslog.PROTOCOLS,
+        "verify_tls": lambda v: isinstance(v, bool),
+        "app_name": lambda v: isinstance(v, str) and re.fullmatch(r"[!-~]{1,48}", v) is not None,
+    },
+}
+
+
+def _incoming(platform: dict, key: str) -> dict:
+    return {k: v for k, v in platform[key].items() if k in _PLATFORM_KEYS[key]}
 
 
 class ImportError_(ValueError):
@@ -63,13 +104,18 @@ def _check(data: dict) -> None:
     if not isinstance(platform, dict) or any(not isinstance(platform.get(k, {}), dict)
                                              for k in ("smtp", "embedding", "syslog", "retention")):
         raise ImportError_("The platform section is malformed.")
+    for key, checks in _VALID.items():
+        if key in platform:
+            for k, v in _incoming(platform, key).items():
+                if not checks[k](v):
+                    raise ImportError_(f"The {key} setting {k} is invalid.")
     if "retention" in platform:
         for k in ("chats_days", "logs_days"):
             v = platform["retention"].get(k)
             if not isinstance(v, int) or isinstance(v, bool) or not 0 <= v <= retention.MAX_DAYS:
                 raise ImportError_(f"Retention {k} must be a number of days between 0 and {retention.MAX_DAYS}.")
     for t in data.get("tenants", []):
-        if not isinstance(t, dict) or not str(t.get("name", "")).strip():
+        if not isinstance(t, dict) or not isinstance(t.get("name"), str) or not t["name"].strip():
             raise ImportError_("Every tenant needs a name.")
         if len(str(t["name"]).strip()) < 2 or len(str(t["name"]).strip()) > 120:
             raise ImportError_(f"Tenant {t['name']}: the name must be 2 to 120 characters.")
@@ -83,10 +129,17 @@ def _check(data: dict) -> None:
     from app.services.llm import KINDS
 
     for p in data.get("llm_providers", []):
-        if not isinstance(p, dict) or not p.get("name") or p.get("kind") not in KINDS or not p.get("base_url") or not p.get("model"):
+        if (not isinstance(p, dict) or not _str_max(p.get("name"), 80) or not p["name"].strip()
+                or p.get("kind") not in KINDS or not _str_max(p.get("base_url"), 500)
+                or not _str_max(p.get("model"), 200) or not p["model"].strip()):
             raise ImportError_("Every AI provider needs name, a known kind, base_url and model.")
         if not isinstance(p.get("options", {}), dict):
             raise ImportError_(f"AI provider {p['name']}: options must be an object.")
+        problem = llm_config.provider_problem(p["kind"], p["base_url"], p.get("options", {}))
+        if problem:
+            raise ImportError_(f"AI provider {p['name']}: {problem}")
+        if not isinstance(p.get("is_default", False), bool):
+            raise ImportError_(f"AI provider {p['name']}: is_default must be true or false.")
 
 
 def import_config(db: Session, data: dict, apply: bool) -> list[str]:
@@ -100,7 +153,7 @@ def import_config(db: Session, data: dict, apply: bool) -> list[str]:
 
     for key, label in (("smtp", "Email (SMTP)"), ("embedding", "Embedding"), ("syslog", "Syslog forwarding")):
         if key in platform:
-            incoming = {k: v for k, v in platform[key].items() if not k.endswith("_enc")}
+            incoming = _incoming(platform, key)
             current = syslog.get_config(db) if key == "syslog" else _setting(db, key)
             if any(current.get(k) != v for k, v in incoming.items()):
                 plan.append(f"Update {label} settings")
@@ -141,8 +194,10 @@ def import_config(db: Session, data: dict, apply: bool) -> list[str]:
                     setattr(cur, f, v)
     if apply:
         db.flush()
+    # Providers this import adds count as existing for the plan too, so the dry run matches the apply.
+    known = set(existing) | {p["name"] for p in data.get("llm_providers", [])}
     default = next((p["name"] for p in data.get("llm_providers", []) if p.get("is_default")), None)
-    if default and default in existing and not existing[default].is_default:
+    if default and default in known and not (default in existing and existing[default].is_default):
         plan.append(f"Make {default} the default AI provider")
         if apply:
             for p in existing.values():
@@ -157,7 +212,7 @@ def import_config(db: Session, data: dict, apply: bool) -> list[str]:
         settings = {**DEFAULT_TENANT_SETTINGS, **(t.get("settings") or {})}
         for key, field in (("llm", "llm_provider_id"), ("llm_fallback", "llm_fallback_id")):
             ref = t.get(key)
-            if ref and ref not in existing:
+            if ref and ref not in known:
                 plan.append(f"Tenant {name}: AI provider {ref} not found, keeping the current choice")
             elif ref and apply:
                 settings[field] = str(existing[ref].id)

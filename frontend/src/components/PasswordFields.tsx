@@ -2,6 +2,7 @@
 
 export function passwordProblem(pw: string, confirm: string): string | null {
   if (pw.length < 12) return "At least 12 characters.";
+  if (pw.length > 256) return "At most 256 characters.";
   if (pw.toLowerCase() === pw || pw.toUpperCase() === pw) return "Mix upper and lower case letters.";
   if (!/\d/.test(pw)) return "Include at least one digit.";
   if (pw !== confirm) return "The two passwords do not match.";

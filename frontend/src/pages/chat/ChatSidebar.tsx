@@ -29,12 +29,12 @@ export function ChatSidebar({ chats, query, onQuery, onNew, onRename, onDelete, 
     <aside className="sidebar chat-sidebar">
       <div className="brand" style={{ justifyContent: "space-between" }}>
         <Brand />
-        <button className="btn btn-sm" onClick={onNew}><Icon name="plus" />New chat</button>
         <button className="icon-btn drawer-close" style={{ border: 0 }} aria-label="Close menu" onClick={onClose}><Icon name="x" /></button>
       </div>
-      <div className="sidebar-block">
+      <div className="sidebar-block chat-tools">
         <input className="input" type="search" placeholder="Search chats…" aria-label="Search chats" value={query}
-          onChange={(e) => onQuery(e.target.value)} style={{ width: "100%" }} />
+          onChange={(e) => onQuery(e.target.value)} />
+        <button className="btn new-chat-btn" aria-label="New chat" title="New chat" onClick={onNew}><Icon name="plus" size={18} /></button>
       </div>
       <nav className="nav chat-history" aria-label="Chat history">
         {chats.length === 0 && <span className="muted small" style={{ padding: "8px 10px" }}>{query ? "No chats match." : "No chats yet."}</span>}

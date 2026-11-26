@@ -1,6 +1,6 @@
 import QRCode from "qrcode";
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, Link } from "react-router-dom";
 import { api, errorText } from "../api/client";
 import type { User } from "../api/types";
 import { homePath, useAuth } from "../auth/AuthContext";
@@ -89,6 +89,7 @@ export function Login() {
             </label>
             {error && <div className="error" role="alert">{error}</div>}
             <button className="btn btn-primary" disabled={busy}>Continue</button>
+            <Link className="link-btn small" to="/forgot">Forgot password?</Link>
           </div>
         </form>
       )}

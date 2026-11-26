@@ -74,6 +74,18 @@ def test_csv_export_neutralises_formulas(super_admin):
     assert "'=HYPERLINK(1)" in super_admin.get("/api/logs/export").text
 
 
+def test_csv_export_neutralises_tab_and_carriage_return(super_admin):
+    from app.services.logs import log_event
+
+    db = _db()
+    try:
+        log_event(db, "test.event", target="\t=cmd|' /C calc'!A0", ip="\r=1+1")
+    finally:
+        db.close()
+    text = super_admin.get("/api/logs/export").text
+    assert "'\t=cmd" in text and "'\r=1+1" in text
+
+
 # --- Syslog --------------------------------------------------------------------
 
 def test_syslog_format():
@@ -139,6 +151,19 @@ def test_syslog_udp_and_unreachable(super_admin):
     super_admin.put("/api/platform/syslog", json={"enabled": True, "host": "127.0.0.1", "port": dead, "protocol": "tcp"})
     assert super_admin.post("/api/platform/syslog/test").json()["ok"] is False
     assert super_admin.get("/api/tenants").status_code == 200
+
+
+def test_syslog_bad_host_name_does_not_stop_forwarding(super_admin):
+    # "collector..local" cannot be IDNA-encoded: UnicodeError, not OSError.
+    r = super_admin.put("/api/platform/syslog", json={"enabled": True, "host": "collector..local", "port": 514, "protocol": "tcp"})
+    assert r.status_code == 200
+    t = super_admin.post("/api/platform/syslog/test")
+    assert t.status_code == 200 and t.json()["ok"] is False
+    dropped = syslog.forwarder.dropped
+    _tenant(super_admin, "Alfa")
+    syslog.forwarder.flush()
+    assert syslog.forwarder.dropped > dropped
+    assert syslog.forwarder._thread is not None and syslog.forwarder._thread.is_alive()
 
 
 # --- Retention -----------------------------------------------------------------
@@ -267,6 +292,43 @@ def test_config_import_rejects_bad_files(super_admin):
         assert r.status_code == 422, raw
     an = _analyst(super_admin)
     assert an.get("/api/platform/config/export").status_code == 403
+
+
+def test_config_import_validates_platform_and_provider_values(super_admin):
+    base = {"format": "mentis-config/1"}
+    bad = [{"platform": {"syslog": {"protocol": "carrier-pigeon"}}},
+           {"platform": {"syslog": {"port": "514"}}},
+           {"platform": {"smtp": {"security": "maybe"}}},
+           {"platform": {"embedding": {"url": "ftp://x"}}},
+           {"tenants": [{"name": 12345}]},
+           {"llm_providers": [{"name": "P", "kind": "anthropic", "base_url": "https://a", "model": "m",
+                               "options": {"price_in": "0.25"}}]},
+           {"llm_providers": [{"name": ["P"], "kind": "anthropic", "base_url": "https://a", "model": "m"}]}]
+    for extra in bad:
+        r = super_admin.post("/api/platform/config/import", params={"apply": "true"},
+                             files={"file": ("c.json", json.dumps({**base, **extra}).encode(), "application/json")})
+        assert r.status_code == 422, extra
+    # Keys that do not travel are ignored, e.g. the model the index was built with.
+    raw = json.dumps({**base, "platform": {"embedding": {"model": "other-model", "indexed_model": "forged"}}}).encode()
+    r = super_admin.post("/api/platform/config/import", params={"apply": "true"}, files={"file": ("c.json", raw, "application/json")})
+    assert r.status_code == 200, r.text
+    emb = super_admin.get("/api/platform/embedding").json()
+    assert emb["model"] == "other-model" and emb["indexed_model"] != "forged"
+
+
+def test_config_import_dry_run_matches_apply_for_new_provider(super_admin):
+    data = {"format": "mentis-config/1",
+            "llm_providers": [{"name": "Local", "kind": "openai_chat", "base_url": "http://ollama:11434/v1",
+                               "model": "llama3.1", "options": {}, "is_default": True}],
+            "tenants": [{"name": "Alfa", "status": "active", "llm": "Local"}]}
+    files = {"file": ("c.json", json.dumps(data).encode(), "application/json")}
+    dry = super_admin.post("/api/platform/config/import", files=files).json()["changes"]
+    done = super_admin.post("/api/platform/config/import", params={"apply": "true"}, files=files).json()["changes"]
+    assert dry == done
+    assert not any("not found" in c for c in dry) and "Make Local the default AI provider" in dry
+    alfa = next(t for t in super_admin.get("/api/tenants").json() if t["name"] == "Alfa")
+    names = {p["id"]: p["name"] for p in super_admin.get("/api/llm/providers").json()}
+    assert names[super_admin.get(f"/api/tenants/{alfa['id']}/llm").json()["provider_id"]] == "Local"
 
 
 def test_importing_own_export_changes_nothing(super_admin):

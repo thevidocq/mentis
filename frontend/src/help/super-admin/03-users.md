@@ -24,6 +24,7 @@ If SMTP is configured, the user receives an email. Otherwise Mentis shows the li
 ## Edit, disable, delete
 
 - Pencil icon: change name, role, customers, or turn the account off. Disabling, changing the role or the customers signs the user out everywhere.
+- Envelope icon: **password reset link** for a user who forgot the password. It is emailed when SMTP works, otherwise shown to copy and send yourself; it works once for 24 hours, and the user still needs the authenticator app.
 - Key icon: **reset 2FA** when a user lost their phone.
 - Trash icon: delete the user.
 

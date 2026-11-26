@@ -43,7 +43,7 @@ export async function api<T = unknown>(path: string, options: { method?: string;
 
 // The session expired or was revoked (password changed elsewhere, account disabled):
 // tell the app, which goes back to the sign-in page. Sign-in steps report their own 401s.
-const SIGN_IN_PATHS = ["/auth/login", "/auth/totp", "/setup", "/invitations/accept"];
+const SIGN_IN_PATHS = ["/auth/login", "/auth/totp", "/auth/password", "/setup", "/invitations/accept"];
 function sessionLost(path: string) {
   if (!SIGN_IN_PATHS.some((p) => path.startsWith(p))) window.dispatchEvent(new Event("mentis:session-lost"));
 }

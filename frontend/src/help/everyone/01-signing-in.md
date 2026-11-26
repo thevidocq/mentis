@@ -13,11 +13,20 @@ Mentis always asks for two things: your password and a 6-digit code from an auth
 
 Enter email and password, then the current 6-digit code from the app. Codes change every 30 seconds.
 
+## Forgot your password
+
+1. On the sign-in page select **Forgot password?** and enter your email.
+2. Open the link you receive (valid 60 minutes, once) and choose a new password.
+3. Sign in with the new password and the code from your authenticator app: the app is still required.
+
+Every open session is closed when the password changes. If no email arrives (email not configured), ask an admin: they can create a reset link from **Users** and send it to you.
+
 ## Password rules
 
 - At least 12 characters
 - Upper and lower case letters
 - At least one digit
+- At most 256 characters
 
 ## Sessions
 

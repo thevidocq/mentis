@@ -14,8 +14,12 @@ container() { docker compose ps -aq "$1" | head -1; }
 API_IMAGE=$(docker inspect -f '{{.Image}}' "$(container api)")
 # Copy a service's data folder with a throwaway container that mounts the same volume.
 archive() {  # service, path in the container, output file
+  local rc=0
   docker run --rm --user 0 --entrypoint tar --volumes-from "$(container "$1")" -v "$DEST":/backup "$API_IMAGE" \
-    czf "/backup/$3" -C "$2" .
+    --warning=no-file-changed -czf "/backup/$3" -C "$2" . || rc=$?
+  # GNU tar exits 1 when a file changed while it was read (MinIO keeps running): the archive is
+  # complete, so do not abort the whole backup for it. Any other code is a real failure.
+  [ "$rc" -eq 0 ] || [ "$rc" -eq 1 ] || return "$rc"
 }
 
 echo "Backing up to $DEST"

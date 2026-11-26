@@ -19,6 +19,7 @@ export function Users() {
   const [editing, setEditing] = useState<AdminUser | null>(null);
   const [deleting, setDeleting] = useState<AdminUser | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [resetLink, setResetLink] = useState<{ email: string; url: string; hours: number } | null>(null);
 
   const load = useCallback(() => {
     Promise.all([api<AdminUser[]>("/users"), api<Invitation[]>("/invitations"), api<Tenant[]>("/tenants")])
@@ -38,6 +39,14 @@ export function Users() {
       await api(`/users/${u.id}/reset-2fa`, { method: "POST" });
       setNotice(`2FA reset for ${u.email}. They will set up the authenticator again at next sign-in.`);
       load();
+    } catch (e) { setError(errorText(e)); }
+  }
+
+  async function passwordLink(u: AdminUser) {
+    try {
+      const r = await api<{ email_sent: boolean; reset_url: string | null; expires_hours: number }>(`/users/${u.id}/password-reset`, { method: "POST" });
+      if (r.email_sent || !r.reset_url) setNotice(`A password reset link was emailed to ${u.email} (valid ${r.expires_hours} hours, once).`);
+      else setResetLink({ email: u.email, url: r.reset_url, hours: r.expires_hours });
     } catch (e) { setError(errorText(e)); }
   }
 
@@ -72,6 +81,7 @@ export function Users() {
                   <td>
                     <div className="actions">
                       <button className="icon-btn" aria-label={`Edit ${u.email}`} onClick={() => setEditing(u)}><Icon name="pencil" /></button>
+                      {u.id !== me?.id && u.is_active && <button className="icon-btn" aria-label={`Password reset link for ${u.email}`} title="Password reset link" onClick={() => passwordLink(u)}><Icon name="mail" /></button>}
                       {isSuper && <button className="icon-btn" aria-label={`Reset 2FA for ${u.email}`} title="Reset 2FA" onClick={() => resetTwoFactor(u)}><Icon name="key" /></button>}
                       <button className="icon-btn danger" aria-label={`Delete ${u.email}`} disabled={u.id === me?.id} onClick={() => setDeleting(u)}><Icon name="trash" /></button>
                     </div>
@@ -104,6 +114,14 @@ export function Users() {
 
       {inviting && <InviteForm isSuper={isSuper} canGiveAll={canGiveAll} tenants={tenants} myTenant={current?.id ?? null} onClose={() => setInviting(false)} onDone={() => load()} />}
       {editing && <EditUser user={editing} isSuper={isSuper} canGiveAll={canGiveAll} isSelf={editing.id === me?.id} tenants={tenants} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />}
+      {resetLink && (
+        <Modal title="Password reset link" onClose={() => setResetLink(null)}
+          footer={<button className="btn btn-primary" onClick={() => setResetLink(null)}>Done</button>}>
+          <p style={{ margin: 0 }}>Email is not configured: send this link to <strong>{resetLink.email}</strong> yourself. It works once, for {resetLink.hours} hours. Their authenticator app is still required to sign in.</p>
+          <div className="notice mono">{resetLink.url}</div>
+          <button className="btn" onClick={() => navigator.clipboard?.writeText(resetLink.url)}>Copy link</button>
+        </Modal>
+      )}
       {deleting && (
         <Modal danger title={`Delete ${deleting.full_name}?`} onClose={() => setDeleting(null)}
           footer={<><button className="btn" onClick={() => setDeleting(null)}>Cancel</button>
@@ -124,7 +142,13 @@ interface Access { tenantIds: string[]; all: boolean }
 function AccessPicker({ tenants, value, onChange, canGiveAll }: {
   tenants: Tenant[]; value: Access; onChange: (a: Access) => void; canGiveAll: boolean;
 }) {
-  const ordered = [...tenants].sort((a, b) => Number(b.is_global) - Number(a.is_global) || a.name.localeCompare(b.name));
+  const [q, setQ] = useState("");
+  const [onlySelected, setOnlySelected] = useState(false);
+  const many = tenants.length > 8;
+  const needle = q.trim().toLowerCase();
+  const ordered = [...tenants]
+    .sort((a, b) => Number(b.is_global) - Number(a.is_global) || a.name.localeCompare(b.name))
+    .filter((t) => (!needle || t.name.toLowerCase().includes(needle)) && (!onlySelected || value.tenantIds.includes(t.id)));
   const toggle = (id: string) => onChange({ ...value, tenantIds: value.tenantIds.includes(id) ? value.tenantIds.filter((x) => x !== id) : [...value.tenantIds, id] });
   return (
     <fieldset className="field tenant-picker">
@@ -135,12 +159,26 @@ function AccessPicker({ tenants, value, onChange, canGiveAll }: {
           <span><strong>All customers, including future ones</strong><br /><span className="muted small">New customers are added automatically.</span></span>
         </label>
       )}
-      {!value.all && ordered.map((t) => (
-        <label key={t.id} className="check">
-          <input type="checkbox" checked={value.tenantIds.includes(t.id)} onChange={() => toggle(t.id)} />
-          {t.name}{t.is_global && <span className="muted small"> · shared documentation</span>}
-        </label>
-      ))}
+      {!value.all && many && (
+        <div className="row" style={{ gap: 8, flexWrap: "nowrap" }}>
+          <input className="input" type="search" placeholder="Search customers…" aria-label="Search customers" value={q}
+            onChange={(e) => setQ(e.target.value)} style={{ flex: 1, minWidth: 0 }} />
+          <label className="check small" style={{ whiteSpace: "nowrap" }}>
+            <input type="checkbox" checked={onlySelected} onChange={(e) => setOnlySelected(e.target.checked)} />Selected only
+          </label>
+        </div>
+      )}
+      {!value.all && (
+        <div className={many ? "tenant-picker-list" : undefined}>
+          {ordered.map((t) => (
+            <label key={t.id} className="check">
+              <input type="checkbox" checked={value.tenantIds.includes(t.id)} onChange={() => toggle(t.id)} />
+              {t.name}{t.is_global && <span className="muted small"> · shared documentation</span>}
+            </label>
+          ))}
+          {ordered.length === 0 && <span className="muted small">No customer matches.</span>}
+        </div>
+      )}
     </fieldset>
   );
 }

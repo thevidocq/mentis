@@ -1,10 +1,10 @@
 import { FormEvent, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
 import { api, errorText } from "../api/client";
 import { ROLE_LABEL, Theme, User } from "../api/types";
-import { applyTheme, homePath, useAuth } from "../auth/AuthContext";
+import { applyTheme, useAuth } from "../auth/AuthContext";
 import { Icon } from "../components/Icon";
-import { Brand } from "../components/Logo";
+import { PageHead } from "../layouts/AdminShell";
+import { PersonalShell } from "../layouts/PersonalShell";
 import { PasswordFields, passwordProblem } from "../components/PasswordFields";
 
 const THEMES: { id: Theme; label: string; bg: string; side: string; body: string }[] = [
@@ -14,8 +14,7 @@ const THEMES: { id: Theme; label: string; bg: string; side: string; body: string
 ];
 
 export function Account() {
-  const { user, setUser, logout } = useAuth();
-  const navigate = useNavigate();
+  const { user, setUser } = useAuth();
   const [editingName, setEditingName] = useState(false);
   const [fullName, setFullName] = useState(user?.full_name ?? "");
   const [current, setCurrent] = useState("");
@@ -59,20 +58,10 @@ export function Account() {
     }
   }
 
-  async function signOut() {
-    await logout();
-    navigate("/login", { replace: true });
-  }
-
   return (
-    <div style={{ minHeight: "100%" }}>
-      <header className="page-head" style={{ minHeight: 0, padding: "14px 32px" }}>
-        <Brand />
-        <Link to={homePath(user)} className="row" style={{ gap: 6, textDecoration: "none" }}><Icon name="arrowLeft" />Back</Link>
-        <button className="btn btn-sm spacer" onClick={signOut}><Icon name="logout" />Sign out</button>
-      </header>
-      <div className="stack" style={{ maxWidth: 760, margin: "0 auto", padding: "32px 24px" }}>
-        <h1>Account</h1>
+    <PersonalShell>
+      <PageHead title="Account" />
+      <div className="page-body" style={{ maxWidth: 760 }}>
         {error && <div className="error">{error}</div>}
 
         <section className="card">
@@ -130,6 +119,6 @@ export function Account() {
           </form>
         </section>
       </div>
-    </div>
+    </PersonalShell>
   );
 }

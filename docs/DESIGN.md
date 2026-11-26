@@ -66,6 +66,7 @@ One chat = one customer scope, locked at the first message; integrations are cho
 - Citations: documents as [1], [2] (document, version, page/sheet/slide); live integration data as [A], [B] (source, object, read time).
 - If the documentation does not cover the question: "Not found in <customer> documentation", never an invented procedure. With no passage above the score threshold the LLM is not called at all; the model can also flag not-found itself.
 - Passages go to the LLM as numbered, untrusted data blocks labelled with their customer; citation numbers not among them are dropped.
+- Sources under the answer are compact: one closed line ("Sources · 1 document · 8 sections"), opened into one block per document (version) with its cited sections in number order. The customer badge appears only when the answer mixes customers or uses General. A click on [n] opens the panel on that section.
 - The last turns of the chat are sent as context; short follow-ups also reuse the previous question for retrieval.
 
 **Suggested follow-ups**
@@ -87,7 +88,7 @@ Uploads run as background jobs; a new version reaches answers only once indexed 
 
 **Pipeline**
 
-1. Upload (PDF, DOCX, PPTX, XLSX, up to 50 MB) → validated (extension matches content, no macros, not encrypted, zip-bomb guard) → original stored in MinIO under a generated key.
+1. Upload (PDF, DOCX, PPTX, XLSX, up to 50 MB) → validated (extension matches content, no macros, no encrypted Office files, zip-bomb guard; a PDF that needs a password to open fails in the worker, one that only restricts printing or copying is read) → original stored in MinIO under a generated key.
 2. The ingestion worker (separate container, RQ on Redis, CPU/RAM limits, 30-minute timeout) parses the file into pages:
     - PDF: one page per page; native text and tables via pdfplumber; pages with almost no text are rendered (pypdfium2) and read with Tesseract OCR (English + Italian) with a confidence score; every page is rendered as an image for the preview.
     - DOCX: split into sections at top-level headings; headings and tables preserved.
@@ -119,17 +120,16 @@ Uploads run as background jobs; a new version reaches answers only once indexed 
 
 ## AI layer
 
-LLM is configurable per tenant; default for the prototype is Claude Haiku. Embeddings stay local.
+LLM is configurable per tenant; the platform default is whichever provider the super-admin marks as default. Embeddings stay local.
 
 | Provider type | Use | Notes |
 | --- | --- | --- |
-| Anthropic | Claude Haiku (default) | API key |
+| Anthropic | Claude models | API key |
 | OpenAI Chat Completions | OpenAI cloud, vLLM, compatible endpoints | `/v1/chat/completions` |
 | OpenAI Responses API | Internal gpt-oss (vLLM) | `/v1/responses`, reasoning auto-on for gpt-oss/o-series, API key optional |
-| Daybreak Blue | OpenAI defensive-cyber model (`gpt-daybreak-blue-latest`) | Requires approval in OpenAI's Daybreak program |
 | Ollama | Local models | No key |
 
-- Every provider: test connection, failover to the tenant's fallback provider. One platform default; each tenant can choose its own provider and fallback. API keys encrypted at rest. (Model discovery: later.)
+- Every provider: test connection, failover to the tenant's fallback provider. One platform default; each tenant can choose its own provider and fallback. API keys encrypted at rest. Models are discovered from the provider (`GET /models`) and picked from a list; presets carry no model names.
 - **Embeddings:** local by default (bge-m3, multilingual). Other providers configurable (Ollama, OpenAI-compatible endpoints).
 - **Vector DB:** Qdrant only, one collection per tenant.
 - **Retrieval:** customer chunks + General chunks (if enabled), active versions only, score threshold; customer wins on conflict.
@@ -200,6 +200,7 @@ PostgreSQL (users, tenants, chats, audit) | Qdrant (one collection per tenant) |
 ## Security, audit and retention
 
 - **Auth:** local login + TOTP 2FA from day one; SSO/OIDC (Entra ID) configurable later.
+- **Password reset:** "Forgot password?" emails a one-time link (60 minutes; same answer whether the email exists; at most one email every 2 minutes per user). Admins who can manage a user create a 24-hour link from Users, emailed or shown to copy when SMTP is off. The link only sets the password: 2FA is still required, every session is closed, the account is unlocked, and both events are logged. Expired links are purged.
 - **Isolation:** server-side tenant filter on every retrieval and integration call; chat tenant fixed in the database.
 - **Read-only:** no writes to customer systems from chat.
 - **Secrets:** encrypted at rest, write-only in the UI.

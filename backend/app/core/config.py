@@ -72,6 +72,8 @@ class Settings(BaseSettings):
     # Base URL users open in the browser; used to build invitation links.
     public_url: str = "http://localhost"
     invitation_ttl_hours: int = 72
+    password_reset_ttl_minutes: int = 60          # link emailed from the sign-in page
+    password_reset_admin_ttl_hours: int = 24      # link created by an admin
 
 
 @lru_cache

@@ -11,7 +11,9 @@ Accepted: **PDF, DOCX, PPTX, XLSX**, up to 50 MB each.
 Refused, with the reason shown:
 
 - macro-enabled files (.docm, .xlsm, .pptm) and old formats (.doc, .xls, .ppt): save them in the modern format first
-- password-protected or encrypted files
+- password-protected or encrypted Office files
+
+A PDF that only restricts printing or copying is accepted and read normally. A PDF that needs a password to open is stored but ends as **Failed** ("The file is password-protected"): remove the password and upload it again.
 - files whose content does not match the extension
 
 ## Versions

@@ -187,7 +187,10 @@ tr.clickable:hover td { background: var(--raised); }
   .modal { max-width: none; border-radius: 14px 14px 0 0; max-height: 92dvh; display: flex; flex-direction: column; }
   .modal-body { overflow-y: auto; }
   .modal-foot { padding-bottom: max(14px, env(safe-area-inset-bottom)); }
-  .theme-grid { grid-template-columns: minmax(0, 1fr); }
+  .theme-grid { gap: 8px; }
+  .theme-option { padding: 8px; gap: 6px; }
+  .theme-option.selected { padding: 7px; }
+  .theme-swatch { height: 36px; }
   .preview-pages { flex: 1 1 100%; max-height: 180px; flex-direction: row; flex-wrap: wrap; }
   .preview-pages button { flex: 0 0 auto; }
   .tenant-switch { width: 100%; margin-top: 6px; }
@@ -228,3 +231,20 @@ tr.clickable:hover td { background: var(--raised); }
 .account-action.danger { color: var(--danger); }
 .account-action.danger:hover { background: color-mix(in srgb, var(--danger) 14%, transparent); }
 .release-line { font-size: 11px; padding: 6px 6px 0; }
+.link-btn { background: none; border: 0; padding: 0; color: var(--accent-text); cursor: pointer; text-align: left; width: fit-content; }
+.link-btn:hover { text-decoration: underline; }
+
+/* Customer switcher with search (many customers) */
+.customer-select { position: relative; }
+.customer-select-btn { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; cursor: pointer; }
+.customer-select-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.customer-panel { position: absolute; z-index: 30; top: calc(100% + 6px); left: 0; right: 0; display: flex; flex-direction: column; gap: 6px; padding: 8px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35); }
+.customer-panel ul { list-style: none; margin: 0; padding: 0; max-height: 320px; overflow-y: auto; }
+.customer-panel li[role="option"] { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+.customer-panel li[role="option"] span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.customer-panel li.active { background: var(--raised); }
+.customer-panel li.current { color: var(--accent-text); font-weight: 600; }
+.customer-panel-head { padding: 8px 10px 2px; }
+.customer-panel-empty { padding: 8px 10px; }
+.tenant-picker-list { display: flex; flex-direction: column; gap: 8px; max-height: 260px; overflow-y: auto; padding-right: 4px; }
