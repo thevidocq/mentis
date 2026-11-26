@@ -24,6 +24,10 @@ Whatever a plugin does, the core:
 - uses an integration only in chats on its own customer;
 - treats records as data, never as instructions, and keeps only links to the records found in answers.
 
+## Lookup mode per customer
+
+Each customer uses **Standard** (default: lookups decided before reading any data, one model call, every model) or **Function calling** (the model reads each result and can ask for further lookups, up to 3 steps and 8 lookups). You choose it in **Tenants → LLM**; tenant admins only when the customer uses its own LLM chosen by them. A model without function calling falls back to Standard (`integration.tools_unavailable` in Logs). Changes are logged as `tenant.integration_mode`.
+
 ## Status and logs
 
 - **Service status** has one line per active integration (its Test, category *Integrations*).

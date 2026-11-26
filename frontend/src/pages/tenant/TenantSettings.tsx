@@ -3,6 +3,7 @@ import { api, errorText } from "../../api/client";
 import type { Tenant, TenantSettings as Settings } from "../../api/types";
 import { useCurrentTenant } from "../../auth/currentTenant";
 import { PageHead } from "../../layouts/AdminShell";
+import { IntegrationModeForm } from "../integrations/IntegrationModeForm";
 
 const OPTIONS: { key: keyof Settings; label: string; help: string }[] = [
   { key: "include_general", label: "Include the General Knowledge Base", help: "Answers also use the general knowledge shared by all customers. Your own procedures win on conflict." },
@@ -48,6 +49,12 @@ export function TenantSettings() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+        {tenant && !current?.is_general && (
+          <div className="card">
+            <div className="card-head"><h2>Integrations</h2></div>
+            <div className="card-body"><IntegrationModeForm tenantId={tenant.id} /></div>
           </div>
         )}
       </div>
