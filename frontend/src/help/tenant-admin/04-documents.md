@@ -33,8 +33,12 @@ At the top of the document:
 - **Approve vN** / **Reject**: when the latest version waits for approval.
 - **Retry vN**: when the latest version failed (fix the cause first, e.g. the embedding service).
 - **New version**: upload a file as the next version of **this** document, whatever its file name (same file type).
-- Download icon: the original file of the version on screen.
+- Download icon: a menu with the formats of the version on screen: **Original** (the file as uploaded), **Markdown** (the text Mentis read, page by page, with a header: customer, version, file, date, SHA-256) and **JSON** (the same text plus the passages as indexed, with page and section: to import the documentation into another system). Markdown and JSON are available once the version has been read.
 - **⋯**: **Rename**, **Versions and restore**, **Delete document**.
+
+## Download all
+
+**All** (download icon) at the top of the list downloads a ZIP with every document **in use** of the customer, in the format you pick: originals, Markdown or JSON. A `manifest.json` in the ZIP lists the files, their versions and how many documents were left out (waiting for approval, not read yet, or failed). Originals are limited to 300 MB per download (set by the administrator); Markdown and JSON have no limit. Every download is in the audit log.
 
 ## Versions
 

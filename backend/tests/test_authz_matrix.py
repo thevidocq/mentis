@@ -85,6 +85,7 @@ class World:
     uid: dict         # actor -> user id
     provider: str
     fake: FakeLLM
+    integ: dict = field(default_factory=dict)  # "A"/"B" -> integration id (the GKB has none)
 
 
 # --- World -------------------------------------------------------------------------
@@ -97,8 +98,11 @@ def world():
 
     from app.main import create_app
     from app.models import Base
+    from app.connectors import http as connector_http
+    from app.connectors import registry
     from app.services import embeddings, jobs, llm, storage, vector_index
     from tests import fake_embeddings
+    from tests.fake_connector import FakeDesk, FakeDeskServer
 
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(engine)
@@ -111,6 +115,8 @@ def world():
     embeddings.set_embedder(fake_embeddings.embed)
     fake = FakeLLM()
     llm.set_transport(fake.transport())
+    registry.set_connectors({"fakedesk": FakeDesk()})
+    connector_http.set_transport(FakeDeskServer().transport())
     try:
         app = create_app()
         app.state.auth_limiter = None  # thousands of sign-ins from one test client; the limiter has its own tests
@@ -120,6 +126,8 @@ def world():
             yield _build(c, fake)
     finally:
         llm.set_transport(None)
+        registry.set_connectors(None)
+        connector_http.set_transport(None)
         storage.set_storage(None)
         jobs.set_runner(None)
         vector_index.set_client(None)
@@ -199,10 +207,19 @@ def _build(c: TestClient, fake: FakeLLM) -> World:
                                               "role": "tenant_admin" if k == "G" else "analyst", "tenant_ids": [t[k]]})
         inv[k] = r.json()["id"]
 
+    # One integration per customer (the General Knowledge Base has none).
+    assert sa.put("/api/platform/integrations", json={"enabled": ["fakedesk"]}).status_code == 200
+    integ = {}
+    for k, admin in (("A", "ta_a"), ("B", "ta_b")):
+        r = clients[admin].post(f"/api/tenants/{t[k]}/integrations",
+                                json={"plugin": "fakedesk", "name": f"Desk {k}", "config": {"url": "https://desk.example.com", "token": "tok-SECRET-1"}})
+        assert r.status_code == 201, r.text
+        integ[k] = r.json()["id"]
+
     # Disable last: its client keeps a cookie whose session no longer exists.
     assert sa.patch(f"/api/users/{uid['disabled']}", json={"is_active": False}).status_code == 200
     return World(c=c, clients=clients, t=t, doc=doc, ver=ver, page=page, chat=chat, msg=msg, share=share, inv=inv,
-                 inv_email=inv_email, uid=uid, provider=provider, fake=fake)
+                 inv_email=inv_email, uid=uid, provider=provider, fake=fake, integ=integ)
 
 
 # --- Who may see what ------------------------------------------------------------
@@ -252,6 +269,7 @@ def forbidden_tokens(w: World, actor: str) -> dict[str, str]:
                     DOC_NAME[k]: f"document name {k}", SECRET[k]: f"document text {k}"})
         if k != "G":
             out[{"A": "AlfaCorp", "B": "BetaCorp"}[k]] = f"tenant name {k}"
+            out[w.integ[k]] = f"integration id {k}"
     for k in "ABG":
         if not manages_invitation(actor, k):
             out[w.inv[k]] = f"invitation id {k}"
@@ -364,6 +382,25 @@ def user_route(w: World, method: str, tmpl: str, kw: dict | None = None, *, allo
             else:
                 exp = 404
             out.append(Probe(a, method, path, exp, kw or {}, skip=skip_allowed if exp not in DENIALS else None))
+    return out
+
+
+def integration_route(w: World, method: str, suffix: str, body: dict, skip: str | None) -> list[Probe]:
+    """/tenants/{t}/integrations/{i}...: every integration under every tenant id (IDOR)."""
+    out = []
+    for a in ACTORS:
+        for k in "ABG":
+            for o in "AB":
+                path = f"/api/tenants/{w.t[k]}/integrations/{w.integ[o]}{suffix}"
+                if a in LOGGED_OUT:
+                    exp = 401
+                elif a not in TAS:
+                    exp = 403
+                elif administers(a, k) and o == k:
+                    exp = ALLOW
+                else:
+                    exp = 404
+                out.append(Probe(a, method, path, exp, body, skip=skip if exp == ALLOW else None))
     return out
 
 
@@ -510,6 +547,7 @@ def _routes(w: World) -> dict[tuple[str, str], list[Probe]]:
     D = A + "/tenants/{t}/documents"
     add("GET", "/tenants/{tenant_id}/documents", tenant_route(w, "GET", D, obj=False))
     add("GET", "/tenants/{tenant_id}/documents/overview", tenant_route(w, "GET", D + "/overview", obj=False))
+    add("GET", "/tenants/{tenant_id}/documents/export", tenant_route(w, "GET", D + "/export?format=md", obj=False))
     add("POST", "/tenants/{tenant_id}/documents", tenant_route(
         w, "POST", D, lambda k, o: {"files": {"file": ("x.docx", b"not a document", "application/octet-stream")}}, obj=False, allowed_status=422))
     add("GET", "/tenants/{tenant_id}/documents/{document_id}", tenant_route(w, "GET", D + "/{doc}"))
@@ -518,6 +556,7 @@ def _routes(w: World) -> dict[tuple[str, str], list[Probe]]:
     V = D + "/versions/{ver}"
     add("GET", "/tenants/{tenant_id}/documents/versions/{version_id}", tenant_route(w, "GET", V))
     add("GET", "/tenants/{tenant_id}/documents/versions/{version_id}/pages", tenant_route(w, "GET", V + "/pages"))
+    add("GET", "/tenants/{tenant_id}/documents/versions/{version_id}/export", tenant_route(w, "GET", V + "/export?format=json"))
     add("GET", "/tenants/{tenant_id}/documents/versions/{version_id}/pages/{index}/image", tenant_route(w, "GET", V + "/pages/{page}/image"))
     add("GET", "/tenants/{tenant_id}/documents/versions/{version_id}/original", tenant_route(w, "GET", V + "/original"))
     add("POST", "/tenants/{tenant_id}/documents/versions/{version_id}/approve", tenant_route(w, "POST", V + "/approve", allowed_status=409))
@@ -526,6 +565,28 @@ def _routes(w: World) -> dict[tuple[str, str], list[Probe]]:
     add("POST", "/tenants/{tenant_id}/documents/versions/{version_id}/retry", tenant_route(w, "POST", V + "/retry", allowed_status=409))
     add("POST", "/tenants/{tenant_id}/documents/versions/{version_id}/search", tenant_route(
         w, "POST", V + "/search", lambda k, o: {"json": {"question": "brute force attacks"}}))
+
+    # Integrations: plugins for super-admins; instances for the tenant admins of that customer only.
+    add("GET", "/platform/integrations", super_only("GET", A + "/platform/integrations"))
+    add("PUT", "/platform/integrations", super_only("PUT", A + "/platform/integrations", kw={"json": {"enabled": ["fakedesk"]}}))
+    I = A + "/tenants/{t}/integrations"
+    add("GET", "/tenants/{tenant_id}/integrations", tenant_route(w, "GET", I, obj=False))
+    add("POST", "/tenants/{tenant_id}/integrations", tenant_route(
+        w, "POST", I, lambda k, o: {"json": {"plugin": "nope", "name": "x", "config": {}}}, obj=False, allowed_status=422))
+    for method, suffix, body, skip in [
+        ("PUT", "", {"json": {"enabled": True}}, None),
+        ("DELETE", "", {}, "would delete a world integration"),
+        ("POST", "/test", {}, None),
+        ("POST", "/run", {"json": {"operation": "search", "args": {"query": "x"}}}, None),
+    ]:
+        add(method, "/tenants/{tenant_id}/integrations/{integration_id}" + suffix, integration_route(w, method, suffix, body, skip))
+    chat_integ = []
+    for a in ACTORS:
+        for k in "ABG":
+            path = f"{A}/chats/integrations?tenant_id={t[k]}"
+            exp = 401 if a in LOGGED_OUT else 403 if a == "sa" else ALLOW if k in sees(a) else 403
+            chat_integ.append(Probe(a, "GET", path, exp))
+    add("GET", "/chats/integrations", chat_integ)
 
     # Chats: content roles; each chat only to its owner.
     add("GET", "/chats/scopes", by_role("GET", A + "/chats/scopes", CONTENT))

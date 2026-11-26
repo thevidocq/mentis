@@ -12,6 +12,7 @@ from app.api.routes import (
     chats,
     documents,
     health,
+    integrations,
     invitations,
     llm_providers,
     logs,
@@ -58,7 +59,7 @@ def create_app() -> FastAPI:
             response.headers.setdefault("Pragma", "no-cache")
         return response
 
-    for module in (health, setup, auth, password_reset, chat_shares, tenants, users, invitations, platform, documents, llm_providers, chats, logs, operations):
+    for module in (health, setup, auth, password_reset, chat_shares, tenants, users, invitations, platform, documents, integrations, llm_providers, chats, logs, operations):
         app.include_router(module.router, prefix="/api")
     return app
 

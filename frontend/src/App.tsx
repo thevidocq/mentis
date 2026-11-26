@@ -13,7 +13,6 @@ import { SharedChatPage } from "./pages/chat/SharedChatPage";
 import { Help } from "./pages/Help";
 import { TenantDocuments, TenantPreview } from "./pages/documents/routes";
 import { Login } from "./pages/Login";
-import { Placeholder } from "./pages/Placeholder";
 import { Setup } from "./pages/Setup";
 import { AiProviders } from "./pages/platform/AiProviders";
 import { Configuration } from "./pages/platform/Configuration";
@@ -25,6 +24,8 @@ import { ServiceStatus } from "./pages/platform/ServiceStatus";
 import { SmtpSettings } from "./pages/platform/SmtpSettings";
 import { Tenants } from "./pages/platform/Tenants";
 import { Users } from "./pages/Users";
+import { PlatformIntegrations } from "./pages/integrations/PlatformIntegrations";
+import { TenantIntegrations } from "./pages/integrations/TenantIntegrations";
 import { TenantLlm } from "./pages/tenant/TenantLlm";
 import { TenantSettings } from "./pages/tenant/TenantSettings";
 
@@ -36,8 +37,6 @@ function RequireRole({ roles, children }: { roles?: Role[]; children: ReactNode 
   return <>{children}</>;
 }
 
-const soon = (title: string, what: string) => <Placeholder title={title} text={`${what} arrives in a later release.`} />;
-
 function PlatformArea() {
   return (
     <AdminShell eyebrow="Administration" title="Platform" nav={PLATFORM_NAV}>
@@ -47,6 +46,7 @@ function PlatformArea() {
         <Route path="smtp" element={<SmtpSettings />} />
         <Route path="status" element={<ServiceStatus />} />
         <Route path="ai" element={<AiProviders />} />
+        <Route path="integrations" element={<PlatformIntegrations />} />
         <Route path="embedding" element={<EmbeddingSettings />} />
         <Route path="usage" element={<Usage />} />
         <Route path="retention" element={<RetentionSettings />} />
@@ -72,7 +72,7 @@ function TenantArea() {
         <Route path="settings" element={<TenantSettings />} />
         <Route path="documents" element={<TenantDocuments />} />
         <Route path="documents/preview/:versionId" element={<TenantPreview />} />
-        <Route path="integrations" element={soon("Integrations", "Ticketing, EDR and SIEM integrations")} />
+        <Route path="integrations" element={<TenantIntegrations />} />
         <Route path="llm" element={<TenantLlm />} />
         <Route path="*" element={<Navigate to="documents" replace />} />
       </Routes>

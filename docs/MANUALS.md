@@ -18,6 +18,7 @@ In the app: **Help** in the left menu. Each profile sees its own guide plus the 
 - [Retention](../frontend/src/help/super-admin/10-retention.md)
 - [LLM usage](../frontend/src/help/super-admin/11-llm-usage.md)
 - [Backup and configuration](../frontend/src/help/super-admin/12-backup-configuration.md)
+- [Integrations](../frontend/src/help/super-admin/13-integrations.md)
 
 ## Tenant admin
 
@@ -26,6 +27,7 @@ In the app: **Help** in the left menu. Each profile sees its own guide plus the 
 - [Customer settings](../frontend/src/help/tenant-admin/03-settings.md)
 - [Documents](../frontend/src/help/tenant-admin/04-documents.md)
 - [LLM and testing answers](../frontend/src/help/tenant-admin/05-llm.md)
+- [Integrations](../frontend/src/help/tenant-admin/06-integrations.md)
 
 ## Analyst
 

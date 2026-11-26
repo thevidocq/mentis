@@ -9,6 +9,8 @@
 
 "Not found" questions appear with LLM *none*: when the documents do not cover a question, the model is not called and costs nothing.
 
+Side calls have rows of their own, counted in tokens and cost but not as questions: **<model> · answer check** (level 2 of the answer check) and **<model> · integration lookups** (the short call that chooses which tickets, devices or alerts to read, in chats with integrations chosen with `#`).
+
 ## Cost
 
 The cost uses the prices you set on each provider in **AI providers** (**Price input** and **Price output**, in USD per million tokens). Leave them empty for internal models: the cost then shows **—**. Prices are not fetched automatically, so check your provider's price list.

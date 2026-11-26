@@ -11,6 +11,7 @@ from app.models.document import (
     VersionPage,
     VersionStatus,
 )
+from app.models.integration import Integration
 from app.models.invitation import Invitation
 from app.models.chat_share import ChatShare
 from app.models.llm import LlmProvider
@@ -22,5 +23,5 @@ from app.models.user import Role, User, user_tenants
 
 __all__ = [
     "Approval", "AuditEvent", "AuthSession", "Base", "Chat", "ChatMessage", "Chunk", "Document", "DocumentVersion",
-    "ChatShare", "Invitation", "LlmProvider", "PasswordReset", "PlatformSetting", "Role", "Tenant", "User", "VersionPage", "VersionStatus", "user_tenants",
+    "ChatShare", "Integration", "Invitation", "LlmProvider", "PasswordReset", "PlatformSetting", "Role", "Tenant", "User", "VersionPage", "VersionStatus", "user_tenants",
 ]

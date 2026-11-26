@@ -24,6 +24,12 @@ RUN pip install --no-cache-dir -r /requirements/base.txt
 COPY pyproject.toml ./
 COPY app ./app
 RUN pip install --no-cache-dir --no-deps .
+# Integration plugins (plugins/<name>/, build context "plugins" in docker-compose.yml): each
+# registers itself under the mentis.connectors entry point. Standard library only, no dependencies.
+COPY --from=plugins . /plugins
+RUN set -e; for p in /plugins/*/; do \
+      if [ -f "$p/pyproject.toml" ]; then pip install --no-cache-dir --no-deps "$p"; fi; \
+    done; rm -rf /plugins
 COPY alembic.ini ./
 COPY migrations ./migrations
 COPY docker-entrypoint.sh ./

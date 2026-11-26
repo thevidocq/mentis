@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.models import Chat, ChatMessage, Role, Tenant, User
 from app.services import access, answer_check, chat_visibility, llm, prompts, retrieval
+from app.services.integrations import live as integrations_live
 from app.services.llm_config import providers_for
 from app.services.setup import GENERAL_NAME
 
@@ -33,6 +34,12 @@ class Answer:
     # For the answer check (not stored): the passages given to the model, and the model that answered.
     passage_texts: dict[int, str] = field(default_factory=dict)
     used: dict | None = None
+    # Integrations (#): public notes on lookups that failed or found nothing, shown under the answer.
+    live_notes: list[str] = field(default_factory=list)
+    live_calls: int = 0
+    # Cited live records the answer does not link yet: (label, URL), added under the answer.
+    live_links: list[tuple[str, str]] = field(default_factory=list)
+    live: object | None = None  # the integration data used (not stored): a rewrite reuses it, no second lookup
 
 
 def all_label(user: User | None) -> str:
@@ -126,12 +133,21 @@ def _cited(answer_text: str, passages) -> tuple[str, list[dict]]:
         return ""
 
     # Grouped markers ("[1, 2]") are split first, so each number is checked like a single one.
-    answer_text = re.sub(r"\[(\d{1,3}(?:\s*,\s*\d{1,3})+)\]",
+    # "[42](https://...)" is a link to a live record, not a citation.
+    answer_text = re.sub(r"\[(\d{1,3}(?:\s*,\s*\d{1,3})+)\](?!\()",
                          lambda m: "".join(f"[{n.strip()}]" for n in m.group(1).split(",")), answer_text)
-    text = re.sub(r"\[(\d{1,3})\]", keep, answer_text)
+    text = re.sub(r"\[(\d{1,3})\](?!\()", keep, answer_text)
     citations = []
     for n in order:
         p = passages[n - 1]
+        if getattr(p, "source", "document") == "integration":
+            citations.append({
+                "n": n, "kind": "integration", "tenant": p.tenant_name, "tenant_id": str(p.tenant_id), "is_general": False,
+                "document": p.document_name, "version": None, "page": p.page_label, "heading": None,
+                "integration": p.integration_name, "product": p.product, "record": p.record_id, "record_kind": p.record_kind,
+                "url": p.url, "links": dict(p.links or {}), "text": p.text[:600],
+            })
+            continue
         citations.append({
             "n": n, "tenant": GENERAL_NAME if p.is_general else p.tenant_name, "tenant_id": str(p.tenant_id), "is_general": p.is_general,
             "document": p.document_name, "version": p.version, "page": p.page_label, "heading": p.heading,
@@ -149,14 +165,22 @@ def not_found_text(scope_label: str) -> str:
     return f"Not found in {target}. No document in use covers this question."
 
 
-def answer(db: Session, chat: Chat, question: str, first: bool, correction: str | None = None) -> Answer:
-    """`correction`: problems of a first draft found by the answer check, for a second attempt."""
+def answer(db: Session, chat: Chat, question: str, first: bool, correction: str | None = None,
+           live: integrations_live.Live | None = None) -> Answer:
+    """`correction`: problems of a first draft found by the answer check, for a second attempt;
+    `live`: the integration data of that first draft (read once per question)."""
     tenants, scope_label, scope_tenant = scope_tenants(db, chat)
     history = _history(db, chat)
     s = get_settings()
 
-    passages = retrieval.search_tenants(db, [t.id for t in tenants], _retrieval_query(question, history),
-                                        limit=s.chat_passages, min_score=s.chat_min_score) if tenants else []
+    primary, fallback = providers_for(db, scope_tenant)
+    # Live data from the chat's # integrations first: the question is usually about that object.
+    if live is None:
+        live = integrations_live.gather(db, chat, question, _context_text(history), primary, fallback) \
+            if tenants and scope_tenant is not None else integrations_live.Live()
+    docs = retrieval.search_tenants(db, [t.id for t in tenants], _retrieval_query(question, history),
+                                    limit=s.chat_passages, min_score=s.chat_min_score) if tenants else []
+    passages = [*live.passages, *docs]
     if not passages:
         # No LLM call: nothing to ground an answer on, so nothing can be invented.
         content = not_found_text(scope_label)
@@ -164,7 +188,7 @@ def answer(db: Session, chat: Chat, question: str, first: bool, correction: str 
             content = (f"I answer questions about {_whose(scope_label)} procedures from the documents in use, "
                        "for example: *Who do I call for a brute-force alert?* or *What is the SLA for a critical incident?*")
         return Answer(status="not_found", content=content, tenants=[scope_label],
-                      title=question[:60] if first else None)
+                      title=question[:60] if first else None, live_notes=live.notes, live_calls=live.calls, live=live)
 
     want_followups = (scope_tenant.settings or {}).get("suggested_followups", True) if scope_tenant else True
     system = prompts.system_prompt(followups=want_followups, title=first)
@@ -175,13 +199,13 @@ def answer(db: Session, chat: Chat, question: str, first: bool, correction: str 
         message += f"\n\nA previous draft of this answer was rejected: {correction}. Answer again strictly from the passages."
     turns.append(llm.Turn("user", message))
 
-    primary, fallback = providers_for(db, scope_tenant)
     reply, used, latency = llm.call_with_failover(primary, fallback, system, turns)
 
     data = _parse_json(reply.text)
     # PostgreSQL text columns refuse NUL (raw or written as \u0000 in the JSON).
     raw_answer = (data["answer"] if data else reply.text.strip()).replace("\x00", "")
-    text, citations = _cited(raw_answer, passages)
+    allowed = _allowed_links(live.passages)
+    text, citations = _cited(_safe_links(raw_answer, allowed, [p.text for p in passages]), passages)
     flag = data.get("not_found") if data else False
     if isinstance(flag, str):  # weak models write "false" / "true"
         flag = flag.strip().lower() in ("true", "yes", "1")
@@ -203,5 +227,67 @@ def answer(db: Session, chat: Chat, question: str, first: bool, correction: str 
         title=(title or question)[:60] if first else None,
         provider_name=used["name"], model=used["model"], latency_ms=latency,
         passage_texts={i: p.text for i, p in enumerate(passages, start=1)}, used=used,
-        input_tokens=reply.input_tokens, output_tokens=reply.output_tokens, passages=len(passages),
+        input_tokens=reply.input_tokens, output_tokens=reply.output_tokens,
+        passages=len(passages), live_notes=live.notes, live_calls=live.calls, live=live,
+        live_links=[] if is_not_found else _missing_links(text, citations),
     )
+
+
+_MD_LINK = re.compile(r"\[([^\]\n]{1,300})\]\((\S{1,1000}?)\)")
+_BARE_URL = re.compile(r"(?<![(\[<])\bhttps?://[^\s)\]>]+", re.IGNORECASE)
+
+
+def _allowed_links(live_passages) -> set[str]:
+    out = set()
+    for p in live_passages:
+        if p.url:
+            out.add(p.url)
+        out.update((p.links or {}).values())
+    return out
+
+
+def _safe_links(text: str, allowed: set[str], sources: list[str]) -> str:
+    """Only the pages of live records found for this question stay Markdown links.
+
+    An address written in a passage (e.g. a portal in a procedure) stays, as plain text; any other
+    address (made up by the model, or planted in a ticket to be shown as a link) is removed, so the
+    answer never offers a link the sources do not contain.
+    """
+    def known(url: str) -> bool:
+        return url in allowed or any(url in src for src in sources)
+
+    def link(m: re.Match) -> str:
+        label, url = m.group(1), m.group(2)
+        if url in allowed:
+            return m.group(0)
+        return f"{label} ({url})" if known(url) and url != label else label
+
+    parts = re.split(r"(\[[^\]\n]{1,300}\]\(\S{1,1000}?\))", text)
+    out = []
+    for i, part in enumerate(parts):
+        if i % 2:
+            out.append(_MD_LINK.sub(link, part))
+        else:
+            out.append(_BARE_URL.sub(_bare(known), part))
+    return "".join(out)
+
+
+def _bare(known):
+    def sub(m: re.Match) -> str:
+        url = m.group(0)
+        core = url.rstrip(".,;:!?")
+        return url if known(core) else "[link removed]" + url[len(core):]
+    return sub
+
+
+def _missing_links(text: str, citations: list[dict]) -> list[tuple[str, str]]:
+    """Cited live records whose page the answer does not link: the analyst still gets one click."""
+    out = []
+    for c in citations:
+        if c.get("kind") == "integration" and c.get("url") and c["url"] not in text and (c["document"], c["url"]) not in out:
+            out.append((c["document"], c["url"]))
+    return out
+
+def _context_text(history: list[ChatMessage]) -> str:
+    """The last exchange, short, so the planner can resolve "this ticket" or "that host"."""
+    return "\n".join(f"{m.role}: {m.content[:400]}" for m in history[-2:])

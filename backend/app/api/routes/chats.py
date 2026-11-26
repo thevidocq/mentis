@@ -19,7 +19,7 @@ from app.api.deps import client_ip, require_roles
 from app.core.db import get_db
 from app.models import Chat, ChatMessage, ChatShare, Role, Tenant, User
 from app.models.base import utcnow
-from app.services import access, answer_check, chat_visibility
+from app.services import access, answer_check, chat_visibility, integrations
 from app.services.answer_check import runner as check_runner
 from app.services import answer as answering
 from app.services.embeddings import EmbeddingError
@@ -61,6 +61,7 @@ class ChatSummary(BaseModel):
     scope_name: str
     updated_at: datetime
     use_general: bool = True  # General Knowledge Base searched with the customer
+    integration_ids: list[uuid.UUID] = []  # integrations chosen with #
 
 
 class ChatOut(ChatSummary):
@@ -72,6 +73,7 @@ class ChatOut(ChatSummary):
 class NewChat(BaseModel):
     tenant_id: uuid.UUID | None = None  # None = All customers
     use_general: bool = True            # turned off only explicitly by the user
+    integration_ids: list[uuid.UUID] = Field(default_factory=list, max_length=20)  # # integrations of the customer
     message: str = Field(min_length=1, max_length=MAX_QUESTION)
 
 
@@ -82,6 +84,7 @@ class NewMessage(BaseModel):
 class Rename(BaseModel):
     title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)] | None = None
     use_general: bool | None = None
+    integration_ids: list[uuid.UUID] | None = Field(default=None, max_length=20)
 
 
 class Feedback(BaseModel):
@@ -92,6 +95,13 @@ class Exchange(BaseModel):
     chat: ChatSummary
     question: MessageOut
     answer: MessageOut
+
+
+class IntegrationOption(BaseModel):
+    id: uuid.UUID
+    name: str
+    product: str
+    type: str  # ticketing | edr | siem
 
 
 class ScopeOption(BaseModel):
@@ -111,7 +121,26 @@ def _scope_name(db: Session, chat: Chat) -> str:
 
 def _summary(db: Session, chat: Chat) -> ChatSummary:
     return ChatSummary(id=chat.id, title=chat.title, scope_tenant_id=chat.scope_tenant_id,
-                       scope_name=_scope_name(db, chat), updated_at=chat.updated_at, use_general=chat.use_general)
+                       scope_name=_scope_name(db, chat), updated_at=chat.updated_at, use_general=chat.use_general,
+                       integration_ids=_chat_integrations(db, chat))
+
+
+def _chat_integrations(db: Session, chat: Chat) -> list[uuid.UUID]:
+    """The chat's # integrations that are still usable (a removed or disabled one disappears)."""
+    return [i.id for i, _ in integrations.for_chat(db, chat)]
+
+
+def _check_integrations(db: Session, tenant_id: uuid.UUID | None, ids: list[uuid.UUID]) -> list[str]:
+    """# integrations must belong to the chat's own customer and be usable; returns them as strings."""
+    if not ids:
+        return []
+    tenant = db.get(Tenant, tenant_id) if tenant_id is not None else None
+    if tenant is None or tenant.is_global:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Integrations can be used only in a chat on one customer.")
+    usable = {i.id for i, _ in integrations.selectable(db, tenant)}
+    if any(i not in usable for i in ids):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "This integration is not available for this customer.")
+    return [str(i) for i in dict.fromkeys(ids)]
 
 
 def _msg(m: ChatMessage, hidden: bool = False) -> MessageOut:
@@ -168,7 +197,8 @@ def _ask(db: Session, user: User, chat: Chat, question: str, first: bool, reques
     # Answer check: level 1 now; level 2 now ("hide") or after the response ("warn").
     try:
         result, check, later = check_runner.before_save(
-            db, chat, question, first, result, lambda problems: answering.answer(db, chat, question, first, correction=problems))
+            db, chat, question, first, result,
+            lambda problems: answering.answer(db, chat, question, first, correction=problems, live=result.live))
     except (LLMError, EmbeddingError, VectorIndexError):
         check, later = {"level2": "unavailable", "issues": [], "checker": None}, False
     except Exception:  # noqa: BLE001 - a broken check must never lose the answer
@@ -178,7 +208,14 @@ def _ask(db: Session, user: User, chat: Chat, question: str, first: bool, reques
     q = ChatMessage(chat_id=chat.id, role="user", content=question)
     db.add(q)
     db.flush()
-    a = ChatMessage(chat_id=chat.id, role="assistant", content=result.content, status=result.status,
+    content = result.content
+    # Added after the check: links to the records found, and lookups that failed or found nothing.
+    if result.live_links and result.status == "ok" and result.citations:  # not under a hidden answer
+        content += "\n\nOpen: " + " · ".join(f"[{label.replace('[', '(').replace(']', ')')}]({url})"
+                                           for label, url in result.live_links)
+    if result.live_notes:
+        content += "\n\n" + "\n".join(f"*{n}*" for n in result.live_notes)
+    a = ChatMessage(chat_id=chat.id, role="assistant", content=content, status=result.status,
                     citations=result.citations, followups=result.followups, tenants=result.tenants,
                     provider_name=result.provider_name, model=result.model, latency_ms=result.latency_ms,
                     input_tokens=result.input_tokens, output_tokens=result.output_tokens, check=check)
@@ -191,6 +228,7 @@ def _ask(db: Session, user: User, chat: Chat, question: str, first: bool, reques
     log_event(db, "chat.answered", actor=user, tenant_id=chat.scope_tenant_id, target=str(chat.id), ip=client_ip(request),
               detail={"status": result.status, "provider": result.provider_name, "model": result.model,
                       "latency_ms": result.latency_ms, "passages": result.passages, "citations": len(result.citations),
+                      "integration_calls": result.live_calls,
                       "input_tokens": result.input_tokens, "output_tokens": result.output_tokens})
     db.refresh(q)
     db.refresh(a)
@@ -216,6 +254,15 @@ def scopes(db: Session = Depends(get_db), user: User = Depends(readers)) -> list
             + [ScopeOption(id=t.id, name=t.name, is_general=True) for t in general])
 
 
+@router.get("/integrations", response_model=list[IntegrationOption])
+def chat_integrations(tenant_id: uuid.UUID, db: Session = Depends(get_db), user: User = Depends(readers)) -> list[IntegrationOption]:
+    """What the user can pick with # in a chat on this customer."""
+    _check_scope(db, user, tenant_id)
+    tenant = db.get(Tenant, tenant_id)
+    return [IntegrationOption(id=i.id, name=i.name, product=c.manifest.label, type=c.manifest.type)
+            for i, c in integrations.selectable(db, tenant)]
+
+
 @router.get("", response_model=list[ChatSummary])
 def list_chats(q: str | None = Query(None, max_length=200), limit: int = Query(100, ge=1, le=500),
                db: Session = Depends(get_db), user: User = Depends(readers)) -> list[ChatSummary]:
@@ -233,6 +280,7 @@ def list_chats(q: str | None = Query(None, max_length=200), limit: int = Query(1
     names = {t.id: t.name for t in db.scalars(select(Tenant))}
     every = answering.all_label(user)
     return [ChatSummary(id=c.id, title=c.title, scope_tenant_id=c.scope_tenant_id, updated_at=c.updated_at, use_general=c.use_general,
+                        integration_ids=[uuid.UUID(i) for i in (c.integration_ids or [])],
                         scope_name=every if c.scope_tenant_id is None else names.get(c.scope_tenant_id, "Deleted customer"))
             for c in chats]
 
@@ -240,9 +288,13 @@ def list_chats(q: str | None = Query(None, max_length=200), limit: int = Query(1
 @router.post("", response_model=Exchange, status_code=status.HTTP_201_CREATED)
 def new_chat(body: NewChat, request: Request, background: BackgroundTasks, db: Session = Depends(get_db), user: User = Depends(readers)) -> Exchange:
     _check_scope(db, user, body.tenant_id)
-    chat = Chat(user_id=user.id, scope_tenant_id=body.tenant_id, use_general=body.use_general)
+    chosen = _check_integrations(db, body.tenant_id, body.integration_ids)
+    chat = Chat(user_id=user.id, scope_tenant_id=body.tenant_id, use_general=body.use_general, integration_ids=chosen)
     db.add(chat)
     db.flush()
+    if chosen:
+        log_event(db, "chat.integrations", actor=user, tenant_id=chat.scope_tenant_id, target=str(chat.id),
+                  detail={"integrations": chosen}, commit=False)
     return _ask(db, user, chat, body.message, True, request, background)
 
 
@@ -270,7 +322,7 @@ def ask(chat_id: uuid.UUID, body: NewMessage, request: Request, background: Back
 
 @router.patch("/{chat_id}", response_model=ChatSummary)
 def rename(chat_id: uuid.UUID, body: Rename, db: Session = Depends(get_db), user: User = Depends(readers)) -> ChatSummary:
-    """Rename the chat, or turn the General Knowledge Base on or off for its next questions."""
+    """Rename the chat, turn the General Knowledge Base on or off, or change its # integrations."""
     chat = _own_chat(db, user, chat_id)
     if body.title is not None:
         title = body.title.strip()
@@ -281,6 +333,12 @@ def rename(chat_id: uuid.UUID, body: Rename, db: Session = Depends(get_db), user
         chat.use_general = body.use_general
         log_event(db, "chat.general_knowledge", actor=user, tenant_id=chat.scope_tenant_id, target=str(chat.id),
                   detail={"use_general": chat.use_general}, commit=False)
+    if body.integration_ids is not None:
+        chosen = _check_integrations(db, chat.scope_tenant_id, body.integration_ids)
+        if chosen != list(chat.integration_ids or []):
+            chat.integration_ids = chosen
+            log_event(db, "chat.integrations", actor=user, tenant_id=chat.scope_tenant_id, target=str(chat.id),
+                      detail={"integrations": chosen}, commit=False)
     db.commit()
     return _summary(db, chat)
 

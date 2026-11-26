@@ -141,3 +141,6 @@
 .doc-overview-link { margin-top: 8px; }
 @media (max-width: 1200px) { .ov-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ov-cols { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 900px) { .doc-overview { display: none; } .doc-overview-link { display: none; } }
+.menu button:disabled { opacity: 0.55; cursor: default; }
+.menu button:disabled:hover { background: transparent; }
+.doc-list-head .menu { min-width: 260px; }

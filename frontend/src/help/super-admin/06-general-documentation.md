@@ -12,4 +12,4 @@ Everyone: every tenant admin and analyst uses it in the chat, nothing to tick. A
 
 The super-admin does not upload documents. Tick **Can manage the General Knowledge Base** (Users → edit or invite a tenant admin) only for the SOC admins who maintain it. It is off by default; "All customers" does not include it. A tenant admin who manages it can give the same permission to other tenant admins.
 
-Those admins pick **General Knowledge Base** in the customer selector and use the **Documents** page. **Every new version needs approval** before it is used, because it reaches every customer. Every upload, approval and deletion is recorded in **Logs** with the user's name.
+Those admins pick **General Knowledge Base** in the customer selector and use the **Documents** page. **Every new version needs approval** before it is used, because it reaches every customer. Every upload, approval, deletion and download is recorded in **Logs** with the user's name. The General Knowledge Base has no integrations.

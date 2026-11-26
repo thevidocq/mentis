@@ -19,6 +19,8 @@ class Chat(IdMixin, CreatedMixin, Base):
     title_locked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)  # renamed by the user
     # The General Knowledge Base is searched with the customer unless the user turned it off.
     use_general: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Integrations chosen with # (ids of the scope customer's integrations; empty = none).
+    integration_ids: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
 
 

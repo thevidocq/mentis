@@ -1,0 +1,16 @@
+[project]
+name = "mentis-crowdstrike"
+version = "1.0.0"
+description = "Mentis connector: CrowdStrike Falcon (read-only)"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.entry-points."mentis.connectors"]
+crowdstrike = "mentis_crowdstrike:connector"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["mentis_crowdstrike*"]

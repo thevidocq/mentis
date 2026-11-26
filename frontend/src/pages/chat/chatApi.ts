@@ -1,12 +1,14 @@
 import { api } from "../../api/client";
-import type { ChatFull, ChatMessage, ChatSummary, Exchange, ScopeOption, SharedChat, ShareState } from "../../api/types";
+import type { ChatFull, ChatMessage, ChatSummary, Exchange, IntegrationOption, ScopeOption, SharedChat, ShareState } from "../../api/types";
 
 export const chatApi = {
   scopes: () => api<ScopeOption[]>("/chats/scopes"),
   list: (q = "") => api<ChatSummary[]>(`/chats${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ""}`),
   get: (id: string) => api<ChatFull>(`/chats/${id}`),
-  create: (tenantId: string | null, message: string, useGeneral = true) =>
-    api<Exchange>("/chats", { method: "POST", body: { tenant_id: tenantId, message, use_general: useGeneral } }),
+  create: (tenantId: string | null, message: string, useGeneral = true, integrationIds: string[] = []) =>
+    api<Exchange>("/chats", { method: "POST", body: { tenant_id: tenantId, message, use_general: useGeneral, integration_ids: integrationIds } }),
+  integrations: (tenantId: string) => api<IntegrationOption[]>(`/chats/integrations?tenant_id=${encodeURIComponent(tenantId)}`),
+  setIntegrations: (id: string, ids: string[]) => api<ChatSummary>(`/chats/${id}`, { method: "PATCH", body: { integration_ids: ids } }),
   setGeneral: (id: string, useGeneral: boolean) => api<ChatSummary>(`/chats/${id}`, { method: "PATCH", body: { use_general: useGeneral } }),
   ask: (id: string, message: string) => api<Exchange>(`/chats/${id}/messages`, { method: "POST", body: { message } }),
   rename: (id: string, title: string) => api<ChatSummary>(`/chats/${id}`, { method: "PATCH", body: { title } }),

@@ -1,16 +1,17 @@
 # Mentis
 
-Mentis is a multi-tenant AI assistant for SOC analysts. It answers questions from each customer's own documentation (procedures, escalation matrices, runbooks) and cites its sources on every answer. Read-only integrations with the customer's ticketing, EDR and SIEM tools are planned.
+Mentis is a multi-tenant AI assistant for SOC analysts. It answers questions from each customer's own documentation (procedures, escalation matrices, runbooks) and cites its sources on every answer. With `#` it also reads the customer's ticketing, EDR and identity tools (ServiceNow, Jira, CrowdStrike, Microsoft Defender, Trend Vision One, Microsoft Entra ID), read only, and links each ticket, host, alert or user it used.
 
-> Status: `0.2.0`. See [CHANGELOG](CHANGELOG.md) and [release notes](docs/releases/).
+> Status: `0.4.0`. See [CHANGELOG](CHANGELOG.md) and [release notes](docs/releases/).
 
 ![Answer with sources](docs/screenshots/chat-answer.png)
 
 ## What it does
 
 - **Chat**: pick the customer with `@` (or ask about all customers). Answers come only from the documents in use. Every statement cites its source (customer, document, version, page), and the chat says "Not found" instead of guessing. Suggested follow-ups, history, feedback.
+- **Integrations (`#`)**: in a chat on one customer, live tickets, devices, alerts and users from its ServiceNow, Jira, CrowdStrike, Microsoft Defender, Trend Vision One or Entra ID, cited like documents with a link to open each record in the product. Read only, enforced by the core; credentials encrypted and bound to their address.
 - **One knowledge base per customer**, plus a **General** one shared by all. Tenant isolation is enforced server-side.
-- **Documents**: PDF, Word, Excel, PowerPoint, with OCR for scans and images. Versions, approval before publishing, and a side-by-side preview of what Mentis read.
+- **Documents**: PDF, Word, Excel, PowerPoint, with OCR for scans and images. Versions, approval before publishing, a side-by-side preview of what Mentis read, and downloads as original, Markdown or JSON (one document, or all of a customer as a ZIP).
 - **AI providers**: Anthropic, OpenAI, vLLM (e.g. gpt-oss), Ollama, with the model picked from the list each provider offers. One LLM per customer with automatic fallback. Embeddings run locally (bge-m3), vectors are in Qdrant.
 - **Security**: mandatory 2FA, three roles with per-customer access (super-admin for the platform; tenant admins and analysts on the customers ticked for them), encrypted secrets, metadata-only logs.
 - **Operations**: service status, Logs with CSV export and syslog forwarding to a SIEM, retention, LLM usage and cost per customer, backup/restore scripts, configuration export/import.

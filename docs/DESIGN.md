@@ -1,6 +1,6 @@
 # Mentis – Project Design Document
 
-_Last updated: 2026-11-25. Living version: the shared design doc; this file is the repo copy._
+_Last updated: 2026-11-26. Living version: the shared design doc; this file is the repo copy._
 
 ## Overview
 
@@ -16,7 +16,7 @@ Mentis is a standalone, multi-tenant web app: an AI assistant that answers SOC a
 
 | Role | Area | Can do |
 | --- | --- | --- |
-| Super-admin | Platform admin | Onboard, edit and delete tenants; users; configure AI providers, embeddings, retention; decide per tenant whether its admins choose the LLM; view service status and audit log. **No chat, no documents** |
+| Super-admin | Platform admin | Onboard, edit and delete tenants; users; configure AI providers, embeddings, retention; enable integration types (no access to customer integration settings); decide per tenant whether its admins choose the LLM; view service status and audit log. **No chat, no documents** |
 | Tenant admin | Tenant admin + chat | For each of its customers: upload, version, preview and approve documents (the General Knowledge Base too, only with the explicit permission); choose tenant LLM when allowed; configure integrations; invite and manage tenant admins and analysts within its customers; chat |
 | Analyst | Chat + account | Chat (read-only consultation) on its customers, own profile, theme, password |
 
@@ -38,7 +38,7 @@ Mentis is a standalone, multi-tenant web app: an AI assistant that answers SOC a
 
 ## Chat experience
 
-One chat = one customer scope, locked at the first message; integrations are chosen per message.
+One chat = one customer scope, locked at the first message; integrations (`#`) are chosen per chat and can change between questions.
 
 **Layout**
 
@@ -58,14 +58,15 @@ One chat = one customer scope, locked at the first message; integrations are cho
 
 **`#` integrations**
 
-- `#` lists only the integrations enabled for the chat's customer, grouped by type (Ticketing, EDR, SIEM).
-- Multi-select; selections show as removable chips in the input and on the sent message; they apply to that message only.
-- No `#` = documentation only. In "All customers" chats `#` is disabled.
+- `#` (or the Integrations chip under the input) lists the chat's customer's usable integrations (enabled instance, plugin installed and enabled by the super-admin) with product and type; multi-select.
+- The choice is stored on the chat (`chats.integration_ids`) and applies to the next questions; it can change at any time (`PATCH /chats/{id}`, audited `chat.integrations`). The server re-checks every id against the chat's own customer on every question; ids of another customer are refused (422) and removed or disabled instances are ignored.
+- No `#` = documentation only. In "All customers" chats and on the General Knowledge Base alone `#` is disabled.
 
 **Answers**
 
 - Every answer states which customer it refers to (and "+ General Knowledge Base" when used).
-- Citations: documents as [1], [2] (document, version, page/sheet/slide); live integration data as [A], [B] (source, object, read time).
+- Citations: one numbering for documents and live records, [1], [2]. Documents carry document, version, page/sheet/slide; live records (`kind: "integration"`) carry product, integration, record id and kind, and the record's links (`url`, `links`: e.g. the device or IP page).
+- **Links to live records**: the prompt asks the model to write a record's id as a link to the "Link" given in its passage; links that do not come from a record found for this question are reduced to their text; addresses written in a passage stay as plain text, any other address is removed, and a cited record the answer does not link gets an "Open: [product kind id](url)" line under the answer (added after the answer check, like the notes on failed lookups). The browser renders `[text](url)` as a link only for URLs of the answer's cited records.
 - If the documentation does not cover the question: "Not found in <customer> documentation", never an invented procedure. With no passage above the score threshold the LLM is not called at all; the model can also flag not-found itself.
 - Passages go to the LLM as numbered, untrusted data blocks labelled with their customer; citation numbers not among them are dropped.
 - Each answer sits in a light frame (hairline fading from the top-left corner, faint teal trail, very light shadow); its customer is a small text line above it, not a badge; the chat header shows the customer as quiet text after the title.
@@ -77,7 +78,7 @@ One chat = one customer scope, locked at the first message; integrations are cho
 - 2–3 clickable chips under each answer, produced by the same LLM call (structured output), no extra request.
 - Grounded: only questions the retrieved sources can answer, so a click never lands on "not found".
 - A click sends the question as a new message in the same chat and customer scope.
-- A suggestion needing an integration pre-selects its `#` chip, only if that integration is enabled for the customer.
+- (Later) a suggestion needing an integration pre-selects its `#` chip, only if that integration is enabled for the customer.
 - Per-tenant setting, default on.
 
 **Titles**
@@ -123,7 +124,7 @@ Uploads run as background jobs; a new version reaches answers only once indexed 
 - Retention of old versions (super-admin, default all): per document the version in use, the latest and pending ones are always kept; older ones beyond N are deleted with files, pages, passages and vectors.
 - Storage: page images WebP; Qdrant vectors on disk (memory-mapped; existing collections moved by the sweep); container logs rotated; backups rotated (`MENTIS_BACKUP_KEEP`).
 - **New version** of a selected document accepts any file name of the same type (`document_id` on upload).
-- The Documents page is a document browser: the list on the left (search; All / In use / To review; *Needs attention* grouped first), the selected document on the right with Approve/Reject or Retry when needed, New version, Download and a ⋯ menu (Rename, Versions, Delete), and the tabs Preview, Text read, Versions, Test a question; details and recent versions in a right column on wide screens. The selection is in the address (`?doc=`); without one the right side shows an **Overview** (`GET /tenants/{id}/documents/overview`, counts only): documents in use, pages read and OCR, passages, embedding model, questions in chats on the customer in 30 days with not-found count (not for the General Knowledge Base), needs-attention list, content by type, last indexed, oldest in use, pages to check, recent uploads and approvals.
+- The Documents page is a document browser: the list on the left (search; All / In use / To review; *Needs attention* grouped first), the selected document on the right with Approve/Reject or Retry when needed, New version, Download (menu: Original, Markdown, JSON; also on each version) and a ⋯ menu (Rename, Versions, Delete); **All** above the list downloads every document in use as a ZIP (originals, Markdown or JSON, with `manifest.json`; originals capped by `MENTIS_EXPORT_MAX_MB`). Markdown = the pages read with a header (customer, version, file, date, SHA-256); JSON (`mentis-document/1`) = metadata, pages and indexed passages, to import elsewhere. Audited `document.exported`, `documents.exported`, and the tabs Preview, Text read, Versions, Test a question; details and recent versions in a right column on wide screens. The selection is in the address (`?doc=`); without one the right side shows an **Overview** (`GET /tenants/{id}/documents/overview`, counts only): documents in use, pages read and OCR, passages, embedding model, questions in chats on the customer in 30 days with not-found count (not for the General Knowledge Base), needs-attention list, content by type, last indexed, oldest in use, pages to check, recent uploads and approvals.
 
 ## AI layer
 
@@ -156,13 +157,17 @@ All integrations are per tenant and read-only; they are invoked from chat with `
 - **Secrets:** encrypted in the database, never shown again in clear text.
 - **Backlog (write actions, not in scope now):** work notes drafted by the bot and confirmed by the analyst, ticket create/update, inbound webhooks.
 
-**Plugin model**
+**Plugin model (implemented in 0.4.0)**
 
-- **Contract:** manifest (name, version, type, vertical, compatible core API), JSON Schema config (admin form generated from it), `test_connection`, read-only typed `operations`, `run` returning normalized models (Ticket, Device, Alert) plus source metadata for citations.
+- **Contract** (`backend/app/connectors/contract.py`, standard library only): manifest (name, label, version, type, vendor, vertical, core API `1`), JSON Schema config (admin form generated from it; `secret` fields write-only and encrypted, `showIf`, `enumLabels`), `origins(config)` and `read_posts(config)`, `test_connection`, read-only typed `operations` (parameters with patterns; `match` regexes for identifiers with an unmistakable shape), `run` returning normalized `Record`s (ticket, device, alert, indicator, user: id, title, fields, text, url, extra links).
+- **Runtime** (`app/connectors/http.py`, `app/services/integrations/`): plugins get a `Context` (config, decrypted secrets, per-instance state for tokens) and an HTTP client that allows GET plus POST only to declared read URLs, only to the instance's origins, no redirects, 15 s per request, 12 requests and 2 MB per answer; results capped (10 records, 3,000 characters of text each). Every call: `integration.called` with integration, operation, object (identifier parameters only, never search words), ok/cause, latency.
+- **Choosing lookups:** identifiers matched by the plugins' `match` patterns run directly; then one short planning call to the chat's LLM (JSON `{"calls": [...]}`, max 4 lookups per question, validated against the declared operations and parameter patterns) adds lookups for host names, IPs, searches. No native tool calling, so every provider works; planner tokens are logged as `integration.planned` and shown in LLM usage as "<model> · integration lookups".
+- **Answer:** records become numbered passages ("read now from <integration>") before the document passages; same citations, Sources panel and answer check. Failed or empty lookups become short public notes under the answer.
 - **Discovery:** Python entry points `mentis.connectors`; the super-admin enables plugins, the tenant admin configures instances.
 - **Invocation:** operations of the `#`-selected instances are exposed to the LLM as tools. The core enforces tenant scope, read-only, timeouts, rate limits, result size cap, audit entry, and data-not-instructions handling. Secrets are passed in by the core; plugins never touch the database.
 - **Distribution (decided):** plugins live in this repo under `plugins/<name>/`, developed through pull requests and shipped with releases. No upload/installation from the admin panel for now.
-- **Packs:** core ships ServiceNow and Jira; the SOC pack ships Defender, CrowdStrike, SentinelOne, Sentinel, Splunk.
+- **Shipped (0.4.0):** ServiceNow (Table API; basic, OAuth client credentials or API key), Jira Cloud and Data Center, CrowdStrike Falcon (hosts, alerts v2; MSSP child CID), Microsoft Defender for Endpoint (devices, alerts with evidence, IP statistics; portal links incl. IP pages), Trend Vision One (endpoints, Workbench alerts), Microsoft Entra ID (type identity: users with state, MFA methods, risk and last sign-in, sign-ins of a user, users at risk; parts needing a missing permission or licence are left out). Plugins are packages in `plugins/<name>/` installed into the api image (build context `plugins`); their tests run with `pytest plugins/` against a fake HTTP client.
+- **Later:** SentinelOne, Microsoft Sentinel, Splunk.
 - **Later:** out-of-process plugins in separate containers; an "MCP server" plugin type exposing read-only tools from existing MCP servers.
 
 ## Admin areas and UI
@@ -171,8 +176,8 @@ Admin areas use a left menu with the logo top-left; content takes the full width
 
 | Area | Menu | Key content |
 | --- | --- | --- |
-| Tenant admin | Documents, Integrations, LLM, Users, Settings | Document browser (list + selected document with preview, text read, versions, test a question) |
-| Platform admin | Tenants, Users, AI providers, Embedding and Qdrant, Retention, Service status, Logs | Tenant table with edit/delete (delete confirmed by typing the name; General locked) |
+| Tenant admin | Documents, Integrations, LLM, Users, Settings | Document browser (list + selected document with preview, text read, versions, test a question; download as original, Markdown or JSON; all documents in use as a ZIP in one of those formats); integrations: add/edit (schema form), Test, Try a lookup, turn off, delete |
+| Platform admin | Tenants, Users, AI providers, Integrations, Embedding and Qdrant, Retention, Service status, Logs | Tenant table with edit/delete (delete confirmed by typing the name; General locked) |
 | Service status | (platform admin) | Summary + per-service state, latency, detail: API, frontend, workers, PostgreSQL, Qdrant, MinIO, embeddings, each LLM provider, each integration |
 | Account | (every user) | Profile with edit, theme picker, password change, 2FA status |
 
@@ -211,7 +216,7 @@ PostgreSQL (users, tenants, chats, audit) | Qdrant (one collection per tenant) |
 - **Isolation:** server-side tenant filter on every retrieval and integration call; chat tenant fixed in the database. Errors of the LLM, embedding service and Qdrant reach analysts and tenant admins as plain messages; addresses and provider replies stay in the Logs.
 - **Rate limit:** requests usable without a session (sign-in, 2FA, password reset, invitations, setup) are limited per client IP (`MENTIS_AUTH_RATE_PER_MINUTE`, default 30/min).
 - **Secrets stay bound:** a stored provider API key is only sent to the origin it was saved for; changing the address requires the key again.
-- **Read-only:** no writes to customer systems from chat.
+- **Read-only:** no writes to customer systems from chat, enforced by the connector HTTP client (GET plus declared read POSTs, the instance's origins only, no redirects), not left to the plugins.
 - **Secrets:** encrypted at rest, write-only in the UI.
 - **Prompt injection:** document and integration content is treated as data inside the prompt, never as instructions.
 - **Audit log:** questions, answers, sources used, integration invocations (who, which integration, which object), admin actions (uploads, approvals, deletions, config changes). Search and export.
@@ -242,7 +247,7 @@ All eight are in 0.1.0.
 
 **Next**
 
-- `#` integrations: ServiceNow and Jira first, then EDR and SIEM plugins.
+- `#` integrations: SIEM (Microsoft Sentinel, Splunk) and SentinelOne; follow-up chips that pre-select an integration.
 - Daybreak Blue once access is approved.
 - SSO/OIDC.
 

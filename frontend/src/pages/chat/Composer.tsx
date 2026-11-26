@@ -1,5 +1,5 @@
 import { KeyboardEvent, useEffect, useRef, useState } from "react";
-import type { ScopeOption } from "../../api/types";
+import type { IntegrationOption, ScopeOption } from "../../api/types";
 import { Icon } from "../../components/Icon";
 
 interface Props {
@@ -12,11 +12,17 @@ interface Props {
   onSend: (text: string) => void;
   useGeneral: boolean;      // the General Knowledge Base is searched with the customer
   onUseGeneral: (v: boolean) => void;
+  integrations: IntegrationOption[];  // the customer's integrations that can be chosen with #
+  selected: string[];                 // chosen for this chat
+  onIntegrations: (ids: string[]) => void;
 }
 
 const AT = /(^|\s)@([^\s@]*)$/;
+const HASH = /(^|\s)#([^\s#]*)$/;
+const TYPE_LABEL: Record<string, string> = { ticketing: "Ticketing", edr: "EDR", siem: "SIEM", identity: "Identity" };
 
-export function Composer({ scopes, scope, locked, disabled, disabledReason, onScope, onSend, useGeneral, onUseGeneral }: Props) {
+export function Composer({ scopes, scope, locked, disabled, disabledReason, onScope, onSend, useGeneral, onUseGeneral,
+  integrations, selected, onIntegrations }: Props) {
   const [confirmOff, setConfirmOff] = useState(false);
   const gkbScope = scopes.find((s) => s.is_general);
   // Asking the knowledge base alone: no separate switch for it.
@@ -27,6 +33,21 @@ export function Composer({ scopes, scope, locked, disabled, disabledReason, onSc
   const ta = useRef<HTMLTextAreaElement>(null);
 
   const options = picker ? scopes.filter((s) => s.name.toLowerCase().includes(picker.filter.toLowerCase())) : [];
+  // # integrations: only in a chat on one customer that has some.
+  const oneCustomer = !!scope?.id && !scope.is_general;
+  const [hashPicker, setHashPicker] = useState<{ filter: string; typed: boolean } | null>(null);
+  const hashOptions = hashPicker
+    ? integrations.filter((i) => `${i.name} ${i.product}`.toLowerCase().includes(hashPicker.filter.toLowerCase()))
+    : [];
+  const chosen = integrations.filter((i) => selected.includes(i.id));
+  function toggle(id: string) {
+    onIntegrations(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
+    if (hashPicker?.typed) {
+      setText((t) => t.replace(HASH, "$1"));
+      setHashPicker(null);
+    }
+    ta.current?.focus();
+  }
 
   useEffect(() => {
     const el = ta.current;
@@ -41,6 +62,8 @@ export function Composer({ scopes, scope, locked, disabled, disabledReason, onSc
     setText(v);
     const m = AT.exec(v);
     setPicker(m ? { filter: m[2] } : null);
+    const h = oneCustomer && integrations.length ? HASH.exec(v) : null;
+    setHashPicker(h ? { filter: h[2], typed: true } : null);
     setHi(0);
   }
 
@@ -52,12 +75,16 @@ export function Composer({ scopes, scope, locked, disabled, disabledReason, onSc
     ta.current?.focus();
   }
 
+  // A "#word" being typed to pick an integration is not part of the question; "#12" in a sentence is.
+  const question = (t: string) => (hashPicker?.typed ? t.replace(HASH, "$1") : t).replace(AT, "$1").trim();
+
   function send() {
-    const q = text.replace(AT, "$1").trim();
+    const q = question(text);
     if (!q || disabled) return;
     onSend(q);
     setText("");
     setPicker(null);
+    setHashPicker(null);
   }
 
   function key(e: KeyboardEvent<HTMLTextAreaElement>) {
@@ -66,6 +93,12 @@ export function Composer({ scopes, scope, locked, disabled, disabledReason, onSc
       if (e.key === "ArrowUp") { e.preventDefault(); setHi((h) => (h - 1 + options.length) % options.length); return; }
       if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); choose(options[hi]); return; }
     }
+    if (hashPicker && hashOptions.length) {
+      if (e.key === "ArrowDown") { e.preventDefault(); setHi((h) => (h + 1) % hashOptions.length); return; }
+      if (e.key === "ArrowUp") { e.preventDefault(); setHi((h) => (h - 1 + hashOptions.length) % hashOptions.length); return; }
+      if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); toggle(hashOptions[hi % hashOptions.length].id); return; }
+    }
+    if (hashPicker && e.key === "Escape") { e.preventDefault(); setHashPicker(null); return; }
     if (picker && e.key === "Escape") { e.preventDefault(); setPicker(null); return; }
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
   }
@@ -88,11 +121,26 @@ export function Composer({ scopes, scope, locked, disabled, disabledReason, onSc
           ))}
         </div>
       )}
+      {hashPicker && (
+        <div className="scope-picker" role="listbox" aria-label="Integrations" aria-multiselectable="true">
+          <div className="scope-picker-note"><Icon name="hash" size={14} />Live data for this chat, read only. Choose one or more.</div>
+          {hashOptions.length === 0 && <div className="muted small" style={{ padding: "8px 12px" }}>No integration matches.</div>}
+          {hashOptions.map((it, i) => (
+            <button key={it.id} type="button" role="option" aria-selected={selected.includes(it.id)}
+              className={`${i === hi % Math.max(hashOptions.length, 1) ? "hi" : ""}${selected.includes(it.id) ? " current" : ""}`}
+              onMouseDown={(e) => { e.preventDefault(); toggle(it.id); }}>
+              <Icon name={selected.includes(it.id) ? "check" : "link"} size={14} />{it.name}
+              <span className="spacer muted small">{it.product} · {TYPE_LABEL[it.type] ?? it.type}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <div className={`composer${disabled ? " busy" : ""}`}>
         <textarea ref={ta} rows={1} value={text} aria-label="Question" maxLength={4000}
-          placeholder={disabledReason ?? (locked ? "Ask a follow-up…" : "Ask about a procedure… type @ to choose the customer")}
+          placeholder={disabledReason ?? (locked ? (chosen.length ? "Ask a follow-up… type # for integrations" : "Ask a follow-up…")
+            : "Ask about a procedure… type @ to choose the customer")}
           disabled={disabled && !!disabledReason}
-          onChange={(e) => change(e.target.value)} onKeyDown={key} onBlur={() => setTimeout(() => setPicker(null), 120)} />
+          onChange={(e) => change(e.target.value)} onKeyDown={key} onBlur={() => setTimeout(() => { setPicker(null); setHashPicker(null); }, 120)} />
         <div className="composer-bar">
           <button type="button" className={`scope-chip${locked ? " locked" : ""}`} aria-label={locked ? `Customer: ${scope?.name}, locked` : "Choose customer"}
             title={locked ? "Customer locked for this chat" : "Choose the customer (or type @)"}
@@ -118,11 +166,22 @@ export function Composer({ scopes, scope, locked, disabled, disabledReason, onSc
               )}
             </span>
           )}
-          <button type="button" className="scope-chip" disabled title="Integrations (ticketing, EDR, SIEM): coming in a later release">
-            <Icon name="hash" size={14} />Integrations<span className="muted small">soon</span>
-          </button>
+          {oneCustomer && integrations.length > 0 ? (
+            <button type="button" className={`scope-chip${chosen.length ? " on" : ""}`} aria-haspopup="listbox"
+              aria-label={chosen.length ? `Integrations: ${chosen.map((c) => c.name).join(", ")}` : "Choose integrations"}
+              title="Live data from the customer's ticketing, EDR and identity tools (or type #)"
+              onClick={() => { setHashPicker(hashPicker ? null : { filter: "", typed: false }); setHi(0); ta.current?.focus(); }}>
+              <Icon name="hash" size={14} />
+              {chosen.length === 0 ? "Integrations" : chosen.length === 1 ? chosen[0].name : `${chosen.length} integrations`}
+            </button>
+          ) : (
+            <button type="button" className="scope-chip" disabled
+              title={oneCustomer ? "No integration is configured for this customer" : "Choose one customer to use its integrations"}>
+              <Icon name="hash" size={14} />Integrations
+            </button>
+          )}
           <span className="spacer muted small composer-hint">Enter to send · Shift+Enter new line</span>
-          <button type="button" className="btn btn-primary btn-sm composer-send" aria-label="Send" disabled={disabled || !text.replace(AT, "$1").trim()} onClick={send}>
+          <button type="button" className="btn btn-primary btn-sm composer-send" aria-label="Send" disabled={disabled || !question(text)} onClick={send}>
             <Icon name="send" />
           </button>
         </div>

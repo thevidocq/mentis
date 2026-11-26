@@ -73,6 +73,7 @@ export const PLATFORM_NAV: NavItem[] = [
   { to: "/admin/tenants", label: "Tenants", icon: "tenants" },
   { to: "/admin/users", label: "Users", icon: "users" },
   { to: "/admin/ai", label: "AI providers", icon: "chip" },
+  { to: "/admin/integrations", label: "Integrations", icon: "link" },
   { to: "/admin/usage", label: "LLM usage", icon: "bars" },
   { to: "/admin/embedding", label: "Embedding and Qdrant", icon: "database" },
   { to: "/admin/smtp", label: "Email (SMTP)", icon: "mail" },
@@ -84,7 +85,7 @@ export const PLATFORM_NAV: NavItem[] = [
 
 export const TENANT_NAV: NavItem[] = [
   { to: "/tenant/documents", label: "Documents", icon: "file" },
-  { to: "/tenant/integrations", label: "Integrations", icon: "link", soon: true },
+  { to: "/tenant/integrations", label: "Integrations", icon: "link" },
   { to: "/tenant/llm", label: "LLM", icon: "brain" },
   { to: "/tenant/users", label: "Users", icon: "users" },
   { to: "/tenant/settings", label: "Settings", icon: "sliders" },

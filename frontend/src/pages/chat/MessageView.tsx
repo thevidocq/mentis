@@ -1,9 +1,15 @@
 import { useState } from "react";
-import type { ChatMessage } from "../../api/types";
+import type { ChatMessage, Citation } from "../../api/types";
 import { Icon } from "../../components/Icon";
 import { Markdown } from "../../components/Markdown";
 import { CheckNotes, checkMarks } from "./CheckNotes";
-import { SourcesBar } from "./Sources";
+import { recordLinks, SourcesBar } from "./Sources";
+
+/** Pages of the live records cited by an answer: the only addresses shown as links in it. */
+function recordUrls(citations: Citation[]): Set<string> | undefined {
+  const urls = citations.flatMap((c) => (c.kind === "integration" ? recordLinks(c).map(([, url]) => url) : []));
+  return urls.length ? new Set(urls) : undefined;
+}
 
 export function UserMessage({ m }: { m: Pick<ChatMessage, "content"> }) {
   return <div className="msg-user"><div className="bubble">{m.content}</div></div>;
@@ -49,7 +55,7 @@ export function AssistantMessage({ m, onFollowup, onFeedback, onRetry, busy, onS
         {m.status === "not_found" && <span className="answer-flag">Not found</span>}
       </div>
       <div className={m.status === "not_found" ? "answer not-found" : "answer"}>
-        <Markdown source={m.content} cite={cite} marks={checkMarks(m.check)} />
+        <Markdown source={m.content} cite={cite} marks={checkMarks(m.check)} links={recordUrls(m.citations)} />
       </div>
       {m.citations.length > 0 && (
         <SourcesBar citations={m.citations} active={sourcesOpen} onOpen={() => onSources(null)} />

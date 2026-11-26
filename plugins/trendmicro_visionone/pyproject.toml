@@ -1,0 +1,16 @@
+[project]
+name = "mentis-trendmicro-visionone"
+version = "1.0.0"
+description = "Mentis connector: Trend Micro Vision One (read-only)"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.entry-points."mentis.connectors"]
+trendmicro_visionone = "mentis_trendmicro_visionone:connector"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["mentis_trendmicro_visionone*"]
