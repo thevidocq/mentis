@@ -59,9 +59,10 @@ export function MobileBar({ title, onMenu, right }: { title: string; onMenu: () 
   );
 }
 
-export function PageHead({ title, children, wide = false }: { title: string; children?: ReactNode; wide?: boolean }) {
+/** Page title. `narrow` for forms and settings, `wide` for data-heavy tables: use the same on the page body. */
+export function PageHead({ title, children, wide = false, narrow = false }: { title: string; children?: ReactNode; wide?: boolean; narrow?: boolean }) {
   return (
-    <header className={`page-head${wide ? " wide" : ""}`}>
+    <header className={`page-head${wide ? " wide" : ""}${narrow ? " narrow" : ""}`}>
       <h1>{title}</h1>
       {children}
     </header>

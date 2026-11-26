@@ -33,8 +33,8 @@ export function TenantSettings() {
 
   return (
     <>
-      <PageHead title="Settings" />
-      <div className="page-body" style={{ maxWidth: 760 }}>
+      <PageHead title="Settings" narrow />
+      <div className="page-body narrow">
         {error && <div className="error">{error}</div>}
         {current?.is_general && <div className="notice">The General Knowledge Base is shared by all customers: its documents always need approval, and the other settings apply to customers.</div>}
         {tenant && !current?.is_general && (

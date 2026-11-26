@@ -6,6 +6,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Changed
+- Desktop layout: pages are centered next to the menu (readable width: 1200 px, 860 px for forms and settings, 1560 px for Logs), and the side menu is wider (280 px).
+
 ## [0.3.2] - 2026-11-26
 
 Security release: authorization matrix over every API route, penetration test (report in `docs/security/pentest-v0.3.2.md`), infrastructure hardening, frontend review.

@@ -41,8 +41,8 @@ export function Configuration() {
 
   return (
     <>
-      <PageHead title="Backup and configuration" />
-      <div className="page-body" style={{ maxWidth: 860 }}>
+      <PageHead title="Backup and configuration" narrow />
+      <div className="page-body narrow">
         <div className="card">
           <div className="card-head"><h2>Configuration</h2></div>
           <div className="card-body stack">
