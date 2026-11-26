@@ -54,7 +54,7 @@
 .answer-error { display: flex; align-items: center; gap: 10px; border: 1px solid var(--danger); color: var(--danger); border-radius: 8px; padding: 10px 12px; }
 
 .sources { display: flex; flex-direction: column; gap: 6px; }
-.sources-toggle { display: flex; align-items: center; gap: 6px; width: 100%; padding: 7px 12px; border: 1px solid var(--border-soft); border-radius: 8px; background: transparent; color: var(--text); font: inherit; font-size: 12.5px; cursor: pointer; text-align: left; }
+.sources-toggle { display: inline-flex; align-self: flex-start; align-items: center; gap: 6px; width: auto; max-width: 100%; padding: 4px 10px; border: 1px solid var(--border-soft); border-radius: 6px; background: transparent; color: var(--text); font: inherit; font-size: 12.5px; cursor: pointer; text-align: left; }
 .sources-toggle:hover { background: var(--raised); }
 .source-doc-block { border: 1px solid var(--border-soft); border-radius: 8px; padding: 6px 4px 4px; }
 .source-doc-name { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 0 6px 4px; font-size: 12.5px; }
@@ -135,19 +135,19 @@
 
 /* Sources panel on the right of the chat (reference viewer) */
 .sources-toggle.active { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); background: var(--raised); }
-.sources-panel { flex: 0 0 380px; align-self: flex-start; max-height: calc(100% - 32px); margin: 16px 16px 16px 0; display: flex; flex-direction: column; min-width: 0;
-  background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 12px 32px -16px rgba(0, 0, 0, 0.5); overflow: hidden; }
-.sources-panel-head { display: flex; align-items: center; gap: 10px; padding: 0 8px 0 16px; height: 48px; box-sizing: border-box;
-  border-bottom: 1px solid var(--border-soft); flex: 0 0 auto; }
-.sources-panel-body { overflow-y: auto; padding: 8px 8px 10px; display: flex; flex-direction: column; gap: 4px; }
-.sources-panel .source-doc-block { border: 0; padding: 4px 0 2px; }
-.sources-panel .source-doc-block + .source-doc-block { border-top: 1px solid var(--border-soft); padding-top: 8px; }
-.sources-panel .source-doc-name { padding: 2px 8px 4px; font-size: 13px; }
-.sources-panel .source-row { font-size: 13px; padding: 7px 8px; }
+.sources-panel { flex: 0 0 min(440px, 38vw); height: 100%; display: flex; flex-direction: column; min-width: 0;
+  background: var(--surface); border-left: 1px solid var(--border); }
+.sources-panel-head { display: flex; align-items: center; gap: 10px; padding: 0 16px 0 20px; height: var(--head-h); box-sizing: border-box;
+  border-bottom: 1px solid var(--border); flex: 0 0 auto; }
+.sources-panel-body { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.sources-panel .source-doc-block { padding: 8px 6px 6px; }
+.sources-panel .source-doc-name { padding: 2px 8px 8px; font-size: 13px; }
+.sources-panel .source-row { font-size: 13px; padding: 8px; }
 .sources-panel .source-section { flex: 1; }
-.sources-panel .source-text { padding: 2px 12px 10px 30px; font-size: 13px; line-height: 1.6; color: var(--text); }
+.sources-panel .source-text { padding: 4px 12px 12px 32px; font-size: 13px; line-height: 1.6; color: var(--text); }
 @media (max-width: 900px) {
-  .sources-panel { position: fixed; inset: 0; z-index: 60; flex: none; width: 100%; max-height: none; margin: 0; border: 0; border-radius: 0; }
+  .sources-panel { position: fixed; inset: 0; z-index: 60; flex: none; width: 100%; border-left: 0; }
   .sources-panel-head { height: 56px; }
   .answer-card { padding: 14px 14px 8px; }
 }
+.composer-send { margin-left: auto; }

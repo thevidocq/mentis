@@ -10,8 +10,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ### Changed
 - **Documents as a document browser**: the list on the left (search, All / In use / To review, documents needing attention grouped first with a quiet badge) and the selected document on the right: state, Approve/Reject or Retry when needed, **New version**, Download, a ⋯ menu (Rename, Versions, Delete), and the tabs Preview, Text read, Versions, Test a question; details and recent versions on the right on wide screens. On a phone: list, then the document with a back button.
-- **Chat answers** sit in a light frame (hairline fading from the top-left corner, faint teal trail, very light shadow); the customer is a small text line, no longer a rounded badge, also in the chat header. Lighter citation numbers, follow-up chips and Sources bar.
-- **Sources** open in a card on the right sized to its content, instead of a full-height panel.
+- **Chat answers** sit in a light frame (hairline fading from the top-left corner, faint teal trail, very light shadow); the customer is a small text line, no longer a rounded badge, also in the chat header. Lighter citation numbers and follow-up chips; the Sources line under the answer is now a small button (only as wide as its text) that opens the panel on the right.
 
 ### Added
 - **New version** of a document accepts any file name of the same type (`document_id` on upload).

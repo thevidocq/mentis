@@ -68,7 +68,7 @@ One chat = one customer scope, locked at the first message; integrations are cho
 - If the documentation does not cover the question: "Not found in <customer> documentation", never an invented procedure. With no passage above the score threshold the LLM is not called at all; the model can also flag not-found itself.
 - Passages go to the LLM as numbered, untrusted data blocks labelled with their customer; citation numbers not among them are dropped.
 - Each answer sits in a light frame (hairline fading from the top-left corner, faint teal trail, very light shadow); its customer is a small text line above it, not a badge; the chat header shows the customer as quiet text after the title.
-- Sources under the answer are one compact line ("Sources · 1 document · 8 sections"). A click opens the **Sources card on the right** of the chat, sized to its content (full screen on a phone): one block per document (version) with its cited sections in number order. The customer badge appears only when the answer mixes customers or uses General. A click on [n] opens the panel on that section.
+- Sources under the answer are one small button ("Sources · 1 document · 8 sections"). A click opens the **Sources panel on the right** of the chat (full screen on a phone): one block per document (version) with its cited sections in number order. The customer badge appears only when the answer mixes customers or uses General. A click on [n] opens the panel on that section.
 - The last turns of the chat are sent as context; short follow-ups also reuse the previous question for retrieval.
 
 **Suggested follow-ups**

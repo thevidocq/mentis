@@ -122,7 +122,7 @@ export function Composer({ scopes, scope, locked, disabled, disabledReason, onSc
             <Icon name="hash" size={14} />Integrations<span className="muted small">soon</span>
           </button>
           <span className="spacer muted small composer-hint">Enter to send · Shift+Enter new line</span>
-          <button type="button" className="btn btn-primary btn-sm" aria-label="Send" disabled={disabled || !text.replace(AT, "$1").trim()} onClick={send}>
+          <button type="button" className="btn btn-primary btn-sm composer-send" aria-label="Send" disabled={disabled || !text.replace(AT, "$1").trim()} onClick={send}>
             <Icon name="send" />
           </button>
         </div>

@@ -17,8 +17,8 @@ Next to the customer, the **Knowledge Base** chip is on by default (✓). To ans
 ## Read the answer
 
 - Each answer sits in a light frame. The small line above it says **which customer** it refers to. With All customers, an answer covering several customers names each one.
-- Every statement ends with a number like **1**: click it to open the **Sources** card on the right, on that passage.
-- The **Sources** bar under the answer says how many documents and sections were used; click it to open the card. It lists each document (with its version) and the cited sections; click a section to read the exact passage. The customer is shown only when the answer mixes customers or uses the General Knowledge Base. Close it with **×** or **Esc**. On a phone it fills the screen.
+- Every statement ends with a number like **1**: click it to open the **Sources** panel on the right, on that passage.
+- The small **Sources** button under the answer says how many documents and sections were used; click it to open the panel. It lists each document (with its version) and the cited sections; click a section to read the exact passage. The customer is shown only when the answer mixes customers or uses the General Knowledge Base. Close it with **×** or **Esc**. On a phone it fills the screen.
 - A customer's own procedure wins over the General Knowledge Base; when they differ, the answer says so.
 - **Not found**: if the documentation in use does not cover the question, Mentis says so and does not guess. Ask your tenant admin to add the missing procedure.
 - Under the answer: up to three **suggested questions** (one click asks them), thumbs up / thumbs down buttons to rate the answer, copy, and the name of the AI model that wrote it.
