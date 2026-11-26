@@ -86,7 +86,7 @@ export function EmbeddingSettings() {
     }
   }
 
-  if (!state) return <PageHead title="Embedding and Qdrant" narrow />;
+  if (!state) return <><PageHead title="Embedding and Qdrant" narrow />{msg && <div className="page-body narrow"><div className="error" role="alert">{msg.text}</div></div>}</>;
   const r = state.reindex;
 
   return (

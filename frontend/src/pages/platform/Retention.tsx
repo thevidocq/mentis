@@ -22,13 +22,15 @@ const PRESETS = [30, 90, 180, 365, 730, 0];
 const label = (d: number) => (d === 0 ? "Keep forever" : d % 365 === 0 ? `${d / 365} year${d > 365 ? "s" : ""}` : `${d} days`);
 
 function DaysField({ title, help, value, onChange }: { title: string; help: string; value: number; onChange: (v: number) => void }) {
-  const custom = !PRESETS.includes(value);
+  // Stays on Custom while typing: clearing the box (0) must not switch to "Keep forever" and hide it.
+  const [customOn, setCustomOn] = useState(!PRESETS.includes(value));
+  const custom = customOn || !PRESETS.includes(value);
   return (
     <div className="stack" style={{ gap: 6 }}>
       <strong>{title}</strong>
       <span className="muted small">{help}</span>
       <div className="row">
-        <select className="input" aria-label={title} value={custom ? "custom" : value} onChange={(e) => onChange(e.target.value === "custom" ? 60 : Number(e.target.value))}>
+        <select className="input" aria-label={title} value={custom ? "custom" : value} onChange={(e) => { setCustomOn(e.target.value === "custom"); onChange(e.target.value === "custom" ? 60 : Number(e.target.value)); }}>
           {PRESETS.map((d) => <option key={d} value={d}>{label(d)}</option>)}
           <option value="custom">Custom…</option>
         </select>
@@ -44,7 +46,7 @@ export function RetentionSettings() {
   const [confirm, setConfirm] = useState(false);
 
   useEffect(() => { api<Retention>("/platform/retention").then(setCfg).catch((e) => setMsg({ ok: false, text: errorText(e) })); }, []);
-  if (!cfg) return <PageHead title="Retention" narrow />;
+  if (!cfg) return <><PageHead title="Retention" narrow />{msg && <div className="page-body narrow"><div className="error" role="alert">{msg.text}</div></div>}</>;
 
   async function save() {
     if (!cfg) return;

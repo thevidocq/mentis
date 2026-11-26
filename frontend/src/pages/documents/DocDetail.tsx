@@ -47,8 +47,14 @@ export function DocDetail({ base, doc, refreshKey, onChanged, onDeleted, onBack,
   useEffect(() => {
     setPages([]);
     if (!ready) return;
-    api<DocPage[]>(`${base}/versions/${shown.id}/pages`).then((p) => { setPages(p); setCurrent((c) => (p.some((x) => x.index === c) ? c : p[0]?.index ?? null)); })
-      .catch((e) => setError(errorText(e)));
+    // Another version picked meanwhile: its pages, not these, belong on screen.
+    let stale = false;
+    api<DocPage[]>(`${base}/versions/${shown.id}/pages`).then((p) => {
+      if (stale) return;
+      setPages(p);
+      setCurrent((c) => (p.some((x) => x.index === c) ? c : p[0]?.index ?? null));
+    }).catch((e) => { if (!stale) setError(errorText(e)); });
+    return () => { stale = true; };
   }, [base, shown.id, ready]);
 
   useEffect(() => {
@@ -58,13 +64,19 @@ export function DocDetail({ base, doc, refreshKey, onChanged, onDeleted, onBack,
     return () => window.removeEventListener("click", close);
   }, [menu]);
 
+  // One action at a time: a double click must not approve (or retry) twice and report a false error.
+  const acting = useRef(false);
   async function act(v: DocVersion, action: Action) {
+    if (acting.current) return;
+    acting.current = true;
     setError(null);
     try {
       await api(`${base}/versions/${v.id}/${action}`, { method: "POST" });
       onChanged();
     } catch (e) {
       setError(errorText(e));
+    } finally {
+      acting.current = false;
     }
   }
 

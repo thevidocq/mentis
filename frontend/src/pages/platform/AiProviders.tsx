@@ -49,6 +49,7 @@ export function AiProviders() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [advanced, setAdvanced] = useState(false);
 
   const load = () => api<LlmProvider[]>("/llm/providers").then(setItems).catch((e) => setMsg({ ok: false, text: errorText(e) }));
@@ -58,7 +59,7 @@ export function AiProviders() {
   }, []);
 
   async function save() {
-    if (!form) return;
+    if (!form || saving) return;
     setFormError(null);
     const options: Record<string, unknown> = {};
     if (form.reasoning_effort) options.reasoning_effort = form.reasoning_effort;
@@ -68,6 +69,7 @@ export function AiProviders() {
     const body: Record<string, unknown> = { name: form.name.trim(), kind: form.kind, base_url: form.base_url.trim(), model: form.model.trim(), options,
       is_default: form.is_default || firstOfRole(form.role, form.id), role: form.role };
     if (form.api_key) body.api_key = form.api_key;
+    setSaving(true); // a double click must not add the provider twice
     try {
       await api(form.id ? `/llm/providers/${form.id}` : "/llm/providers", { method: form.id ? "PUT" : "POST", body });
       setForm(null);
@@ -75,6 +77,8 @@ export function AiProviders() {
       load();
     } catch (e) {
       setFormError(errorText(e));
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -175,7 +179,7 @@ export function AiProviders() {
         <Modal title={form.id ? `Edit ${form.name}` : "Add provider"} onClose={() => setForm(null)}
           footer={<>
             <button className="btn" onClick={() => setForm(null)}>Cancel</button>
-            <button className="btn btn-primary" disabled={!form.name.trim() || !form.base_url.trim() || !form.model.trim()} onClick={save}>Save</button>
+            <button className="btn btn-primary" disabled={saving || !form.name.trim() || !form.base_url.trim() || !form.model.trim()} onClick={save}>Save</button>
           </>}>
           <div className="field">Use for
             <div className="role-choice" role="radiogroup" aria-label="Use for">

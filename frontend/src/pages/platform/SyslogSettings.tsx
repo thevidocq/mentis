@@ -20,7 +20,7 @@ export function SyslogSettings({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => { api<Syslog>("/platform/syslog").then(setCfg).catch((e) => setMsg({ ok: false, text: errorText(e) })); }, []);
-  if (!cfg) return null;
+  if (!cfg) return msg ? <Modal title="Syslog forwarding" onClose={onClose}><div className="error" role="alert">{msg.text}</div></Modal> : null;
   const set = <K extends keyof Syslog>(k: K, v: Syslog[K]) => setCfg({ ...cfg, [k]: v });
 
   async function save(): Promise<boolean> {
@@ -38,11 +38,16 @@ export function SyslogSettings({ onClose }: { onClose: () => void }) {
 
   async function test() {
     setBusy(true);
-    if (await save()) {
-      const r = await api<{ ok: boolean; message?: string; error?: string }>("/platform/syslog/test", { method: "POST" });
-      setMsg(r.ok ? { ok: true, text: r.message ?? "Sent." } : { ok: false, text: r.error ?? "Sending failed." });
+    try {
+      if (await save()) {
+        const r = await api<{ ok: boolean; message?: string; error?: string }>("/platform/syslog/test", { method: "POST" });
+        setMsg(r.ok ? { ok: true, text: r.message ?? "Sent." } : { ok: false, text: r.error ?? "Sending failed." });
+      }
+    } catch (e) {
+      setMsg({ ok: false, text: errorText(e) });
+    } finally {
+      setBusy(false); // a failed test must not leave both buttons disabled
     }
-    setBusy(false);
   }
 
   return (

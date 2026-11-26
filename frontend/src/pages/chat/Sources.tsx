@@ -52,7 +52,8 @@ export function SourcesPanel({ citations, focus, onClose }: { citations: Citatio
   }, [focus, citations]);
 
   useEffect(() => {
-    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    // Escape handled elsewhere (the @ customer list) or meant for a dialog on top leaves the panel open.
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape" && !e.defaultPrevented && !document.querySelector('[aria-modal="true"]')) onClose(); };
     document.addEventListener("keydown", esc);
     return () => document.removeEventListener("keydown", esc);
   }, [onClose]);
