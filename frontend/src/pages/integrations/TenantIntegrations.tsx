@@ -72,8 +72,8 @@ export function TenantIntegrations() {
       </PageHead>
       <div className="page-body">
         <p className="muted" style={{ margin: 0 }}>
-          The customer's ticketing and EDR tools. In a chat on this customer, analysts choose them with <strong>#</strong>:
-          Mentis reads tickets, devices and alerts and answers with the link to each record. Read only: nothing is ever changed in these systems.
+          The customer's ticketing, EDR and identity tools. In a chat on this customer, analysts choose them with <strong>#</strong>:
+          Mentis reads tickets, devices, alerts and users and answers with the link to each record. Read only: nothing is ever changed in these systems.
         </p>
         {error && <div className="error" role="alert">{error}</div>}
         {data?.general && <div className="notice">The General Knowledge Base holds general knowledge only: integrations belong to a customer.</div>}
@@ -81,7 +81,7 @@ export function TenantIntegrations() {
           <div className="notice">No integration type is enabled yet. A super-admin enables them in <strong>Integrations</strong> of the platform.</div>
         )}
         {data && !data.general && data.integrations.length === 0 && data.plugins.length > 0 && (
-          <div className="notice">No integration yet. <strong>Add integration</strong> to connect the customer's ServiceNow, Jira or EDR.</div>
+          <div className="notice">No integration yet. <strong>Add integration</strong> to connect the customer's ServiceNow, Jira, EDR or Entra ID.</div>
         )}
         <div className="integration-list">
           {data?.integrations.map((i) => {

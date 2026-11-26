@@ -1,6 +1,6 @@
 # Integrations
 
-Mentis reads customers' ticketing and EDR tools, **read only**, so analysts get live tickets, devices and alerts in their answers (`#` in the chat).
+Mentis reads customers' ticketing, EDR and identity tools, **read only**, so analysts get live tickets, devices, alerts and users in their answers (`#` in the chat).
 
 ## Enable the types
 
@@ -8,6 +8,7 @@ Mentis reads customers' ticketing and EDR tools, **read only**, so analysts get 
 
 - Ticketing: **ServiceNow**, **Jira** (Cloud and Data Center).
 - EDR: **CrowdStrike Falcon**, **Microsoft Defender for Endpoint**, **Trend Vision One**.
+- Identity: **Microsoft Entra ID**.
 
 Click **Enable** on the ones tenant admins may use. Turning a type off stops every customer integration of that type at once (configurations are kept). The number on the right says how many customer integrations use it.
 

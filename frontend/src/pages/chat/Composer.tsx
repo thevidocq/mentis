@@ -19,7 +19,7 @@ interface Props {
 
 const AT = /(^|\s)@([^\s@]*)$/;
 const HASH = /(^|\s)#([^\s#]*)$/;
-const TYPE_LABEL: Record<string, string> = { ticketing: "Ticketing", edr: "EDR", siem: "SIEM" };
+const TYPE_LABEL: Record<string, string> = { ticketing: "Ticketing", edr: "EDR", siem: "SIEM", identity: "Identity" };
 
 export function Composer({ scopes, scope, locked, disabled, disabledReason, onScope, onSend, useGeneral, onUseGeneral,
   integrations, selected, onIntegrations }: Props) {
@@ -169,7 +169,7 @@ export function Composer({ scopes, scope, locked, disabled, disabledReason, onSc
           {oneCustomer && integrations.length > 0 ? (
             <button type="button" className={`scope-chip${chosen.length ? " on" : ""}`} aria-haspopup="listbox"
               aria-label={chosen.length ? `Integrations: ${chosen.map((c) => c.name).join(", ")}` : "Choose integrations"}
-              title="Live data from the customer's ticketing and EDR tools (or type #)"
+              title="Live data from the customer's ticketing, EDR and identity tools (or type #)"
               onClick={() => { setHashPicker(hashPicker ? null : { filter: "", typed: false }); setHi(0); ta.current?.focus(); }}>
               <Icon name="hash" size={14} />
               {chosen.length === 0 ? "Integrations" : chosen.length === 1 ? chosen[0].name : `${chosen.length} integrations`}

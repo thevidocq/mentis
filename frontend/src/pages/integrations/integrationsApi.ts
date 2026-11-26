@@ -21,4 +21,4 @@ export const integrationsApi = {
       { method: "POST", body: { operation, args } }),
 };
 
-export const TYPE_LABEL: Record<string, string> = { ticketing: "Ticketing", edr: "EDR", siem: "SIEM" };
+export const TYPE_LABEL: Record<string, string> = { ticketing: "Ticketing", edr: "EDR", siem: "SIEM", identity: "Identity" };

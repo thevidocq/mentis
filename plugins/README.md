@@ -1,6 +1,6 @@
 # Plugins
 
-Each integration (ticketing, EDR, SIEM) is a plugin in its own folder, implementing the core connector contract (`backend/app/connectors/contract.py`, described in `docs/DESIGN.md`, Integrations → Plugin model). The core never imports a specific plugin.
+Each integration (ticketing, EDR, SIEM, identity) is a plugin in its own folder, implementing the core connector contract (`backend/app/connectors/contract.py`, described in `docs/DESIGN.md`, Integrations → Plugin model). The core never imports a specific plugin.
 
 | Folder | Product | Type | Operations |
 | --- | --- | --- | --- |
@@ -8,6 +8,7 @@ Each integration (ticketing, EDR, SIEM) is a plugin in its own folder, implement
 | `jira/` | Jira Cloud and Data Center | ticketing | issue by key, search, open issues of a host |
 | `crowdstrike/` | CrowdStrike Falcon | edr | host, alerts of a host, alert by id, open alerts |
 | `defender/` | Microsoft Defender for Endpoint | edr | device, alerts of a device, alert by id, open alerts, IP statistics |
+| `entraid/` | Microsoft Entra ID | identity | user (state, MFA, risk, last sign-in), recent sign-ins of a user, users at risk |
 | `trendmicro_visionone/` | Trend Vision One | edr | endpoint, Workbench alerts of an endpoint, alert by id, open alerts |
 
 ## Writing a plugin

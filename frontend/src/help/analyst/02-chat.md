@@ -16,10 +16,10 @@ Next to the customer, the **Knowledge Base** chip is on by default (✓). To ans
 
 ## Live data from the customer's tools (#)
 
-In a chat on **one customer**, Mentis can also read the customer's ticketing and EDR tools (ServiceNow, Jira, CrowdStrike, Microsoft Defender, Trend Vision One), if its tenant admin connected them.
+In a chat on **one customer**, Mentis can also read the customer's ticketing, EDR and identity tools (ServiceNow, Jira, CrowdStrike, Microsoft Defender, Trend Vision One, Microsoft Entra ID), if its tenant admin connected them.
 
 1. Type `#` (or click **Integrations** under the box) and pick one or more of the customer's integrations. The chip shows what is chosen; click it again to change the choice for the next questions.
-2. Ask as usual, for example *What is the status of INC0012345?*, *Open alerts on WS-042?* or *Is there a procedure for the alert WB-14-20261126-00003?*
+2. Ask as usual, for example *What is the status of INC0012345?*, *Open alerts on WS-042?* *Is there a procedure for the alert WB-14-20261126-00003?* or *Is mario.rossi@acme.com blocked, and where did he sign in from?*
 3. Ticket numbers (INC…, SOC-123), alert ids and similar are looked up directly; for host names, IP addresses and searches the AI model decides which lookups help.
 
 The answer cites the records like documents: their numbers open the **Sources** panel, marked *live*, with **Open in ServiceNow** (or the product) and further links, for example the device or the IP page. The record's id in the answer is a link too, and when the answer does not link a record it cites, an **Open:** line under the answer does. Only links to the records found are clickable: any other address in an answer is shown as plain text.

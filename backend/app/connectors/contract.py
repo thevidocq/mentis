@@ -16,11 +16,12 @@ from typing import Any, Protocol
 
 CORE_API = "1"
 
-TICKETING, EDR, SIEM = "ticketing", "edr", "siem"
-TYPES = (TICKETING, EDR, SIEM)
+TICKETING, EDR, SIEM, IDENTITY = "ticketing", "edr", "siem", "identity"
+TYPES = (TICKETING, EDR, SIEM, IDENTITY)
 
-TICKET, DEVICE, ALERT, INDICATOR = "ticket", "device", "alert", "indicator"
-KINDS = (TICKET, DEVICE, ALERT, INDICATOR)  # indicator: an IP, domain or file hash and what the product knows of it
+TICKET, DEVICE, ALERT, INDICATOR, USER = "ticket", "device", "alert", "indicator", "user"
+# indicator: an IP, domain or file hash and what the product knows of it; user: an account (identity)
+KINDS = (TICKET, DEVICE, ALERT, INDICATOR, USER)
 
 
 @dataclass(frozen=True)
@@ -28,7 +29,7 @@ class Manifest:
     name: str            # entry point name, e.g. "servicenow"
     label: str           # shown in the UI, e.g. "ServiceNow"
     version: str
-    type: str            # ticketing | edr | siem
+    type: str            # ticketing | edr | siem | identity
     vendor: str
     description: str
     vertical: str = "soc"
@@ -52,7 +53,7 @@ class Operation:
     name: str
     label: str
     description: str     # for the planner model: when to use this operation
-    returns: str         # ticket | device | alert | indicator
+    returns: str         # ticket | device | alert | indicator | user
     params: dict[str, Param] = field(default_factory=dict)
     # Run without asking a model when the question contains a match: {param: regex}. The whole
     # match becomes the parameter value. Only for identifiers with an unmistakable shape.
@@ -63,7 +64,7 @@ class Operation:
 class Record:
     """One normalized object read from a customer system."""
 
-    kind: str                      # ticket | device | alert | indicator
+    kind: str                      # ticket | device | alert | indicator | user
     id: str                        # as the analyst knows it: INC0012345, ABC-123, host name, alert id
     title: str
     url: str | None = None         # link to the object in the product's console

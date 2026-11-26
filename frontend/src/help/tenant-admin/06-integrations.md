@@ -1,6 +1,6 @@
 # Integrations
 
-**Integrations** in the left menu connects your customer's ticketing and EDR tools. In a chat on this customer, analysts choose them with `#`: Mentis reads tickets, devices and alerts at the moment of the question and answers with a link to each record.
+**Integrations** in the left menu connects your customer's ticketing, EDR and identity tools. In a chat on this customer, analysts choose them with `#`: Mentis reads tickets, devices, alerts and users at the moment of the question and answers with a link to each record.
 
 Integrations are **read only**: Mentis never creates, changes or closes anything in these systems. Use an account (or API client) with read permissions only.
 
@@ -21,6 +21,7 @@ Credentials are stored encrypted and never shown again: leave a credential empty
 | **Jira** | Issues by key (SOC-123), search, open issues that mention a host | Site URL. Cloud: account e-mail and API token. Data Center: personal access token. *Projects* limits what Mentis reads |
 | **CrowdStrike** | Host details and containment, alerts of a host, alert by id, open alerts | Cloud (US-1, US-2, EU-1, US-GOV-1), API client with **Hosts: Read** and **Alerts: Read**. Child CID for Flight Control (MSSP) |
 | **Microsoft Defender** | Device details with IP links, alerts of a device, alert by id with evidence, open alerts, IP address statistics | Entra app registration with application permissions **Machine.Read.All**, **Alert.Read.All**, **Ip.Read.All** (admin consent): tenant ID, client ID, client secret, API region |
+| **Microsoft Entra ID** | A user (blocked or enabled, MFA methods, risk, last sign-in, password change, department), the last sign-ins of a user (app, IP, country, result, Conditional Access), users at risk | Entra app registration with application permissions **User.Read.All**, **AuditLog.Read.All**, **UserAuthenticationMethod.Read.All**, **IdentityRiskyUser.Read.All** (admin consent): tenant ID, client ID, client secret. Sign-ins need Entra ID P1, risk needs P2: without them that part is simply left out |
 | **Trend Vision One** | Endpoint details, Workbench alerts of an endpoint, alert by id (WB-…), open alerts | Region and an API key whose role can view Endpoint Inventory and Workbench |
 
 ## Field mapping

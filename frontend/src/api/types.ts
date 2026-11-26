@@ -212,7 +212,7 @@ export interface IntegrationOption {
   id: string;
   name: string;
   product: string;
-  type: "ticketing" | "edr" | "siem";
+  type: "ticketing" | "edr" | "siem" | "identity";
 }
 
 // --- Integrations (admin) -------------------------------------------------------
@@ -233,7 +233,7 @@ export interface SchemaProp {
 export interface IntegrationPlugin {
   name: string;
   label: string;
-  type: "ticketing" | "edr" | "siem";
+  type: "ticketing" | "edr" | "siem" | "identity";
   vendor: string;
   version: string;
   description: string;

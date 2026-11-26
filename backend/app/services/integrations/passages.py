@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from app.connectors.contract import Connector, Record
 from app.models import Integration, Tenant
 
-KIND_LABEL = {"ticket": "Ticket", "device": "Device", "alert": "Alert", "indicator": "Indicator"}
+KIND_LABEL = {"ticket": "Ticket", "device": "Device", "alert": "Alert", "indicator": "Indicator", "user": "User"}
 
 
 @dataclass

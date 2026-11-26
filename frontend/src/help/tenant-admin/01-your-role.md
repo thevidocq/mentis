@@ -12,7 +12,7 @@ If you administer more than one customer, the **customer selector** at the top o
 - **Users**: invite and manage tenant admins and analysts of your customers.
 - **Settings**: decide how answers use your documentation.
 - **LLM**: choose which AI model answers for your customer, and a fallback (when the super-admin allows it).
-- **Integrations**: connect the customer's ticketing and EDR tools (ServiceNow, Jira, CrowdStrike, Microsoft Defender, Trend Vision One), read only; analysts use them in the chat with `#`.
+- **Integrations**: connect the customer's ticketing, EDR and identity tools (ServiceNow, Jira, CrowdStrike, Microsoft Defender, Trend Vision One, Microsoft Entra ID), read only; analysts use them in the chat with `#`.
 - **General Knowledge Base**: if you can manage it, pick it in the customer selector to upload general knowledge (no customer context); every new version needs approval. Everyone reads it in the chat anyway.
 - **Chat**: test the answers analysts get about your customers. `@` lists your customers; **All my customers** searches all of them.
 

@@ -147,9 +147,9 @@ Retrieval tuning in `.env`: `MENTIS_CHAT_PASSAGES` (default 8) and `MENTIS_CHAT_
 
 ## Integrations
 
-The integration plugins in `plugins/` (ServiceNow, Jira, CrowdStrike, Microsoft Defender, Trend Vision One) are installed into the `api` image at build time. They are off until a super-admin enables them in **Integrations**; tenant admins then configure them for their customers.
+The integration plugins in `plugins/` (ServiceNow, Jira, CrowdStrike, Microsoft Defender, Trend Vision One, Microsoft Entra ID) are installed into the `api` image at build time. They are off until a super-admin enables them in **Integrations**; tenant admins then configure them for their customers.
 
-The `api` container needs outbound HTTPS to each customer's systems: the ServiceNow instance or Jira site (on-premise Jira Data Center may need a route or VPN from the VPS), `api.crowdstrike.com` (or the customer's region), `login.microsoftonline.com` and `api*.securitycenter.microsoft.com`, `api*.xdr.trendmicro.com`. Customers that restrict API access by source IP must allow the VPS's public address.
+The `api` container needs outbound HTTPS to each customer's systems: the ServiceNow instance or Jira site (on-premise Jira Data Center may need a route or VPN from the VPS), `api.crowdstrike.com` (or the customer's region), `login.microsoftonline.com` and `api*.securitycenter.microsoft.com`, `api*.xdr.trendmicro.com`, `graph.microsoft.com`. Customers that restrict API access by source IP must allow the VPS's public address.
 
 Check what is installed:
 
