@@ -3,8 +3,18 @@
 from PIL import Image
 
 
+MAX_OCR_PIXELS = 40_000_000  # larger pictures are scaled down first (memory and OCR time)
+
+
 def ocr_image(image: Image.Image, languages: str) -> tuple[str, float | None]:
     import pytesseract
+
+    if image.width * image.height > MAX_OCR_PIXELS:
+        ratio = (MAX_OCR_PIXELS / (image.width * image.height)) ** 0.5
+        image.draft("L", (int(image.width * ratio), int(image.height * ratio)))  # JPEG: decode smaller
+        if image.width * image.height > MAX_OCR_PIXELS:
+            ratio = (MAX_OCR_PIXELS / (image.width * image.height)) ** 0.5
+            image = image.resize((max(1, int(image.width * ratio)), max(1, int(image.height * ratio))))
 
     data = pytesseract.image_to_data(image.convert("L"), lang=languages, output_type=pytesseract.Output.DICT)
     lines: dict[tuple, list[str]] = {}

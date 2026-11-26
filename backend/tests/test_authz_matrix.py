@@ -109,7 +109,9 @@ def world():
     fake = FakeLLM()
     llm.set_transport(fake.transport())
     try:
-        with TestClient(create_app()) as c:
+        app = create_app()
+        app.state.auth_limiter = None  # thousands of sign-ins from one test client; the limiter has its own tests
+        with TestClient(app) as c:
             c.headers.update(HEADERS)
             c.storage, c.queued = store, queued
             yield _build(c, fake)

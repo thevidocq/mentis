@@ -33,6 +33,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 - Chat history: answers that used a customer no longer assigned to the user (removed from the account) are hidden, with their sources and follow-ups, also in the feedback response, and are no longer sent to the LLM as history of "All my customers" chats; citations now carry the tenant id (older ones are matched by name, unknown = hidden).
 - Service errors shown to analysts and tenant admins (chat answer, "Test a question", failed version) no longer include internal addresses or raw provider/embedding replies; the cause stays in the Logs (`document.failed` gains `cause`, new `document.test_question_failed`).
 - Tests: authorization matrix (`backend/tests/test_authz_matrix.py`) over every API route, nine actors and objects of other tenants (IDOR), with leak checks on every response; a new route without an expectation fails the test.
+Penetration test of v0.3.1, report in `docs/security/pentest-v0.3.2.md`.
+- PT-01: sign-in, 2FA, password reset, invitation and setup requests are rate limited per client IP (`MENTIS_AUTH_RATE_PER_MINUTE`, default 30/min, 429 above): no unlimited password spraying, no Argon2 CPU exhaustion from one client.
+- PT-02: "Forgot password?" does the lookup and sends the email after answering, so the response time no longer reveals which emails have an account.
+- PT-03: a stored AI provider API key is only sent to the origin it was saved for: model listing with another address, editing the address without re-entering the key (422) and a configuration import that moves a provider (key dropped) can no longer send it elsewhere.
+- PT-04: PDF pages and pictures are rendered/OCR'd within a 40-million-pixel budget: a tiny PDF declaring a huge page no longer takes gigabytes of worker memory.
+- PT-05: chat answers that fail show a generic message to analysts; provider/embedding error bodies and internal addresses go to the logs only.
+- PT-06: malformed requests (NUL characters, lone surrogates, deeply nested JSON) get 4xx instead of 500, and validation errors no longer echo the submitted values (e.g. a password).
+- PT-08: upload checks: macro parts and content types are matched case-insensitively; control and bidi format characters (U+202E) are removed from file names.
+- PT-09: a passage closing tag is neutralised in any case or spacing, so a document cannot end its own passage in the prompt.
 
 ## [0.3.1] - 2026-11-26
 

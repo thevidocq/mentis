@@ -13,6 +13,7 @@ from app.api.deps import client_ip
 from app.api.schemas import SetupRequest, SetupStatus, UserOut
 from app.core.config import get_settings
 from app.core.db import get_db
+from app.core.ratelimit import auth_rate_limit
 from app.services import setup as svc
 from app.services.logs import log_event
 
@@ -24,7 +25,7 @@ def setup_status(db: Session = Depends(get_db)) -> SetupStatus:
     return SetupStatus(needs_setup=svc.needs_setup(db), web_setup=get_settings().web_setup)
 
 
-@router.post("", response_model=UserOut, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=UserOut, status_code=status.HTTP_201_CREATED, dependencies=[Depends(auth_rate_limit)])
 def run_setup(body: SetupRequest, request: Request, db: Session = Depends(get_db)) -> UserOut:
     if not get_settings().web_setup:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Web setup is off. Create the first super-admin on the server: "

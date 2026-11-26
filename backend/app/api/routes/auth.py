@@ -22,6 +22,7 @@ from app.api.schemas import (
 from app.core import crypto
 from app.core.config import get_settings
 from app.core.db import get_db
+from app.core.ratelimit import auth_rate_limit
 from app.core.security import (
     hash_password,
     new_totp_secret,
@@ -77,7 +78,7 @@ def _user_from_challenge(db: Session, challenge: str, purposes: set[str]) -> tup
     return user, payload["p"]
 
 
-@router.post("/login", response_model=LoginResponse)
+@router.post("/login", response_model=LoginResponse, dependencies=[Depends(auth_rate_limit)])
 def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)) -> LoginResponse:
     ip = client_ip(request)
     email = body.email.lower()
@@ -106,7 +107,7 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)) -
     )
 
 
-@router.post("/totp/enroll", response_model=EnrollResponse)
+@router.post("/totp/enroll", response_model=EnrollResponse, dependencies=[Depends(auth_rate_limit)])
 def totp_enroll(body: EnrollRequest, db: Session = Depends(get_db)) -> EnrollResponse:
     user, _ = _user_from_challenge(db, body.challenge, {PURPOSE_ENROLL})
     if user.totp_enabled:
@@ -118,7 +119,7 @@ def totp_enroll(body: EnrollRequest, db: Session = Depends(get_db)) -> EnrollRes
     return EnrollResponse(secret=secret, otpauth_uri=totp_uri(secret, user.email, get_settings().totp_issuer))
 
 
-@router.post("/totp/verify", response_model=UserOut)
+@router.post("/totp/verify", response_model=UserOut, dependencies=[Depends(auth_rate_limit)])
 def totp_verify(body: VerifyRequest, request: Request, response: Response, db: Session = Depends(get_db)) -> UserOut:
     ip = client_ip(request)
     user, purpose = _user_from_challenge(db, body.challenge, {PURPOSE_MFA, PURPOSE_ENROLL})

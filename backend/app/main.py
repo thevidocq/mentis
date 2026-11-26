@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app import __version__
+from app.api import errors
 from app.api.routes import (
     auth,
     chats,
@@ -22,6 +23,7 @@ from app.api.routes import (
     users,
 )
 from app.core.config import get_settings
+from app.core.ratelimit import RateLimiter
 
 # State-changing requests must carry this header. Browsers do not send it cross-site
 # without a CORS preflight, which this API never allows, so it blocks CSRF.
@@ -35,6 +37,8 @@ def create_app() -> FastAPI:
     docs = get_settings().api_docs
     app = FastAPI(title="Mentis API", version=__version__, docs_url="/api/docs" if docs else None,
                   redoc_url=None, openapi_url="/api/openapi.json" if docs else None)
+    app.state.auth_limiter = RateLimiter(get_settings().auth_rate_per_minute)
+    errors.install(app)
 
     @app.middleware("http")
     async def csrf_guard(request: Request, call_next):

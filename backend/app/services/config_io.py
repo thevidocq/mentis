@@ -188,10 +188,13 @@ def import_config(db: Session, data: dict, apply: bool) -> list[str]:
                 db.add(cur)
                 existing[p["name"]] = cur
         elif any(getattr(cur, f) != v for f, v in fields.items()):
-            plan.append(f"Update AI provider {p['name']}")
+            moved = "base_url" in fields and cur.api_key_enc and not llm_config.same_origin(cur.base_url, fields["base_url"])
+            plan.append(f"Update AI provider {p['name']}" + (" (new address: API key to enter again)" if moved else ""))
             if apply:
                 for f, v in fields.items():
                     setattr(cur, f, v)
+                if moved:  # the stored key is never sent to an address it was not saved for
+                    cur.api_key_enc = None
     if apply:
         db.flush()
     # Providers this import adds count as existing for the plan too, so the dry run matches the apply.

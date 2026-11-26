@@ -44,7 +44,10 @@ def safe_filename(name: str) -> str:
     """Display-safe file name: no path, no control characters, bounded length."""
     name = name.replace("\\", "/").rsplit("/", 1)[-1]
     name = unicodedata.normalize("NFC", name)
-    name = re.sub(r"[\x00-\x1f\x7f]", "", name).strip().strip(".")
+    # Control and format characters (e.g. U+202E right-to-left override, which makes
+    # "x\u202egnp.pdf" display as "xfdp.png") are dropped.
+    name = "".join(c for c in name if unicodedata.category(c) not in ("Cc", "Cf"))
+    name = name.strip().strip(".")
     if not name:
         raise UploadError("The file has no name.")
     if len(name) > 200:
@@ -70,7 +73,9 @@ def _check_ooxml(data: bytes, file_type: str) -> None:
             if _OOXML_MAIN[file_type] not in names:
                 raise UploadError(f"The file is not a valid .{file_type} document.")
             content_types = zf.read("[Content_Types].xml").decode("utf-8", "replace") if "[Content_Types].xml" in names else ""
-            if any(m in n for n in names for m in _MACRO_MARKERS) or "macroEnabled" in content_types:
+            # Part names and content types are case-insensitive in Office files.
+            lowered = [n.lower() for n in names]
+            if any(m.lower() in n for n in lowered for m in _MACRO_MARKERS) or "macroenabled" in content_types.lower():
                 raise UploadError("Files containing macros are not accepted.")
     except zipfile.BadZipFile:
         # Password-protected Office files are not zip archives (they are OLE containers).

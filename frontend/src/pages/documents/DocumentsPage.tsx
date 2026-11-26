@@ -59,6 +59,13 @@ export function DocumentsPage({ tenantId, title, previewBase }: Props) {
 
   // Poll while something is being processed.
   const busy = docs.some((d) => isBusy(d.latest));
+
+  // An uploaded file leaves the notice once its document has finished processing (ready or failed):
+  // its status is then shown on the document itself.
+  useEffect(() => {
+    const finished = (name: string) => docs.some((d) => d.name.toLowerCase() === name.toLowerCase() && !isBusy(d.latest));
+    setUploads((u) => (u.some((x) => x.done && finished(x.name)) ? u.filter((x) => !(x.done && finished(x.name))) : u));
+  }, [docs]);
   useEffect(() => {
     if (!busy) return;
     let stop = false;
