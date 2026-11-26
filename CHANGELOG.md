@@ -7,6 +7,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 ## [Unreleased]
 
 ### Changed
+- check.sh: the "CHANGE_ME placeholders" check no longer counts the comment at the top of `.env` (false FAIL).
 - Desktop layout: pages are centered next to the menu (readable width: 1200 px, 860 px for forms and settings, 1560 px for Logs), and the side menu is wider (280 px).
 
 ## [0.3.2] - 2026-11-26

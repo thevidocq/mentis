@@ -69,7 +69,8 @@ echo "Security:"
 if [ -f .env ]; then
   mode=$(stat -c '%a' .env 2>/dev/null)
   case "$mode" in 600|400) ok ".env readable by its owner only ($mode)" ;; *) warn ".env permissions are $mode: run  chmod 600 .env" ;; esac
-  grep -q 'CHANGE_ME' .env && bad ".env still contains CHANGE_ME placeholders" || ok "no CHANGE_ME placeholders in .env"
+  # Comment lines (the template's own instructions) do not count, only values.
+  grep -v '^[[:space:]]*#' .env | grep -q 'CHANGE_ME' && bad ".env still contains CHANGE_ME placeholders" || ok "no CHANGE_ME placeholders in .env"
 fi
 # Data services must stay on the internal network only (not on the web container's networks).
 for svc in postgres qdrant minio redis embeddings; do
