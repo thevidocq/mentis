@@ -88,7 +88,11 @@ def provider_models(body: ModelsIn, db: Session = Depends(get_db), _: User = Dep
     api_key = body.api_key or None
     if api_key is None and body.provider_id is not None:
         p = db.get(LlmProvider, body.provider_id)
-        api_key = crypto.decrypt(p.api_key_enc) if p is not None and p.api_key_enc else None
+        if p is not None and p.api_key_enc:
+            # The stored key goes only to the address it was saved for, never to one typed in the form.
+            if not llm_config.same_origin(p.base_url, body.base_url):
+                raise HTTPException(422, "Enter the API key to list the models at this address.")
+            api_key = crypto.decrypt(p.api_key_enc)
     try:
         models = llm.list_models({"name": "The provider", "kind": body.kind, "base_url": body.base_url.rstrip("/"), "api_key": api_key})
     except llm.LLMError as e:
@@ -133,6 +137,9 @@ def update_provider(provider_id: uuid.UUID, body: ProviderIn, request: Request, 
     p = db.get(LlmProvider, provider_id)
     if p is None:
         raise HTTPException(404, "Provider not found.")
+    if body.api_key is None and p.api_key_enc and not llm_config.same_origin(p.base_url, body.base_url):
+        # Otherwise the stored key would be sent to the new address without the admin ever typing it.
+        raise HTTPException(422, "Enter the API key again when you change the provider's address.")
     p.name, p.kind, p.base_url, p.model, p.options = body.name.strip(), body.kind, body.base_url.rstrip("/"), body.model.strip(), body.options
     if body.api_key is not None:
         p.api_key_enc = crypto.encrypt(body.api_key) if body.api_key else None

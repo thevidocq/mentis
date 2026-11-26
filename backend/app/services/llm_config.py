@@ -34,6 +34,17 @@ def provider_problem(kind, base_url, options) -> str | None:
     return None
 
 
+def same_origin(a: str | None, b: str | None) -> bool:
+    """Same scheme, host and port. A stored API key is only ever sent to the origin it was saved for."""
+    from urllib.parse import urlsplit
+
+    try:
+        ua, ub = urlsplit((a or "").strip()), urlsplit((b or "").strip())
+        return (ua.scheme.lower(), ua.hostname, ua.port) == (ub.scheme.lower(), ub.hostname, ub.port) and bool(ua.hostname)
+    except ValueError:
+        return False
+
+
 def default_provider(db: Session) -> LlmProvider | None:
     return db.scalar(select(LlmProvider).where(LlmProvider.is_default.is_(True)))
 

@@ -19,7 +19,7 @@ When you edit a provider, the list is loaded with the stored key; **Reload** ref
 
 **Reasoning effort** applies to the Responses API. **Max answer tokens** limits the answer length (default 1500). **Price input/output** (USD per million tokens, optional) feed the cost estimate in **LLM usage**.
 
-API keys are stored encrypted and never shown again; leave the field empty to keep the stored key.
+API keys are stored encrypted and never shown again; leave the field empty to keep the stored key. A stored key is only sent to the address it was saved for: when you change the **Base URL** to another server, enter the key again (a configuration import that moves a provider to another address drops its key).
 
 ## Default, tenant choice and fallback
 

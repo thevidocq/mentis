@@ -20,7 +20,7 @@ from app.models import Chat, ChatMessage, Role, Tenant, User
 from app.models.base import utcnow
 from app.services import access
 from app.services import answer as answering
-from app.services.embeddings import EmbeddingError
+from app.services.embeddings import EmbeddingError, EmbeddingModelChanged
 from app.services.llm import LLMError
 from app.services.vector_index import VectorIndexError
 from app.services.logs import log_event
@@ -30,6 +30,8 @@ router = APIRouter(prefix="/chats", tags=["chats"])
 readers = require_roles(Role.TENANT_ADMIN, Role.ANALYST)
 
 MAX_QUESTION = 4000
+ANSWER_FAILED = ("The answer could not be generated: the AI service is not available right now. "
+                 "Try again in a moment; if it keeps failing, tell your administrator.")
 
 
 # --- Schemas -------------------------------------------------------------------
@@ -144,7 +146,10 @@ def _ask(db: Session, user: User, chat: Chat, question: str, first: bool, reques
     try:
         result = answering.answer(db, chat, question, first)
     except (LLMError, EmbeddingError, VectorIndexError) as e:
-        result = answering.Answer(status="error", content=f"The answer could not be generated: {e}")
+        # The provider's error (internal addresses, response bodies) goes to the logs, not to the chat.
+        # Only Mentis' own configuration messages (e.g. no LLM configured) are shown as they are.
+        own = (isinstance(e, LLMError) and not e.retryable) or isinstance(e, (VectorIndexError, EmbeddingModelChanged))
+        result = answering.Answer(status="error", content=f"The answer could not be generated: {e}" if own else ANSWER_FAILED)
         log_event(db, "chat.error", kind="system", level="error", actor=user, tenant_id=chat.scope_tenant_id,
                   target=str(chat.id), detail={"error": str(e)[:300]}, commit=False)
 

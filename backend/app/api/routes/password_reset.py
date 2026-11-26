@@ -3,7 +3,7 @@
 import uuid
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import client_ip, require_roles
 from app.core.config import get_settings
 from app.core.db import get_db
+from app.core.ratelimit import auth_rate_limit
 from app.core.security import password_problem
 from app.models import Role, User
 from app.services import password_reset as svc
@@ -41,26 +42,33 @@ class AdminLinkOut(BaseModel):
     expires_hours: int
 
 
-@router.post("/auth/password/forgot", status_code=status.HTTP_202_ACCEPTED)
-def forgot(body: ForgotIn, request: Request, db: Session = Depends(get_db)) -> dict:
-    """Same answer whether or not the email exists, so it cannot be used to find accounts."""
-    email = body.email.lower()
-    user = db.scalar(select(User).where(User.email == email))
-    ip = client_ip(request)
-    if user is None or not user.is_active:
-        log_event(db, "auth.password.reset_requested", level="warning", actor_email=email, ip=ip, detail={"sent": False, "reason": "no_active_user"})
-        return {"detail": SENT}
-    if svc.recently_requested(db, user):
-        log_event(db, "auth.password.reset_requested", level="warning", actor=user, ip=ip, detail={"sent": False, "reason": "too_soon"})
-        return {"detail": SENT}
-    minutes = get_settings().password_reset_ttl_minutes
-    token = svc.create(db, user, timedelta(minutes=minutes))
-    sent = svc.send(db, user, token, minutes)
-    log_event(db, "auth.password.reset_requested", actor=user, ip=ip, detail={"sent": sent})
+@router.post("/auth/password/forgot", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(auth_rate_limit)])
+def forgot(body: ForgotIn, request: Request, background: BackgroundTasks) -> dict:
+    """Same answer, in the same time, whether or not the email exists: the lookup and the email
+    are done after the response is sent, so the response time cannot reveal accounts."""
+    background.add_task(_forgot, body.email.lower(), client_ip(request))
     return {"detail": SENT}
 
 
-@router.get("/auth/password/reset/{token}", response_model=ResetInfo)
+def _forgot(email: str, ip: str | None) -> None:
+    db = next(get_db())
+    try:
+        user = db.scalar(select(User).where(User.email == email))
+        if user is None or not user.is_active:
+            log_event(db, "auth.password.reset_requested", level="warning", actor_email=email, ip=ip, detail={"sent": False, "reason": "no_active_user"})
+            return
+        if svc.recently_requested(db, user):
+            log_event(db, "auth.password.reset_requested", level="warning", actor=user, ip=ip, detail={"sent": False, "reason": "too_soon"})
+            return
+        minutes = get_settings().password_reset_ttl_minutes
+        token = svc.create(db, user, timedelta(minutes=minutes))
+        sent = svc.send(db, user, token, minutes)
+        log_event(db, "auth.password.reset_requested", actor=user, ip=ip, detail={"sent": sent})
+    finally:
+        db.close()
+
+
+@router.get("/auth/password/reset/{token}", response_model=ResetInfo, dependencies=[Depends(auth_rate_limit)])
 def reset_info(token: str, db: Session = Depends(get_db)) -> ResetInfo:
     found = svc.find_valid(db, token)
     if found is None:
@@ -68,7 +76,7 @@ def reset_info(token: str, db: Session = Depends(get_db)) -> ResetInfo:
     return ResetInfo(email=found[1].email)
 
 
-@router.post("/auth/password/reset/{token}", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/auth/password/reset/{token}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(auth_rate_limit)])
 def reset(token: str, body: ResetIn, request: Request, db: Session = Depends(get_db)) -> None:
     found = svc.find_valid(db, token)
     if found is None:

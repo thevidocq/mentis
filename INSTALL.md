@@ -105,7 +105,9 @@ server {
 }
 ```
 
-The real client IP in Logs comes from `X-Forwarded-For`, trusted only from private networks (`MENTIS_TRUSTED_PROXIES`).
+The real client IP in Logs comes from `X-Forwarded-For`, trusted only from private networks (`MENTIS_TRUSTED_PROXIES`). When users reach Mentis from a private network (office LAN, VPN), set `MENTIS_TRUSTED_PROXIES` to the addresses of your proxies only (for example `127.0.0.1,172.16.0.0/12` for the web container and a proxy on this host): otherwise a client on that network can put any address in `X-Forwarded-For`, and it is believed for the Logs and the sign-in rate limit.
+
+Sign-in, 2FA, password reset, invitation and setup requests are limited per client IP: `MENTIS_AUTH_RATE_PER_MINUTE` (default 30; `0` turns the limit off). Above it the API answers 429 for a minute. Raise it if many users sign in through one NAT address at the same moment.
 
 Browsers accept the secure session cookie on `http://127.0.0.1` and `http://localhost`. Over plain HTTP from another host name, sign-in does not stick unless `MENTIS_COOKIE_SECURE=false` (tests only).
 

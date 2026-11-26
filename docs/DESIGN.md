@@ -202,6 +202,8 @@ PostgreSQL (users, tenants, chats, audit) | Qdrant (one collection per tenant) |
 - **Auth:** local login + TOTP 2FA from day one; SSO/OIDC (Entra ID) configurable later.
 - **Password reset:** "Forgot password?" emails a one-time link (60 minutes; same answer whether the email exists; at most one email every 2 minutes per user). Admins who can manage a user create a 24-hour link from Users, emailed or shown to copy when SMTP is off. The link only sets the password: 2FA is still required, every session is closed, the account is unlocked, and both events are logged. Expired links are purged.
 - **Isolation:** server-side tenant filter on every retrieval and integration call; chat tenant fixed in the database.
+- **Rate limit:** requests usable without a session (sign-in, 2FA, password reset, invitations, setup) are limited per client IP (`MENTIS_AUTH_RATE_PER_MINUTE`, default 30/min).
+- **Secrets stay bound:** a stored provider API key is only sent to the origin it was saved for; changing the address requires the key again.
 - **Read-only:** no writes to customer systems from chat.
 - **Secrets:** encrypted at rest, write-only in the UI.
 - **Prompt injection:** document and integration content is treated as data inside the prompt, never as instructions.

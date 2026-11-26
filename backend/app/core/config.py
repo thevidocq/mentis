@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     # MFA challenge lifetime (between password check and TOTP code).
     mfa_challenge_ttl_seconds: int = 300
 
+    # Requests per minute per client IP to the endpoints usable without a session (sign-in, 2FA,
+    # password reset, invitations, setup). 0 turns the limit off.
+    auth_rate_per_minute: int = 30
+
     # Login lockout.
     max_failed_logins: int = 5
     lockout_minutes: int = 15

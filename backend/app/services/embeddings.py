@@ -23,6 +23,10 @@ class EmbeddingError(RuntimeError):
     pass
 
 
+class EmbeddingModelChanged(EmbeddingError):
+    """The configured model differs from the one the index was built with (a message for users)."""
+
+
 def set_embedder(embedder: Embedder | None) -> None:
     """Tests replace the HTTP client with an in-process function."""
     global _override

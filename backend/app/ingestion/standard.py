@@ -18,8 +18,22 @@ PREVIEW_DPI = 110
 
 # --- PDF ---------------------------------------------------------------------
 
+# Pixel budget for one rendered page (an A2 page at 300 dpi is about 35 million pixels). A page
+# declared far larger (a 200-byte PDF can ask for 14400 x 14400 points) is rendered at a lower
+# resolution instead of allocating gigabytes and stalling the worker in OCR.
+MAX_RENDER_PIXELS = 40_000_000
+
+
+def render_scale(width_pt: float, height_pt: float, dpi: int) -> float:
+    scale = dpi / 72
+    area = max(width_pt, 1.0) * max(height_pt, 1.0) * scale * scale
+    return scale if area <= MAX_RENDER_PIXELS else scale * (MAX_RENDER_PIXELS / area) ** 0.5
+
+
 def _render(pdf, index: int, dpi: int) -> Image.Image:
-    return pdf[index].render(scale=dpi / 72).to_pil()
+    page = pdf[index]
+    width, height = page.get_size()
+    return page.render(scale=render_scale(width, height, dpi)).to_pil()
 
 
 def _png(image: Image.Image) -> bytes:
