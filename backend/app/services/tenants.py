@@ -80,5 +80,9 @@ def delete_tenant(db: Session, tenant: Tenant) -> None:
         else:
             u.tenants = [t for t in u.tenants if t.id != tenant.id]
     db.flush()
+    tenant_id = tenant.id
     db.delete(tenant)
     db.commit()
+    from app.services.versions import cleanup_tenant
+
+    cleanup_tenant(tenant_id)  # files and vector collection, after the rows are gone

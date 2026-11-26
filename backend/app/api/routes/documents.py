@@ -319,7 +319,7 @@ def page_image(tenant_id: uuid.UUID, version_id: uuid.UUID, index: int, db: Sess
     page = db.scalar(select(VersionPage).where(VersionPage.version_id == v.id, VersionPage.index == index))
     if page is None or not page.image_key:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No image for this page.")
-    return Response(storage.get_storage().get(page.image_key), media_type="image/png",
+    return Response(storage.get_storage().get(page.image_key), media_type=storage.image_type(page.image_key),
                     headers={"X-Content-Type-Options": "nosniff"})
 
 

@@ -166,6 +166,23 @@ echo "MENTIS_BACKUP_PASSPHRASE_FILE=/root/.mentis-backup-pass" >> .env
 
 Keep a copy of the passphrase or private key off the server: without it the backups cannot be restored.
 
+Rotation: `./backup.sh` keeps the newest 7 complete backups in `backups/` (`MENTIS_BACKUP_KEEP`, 0 = all), refuses to start without enough free space, and removes a backup that failed half-way. Backups on the same disk do not survive a disk failure: copy them elsewhere.
+
+## Storage over time
+
+Where the space goes, and what keeps it in check:
+
+| What | Where | Grows with | Kept in check by |
+| --- | --- | --- | --- |
+| Original files, page images | MinIO volume | every version uploaded | deleting documents; **Retention → Old document versions** |
+| Extracted text, passages, chats, logs | PostgreSQL volume | versions, questions, events | the same, plus chat and log retention |
+| Vector index | Qdrant volume (vectors on disk, graph in RAM) | passages of every version | the same |
+| Container logs | Docker | time | rotation: 5 × 20 MB per container (`MENTIS_LOG_MAX_SIZE`, `MENTIS_LOG_MAX_FILES`) |
+| Images and build cache | Docker | every upgrade | `docker image prune -f && docker builder prune -f` after an upgrade |
+| Backups | `backups/` | every backup | rotation (`MENTIS_BACKUP_KEEP`) |
+
+`./check.sh` shows free disk space (warning at 80%, failure at 90%), the size of each volume (with `sudo`), backups and reclaimable Docker space. A daily sweep removes files and index entries left behind when MinIO or Qdrant were down during a deletion. Page images are WebP (about a quarter of a PNG). Plan the disk at roughly 3–4 times the size of the original files you will upload (originals, page images, text, index, one backup), plus 10 GB for images and the embedding model.
+
 ## Upgrade
 
 ```bash
@@ -175,6 +192,7 @@ git fetch --tags
 git checkout <version-tag>
 docker compose up -d --build
 ./check.sh
+docker image prune -f && docker builder prune -f   # space left by the previous version's images
 ```
 
 If you edited `docker-compose.yml` or `check.sh` by hand, `git checkout` refuses to switch: put your change in `.env` or `docker-compose.override.yml` instead, then `git checkout -- docker-compose.yml check.sh`.

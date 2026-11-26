@@ -16,6 +16,13 @@ x-hardening: &hardening
     - no-new-privileges:true
   cap_drop:
     - ALL
+  # Container logs are rotated (the default json-file driver grows without limit and can fill the disk).
+  # Audit and system events live in PostgreSQL (Logs page, syslog forwarding), not here.
+  logging:
+    driver: json-file
+    options:
+      max-size: ${MENTIS_LOG_MAX_SIZE:-20m}
+      max-file: "${MENTIS_LOG_MAX_FILES:-5}"
 
 services:
   web:

@@ -9,6 +9,8 @@ Rules
 - Restore activates an older ready version that is not pending or rejected.
 """
 
+import logging
+
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
@@ -23,6 +25,8 @@ from app.models import (
 )
 from app.models.base import utcnow
 from app.services import storage, vector_index
+
+_log = logging.getLogger("mentis.versions")
 
 
 class VersionError(ValueError):
@@ -99,20 +103,43 @@ def _delete_version_rows(db: Session, version_ids: list) -> None:
 
 
 def delete_document(db: Session, document: Document) -> None:
-    versions = db.scalars(select(DocumentVersion).where(DocumentVersion.document_id == document.id)).all()
-    vector_index.delete_document(document.tenant_id, document.id)
-    store = storage.get_storage()
-    for v in versions:
-        store.delete_prefix(storage.version_prefix(v.tenant_id, v.id))
-    _delete_version_rows(db, [v.id for v in versions])
+    """The rows go first (committed): answers stop using the document at once. Files and vectors
+    are removed next; if MinIO or Qdrant fail, the daily storage sweep removes what is left."""
+    tenant_id, document_id = document.tenant_id, document.id
+    version_ids = list(db.scalars(select(DocumentVersion.id).where(DocumentVersion.document_id == document_id)))
+    _delete_version_rows(db, version_ids)
     db.delete(document)
     db.commit()
+    _cleanup(lambda: vector_index.delete_document(tenant_id, document_id),
+             *[(lambda vid=vid: storage.get_storage().delete_prefix(storage.version_prefix(tenant_id, vid))) for vid in version_ids])
+
+
+def delete_versions(db: Session, versions: list[DocumentVersion]) -> None:
+    """Old versions removed by the retention purge: rows, then files and vectors (best effort)."""
+    refs = [(v.tenant_id, v.id) for v in versions]
+    _delete_version_rows(db, [vid for _, vid in refs])
+    db.commit()
+    for tid, vid in refs:
+        _cleanup(lambda tid=tid, vid=vid: vector_index.delete_version(tid, vid),
+                 lambda tid=tid, vid=vid: storage.get_storage().delete_prefix(storage.version_prefix(tid, vid)))
 
 
 def delete_tenant_documents(db: Session, tenant_id) -> None:
-    """Called when a tenant is deleted: rows and stored files."""
+    """Called when a tenant is deleted, before the caller commits: rows only. The caller then calls
+    `cleanup_tenant` (files and vector collection)."""
     version_ids = db.scalars(select(DocumentVersion.id).where(DocumentVersion.tenant_id == tenant_id)).all()
     _delete_version_rows(db, list(version_ids))
     db.execute(delete(Document).where(Document.tenant_id == tenant_id))
-    vector_index.delete_tenant(tenant_id)
-    storage.get_storage().delete_prefix(storage.tenant_prefix(tenant_id))
+
+
+def cleanup_tenant(tenant_id) -> None:
+    _cleanup(lambda: vector_index.delete_tenant(tenant_id),
+             lambda: storage.get_storage().delete_prefix(storage.tenant_prefix(tenant_id)))
+
+
+def _cleanup(*steps) -> None:
+    for step in steps:
+        try:
+            step()
+        except Exception:  # noqa: BLE001 - leftovers are removed by the storage sweep
+            _log.warning("storage cleanup deferred to the daily sweep", exc_info=True)

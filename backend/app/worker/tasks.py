@@ -45,7 +45,7 @@ def ingest_version(version_id: str) -> None:
             image_key = None
             if page.image:
                 image_key = storage.page_image_key(version.tenant_id, version.id, page.index)
-                store.put(image_key, page.image, "image/png")
+                store.put(image_key, page.image, "image/webp")
             db.add(VersionPage(
                 version_id=version.id, tenant_id=version.tenant_id, index=page.index, kind=page.kind,
                 label=page.label, text=page.text, method=page.method, ocr_confidence=page.ocr_confidence,

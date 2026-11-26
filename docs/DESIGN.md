@@ -118,7 +118,9 @@ Uploads run as background jobs; a new version reaches answers only once indexed 
 - Same file name (case-insensitive) = new version; renaming keeps the extension. Only the active version is searchable; older ones stay viewable and can be made active again.
 - A failed or rejected version never replaces the active one. An upload identical (SHA-256) to the active version is refused.
 - Each version records date, uploader and an optional note.
-- Documents can be renamed and deleted (with confirmation).
+- Documents can be renamed and deleted (with confirmation). Deletion removes the rows first (answers stop at once), then files and vectors; anything left by an unreachable MinIO or Qdrant is removed by the daily storage sweep (no row = leftover; rows are always written before files and vectors).
+- Retention of old versions (super-admin, default all): per document the version in use, the latest and pending ones are always kept; older ones beyond N are deleted with files, pages, passages and vectors.
+- Storage: page images WebP; Qdrant vectors on disk (memory-mapped; existing collections moved by the sweep); container logs rotated; backups rotated (`MENTIS_BACKUP_KEEP`).
 - **New version** of a selected document accepts any file name of the same type (`document_id` on upload).
 - The Documents page is a document browser: the list on the left (search; All / In use / To review; *Needs attention* grouped first), the selected document on the right with Approve/Reject or Retry when needed, New version, Download and a ⋯ menu (Rename, Versions, Delete), and the tabs Preview, Text read, Versions, Test a question; details and recent versions in a right column on wide screens. The selection is in the address (`?doc=`); without one the right side shows an **Overview** (`GET /tenants/{id}/documents/overview`, counts only): documents in use, pages read and OCR, passages, embedding model, questions in chats on the customer in 30 days with not-found count (not for the General Knowledge Base), needs-attention list, content by type, last indexed, oldest in use, pages to check, recent uploads and approvals.
 

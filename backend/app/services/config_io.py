@@ -76,7 +76,7 @@ def export_config(db: Session, tenant_ids: set | None = None) -> dict:
     by_id = {str(p.id): p.name for p in providers}
     smtp = {k: v for k, v in _setting(db, "smtp").items() if not k.endswith("_enc")}
     emb = {k: v for k, v in _setting(db, "embedding").items() if k in ("url", "model")}
-    ret = {k: v for k, v in retention.get_config(db).items() if k in ("chats_days", "logs_days")}
+    ret = {k: v for k, v in retention.get_config(db).items() if k in ("chats_days", "logs_days", "versions_keep")}
     tenants = []
     for t in db.scalars(select(Tenant).order_by(Tenant.is_global.desc(), Tenant.name)):
         if tenant_ids is not None and t.id not in tenant_ids:
@@ -114,6 +114,9 @@ def _check(data: dict) -> None:
             v = platform["retention"].get(k)
             if not isinstance(v, int) or isinstance(v, bool) or not 0 <= v <= retention.MAX_DAYS:
                 raise ImportError_(f"Retention {k} must be a number of days between 0 and {retention.MAX_DAYS}.")
+        vk = platform["retention"].get("versions_keep", 0)  # optional: files exported before 0.3.5 lack it
+        if not isinstance(vk, int) or isinstance(vk, bool) or not 0 <= vk <= retention.MAX_VERSIONS:
+            raise ImportError_(f"Retention versions_keep must be between 0 and {retention.MAX_VERSIONS}.")
     for t in data.get("tenants", []):
         if not isinstance(t, dict) or not isinstance(t.get("name"), str) or not t["name"].strip():
             raise ImportError_("Every tenant needs a name.")
@@ -167,10 +170,11 @@ def import_config(db: Session, data: dict, apply: bool) -> list[str]:
     if "retention" in platform:
         r = platform["retention"]
         cur = retention.get_config(db)
-        if (r.get("chats_days"), r.get("logs_days")) != (cur["chats_days"], cur["logs_days"]):
-            plan.append(f"Set retention: chats {r.get('chats_days')} days, logs {r.get('logs_days')} days")
+        vk = int(r.get("versions_keep", cur.get("versions_keep", 0)))
+        if (r.get("chats_days"), r.get("logs_days"), vk) != (cur["chats_days"], cur["logs_days"], cur.get("versions_keep", 0)):
+            plan.append(f"Set retention: chats {r.get('chats_days')} days, logs {r.get('logs_days')} days, old versions kept {vk or 'all'}")
             if apply:
-                cur.update(chats_days=int(r["chats_days"]), logs_days=int(r["logs_days"]))
+                cur.update(chats_days=int(r["chats_days"]), logs_days=int(r["logs_days"]), versions_keep=vk)
                 row = db.get(PlatformSetting, retention.KEY)
                 if row is None:
                     db.add(PlatformSetting(key=retention.KEY, value=cur))

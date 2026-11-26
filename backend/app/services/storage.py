@@ -14,6 +14,7 @@ class Storage(Protocol):
     def put(self, key: str, data: bytes, content_type: str) -> None: ...
     def get(self, key: str) -> bytes: ...
     def delete_prefix(self, prefix: str) -> None: ...
+    def list_dirs(self, prefix: str) -> set[str]: ...
     def ping(self) -> bool: ...
 
 
@@ -45,9 +46,19 @@ class MinioStorage:
             resp.release_conn()
 
     def delete_prefix(self, prefix: str) -> None:
+        from minio.deleteobjects import DeleteObject
+
         self._ensure_bucket()
-        for obj in self.client.list_objects(self.bucket, prefix=prefix, recursive=True):
-            self.client.remove_object(self.bucket, obj.object_name)
+        names = (DeleteObject(o.object_name) for o in self.client.list_objects(self.bucket, prefix=prefix, recursive=True))
+        # Batched delete (1,000 objects per request); errors are reported per object.
+        errors = list(self.client.remove_objects(self.bucket, names))
+        if errors:
+            raise OSError(f"{len(errors)} objects could not be deleted under {prefix}: {errors[0]}")
+
+    def list_dirs(self, prefix: str) -> set[str]:
+        """Names of the "folders" right under `prefix` (e.g. version ids under tenants/<id>/versions/)."""
+        self._ensure_bucket()
+        return {o.object_name[len(prefix):].strip("/") for o in self.client.list_objects(self.bucket, prefix=prefix, recursive=False) if o.is_dir}
 
     def ping(self) -> bool:
         try:
@@ -72,6 +83,9 @@ class MemoryStorage:
     def delete_prefix(self, prefix: str) -> None:
         for k in [k for k in self.objects if k.startswith(prefix)]:
             del self.objects[k]
+
+    def list_dirs(self, prefix: str) -> set[str]:
+        return {k[len(prefix):].split("/", 1)[0] for k in self.objects if k.startswith(prefix) and "/" in k[len(prefix):]}
 
     def ping(self) -> bool:
         return True
@@ -99,7 +113,11 @@ def original_key(tenant_id, version_id, file_type: str) -> str:
 
 
 def page_image_key(tenant_id, version_id, index: int) -> str:
-    return f"tenants/{tenant_id}/versions/{version_id}/pages/{index:04d}.png"
+    return f"tenants/{tenant_id}/versions/{version_id}/pages/{index:04d}.webp"  # older versions keep .png keys
+
+
+def image_type(key: str) -> str:
+    return "image/webp" if key.endswith(".webp") else "image/png"
 
 
 def version_prefix(tenant_id, version_id) -> str:

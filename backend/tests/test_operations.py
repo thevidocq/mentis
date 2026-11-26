@@ -183,14 +183,15 @@ def test_retention_settings_and_purge(super_admin):
     db.add(AuditEvent(ts=old, kind="audit", level="info", action="old.event", detail={}))
     db.commit()
     r = super_admin.post("/api/platform/retention/purge").json()
-    assert r == {"chats": 1, "messages": 1, "log_events": 1}
+    assert r == {"chats": 1, "messages": 1, "log_events": 1, "versions": 0, "orphan_files": 0, "orphan_vectors": 0}
     db = _db()
     assert [c.title for c in db.query(Chat)] == ["new"]
     cfg = super_admin.get("/api/platform/retention").json()
     assert cfg["last_result"] == r and cfg["last_purge"]
     # 0 = keep forever
     super_admin.put("/api/platform/retention", json={"chats_days": 0, "logs_days": 0})
-    assert super_admin.post("/api/platform/retention/purge").json() == {"chats": 0, "messages": 0, "log_events": 0}
+    assert super_admin.post("/api/platform/retention/purge").json() == {"chats": 0, "messages": 0, "log_events": 0, "versions": 0,
+                                                                        "orphan_files": 0, "orphan_vectors": 0}
 
 
 def test_daily_purge_runs_once_across_workers(super_admin, monkeypatch):
@@ -206,7 +207,7 @@ def test_daily_purge_runs_once_across_workers(super_admin, monkeypatch):
             return True
 
     monkeypatch.setattr(maintenance, "redis_connection", lambda: FakeRedis())
-    assert maintenance.run_purge_once() == {"chats": 0, "messages": 0, "log_events": 0}
+    assert maintenance.run_purge_once() == {"chats": 0, "messages": 0, "log_events": 0, "versions": 0, "orphan_files": 0, "orphan_vectors": 0}
     assert maintenance.run_purge_once() is None
     assert "retention.purged" in super_admin.get("/api/logs/actions").json()
 

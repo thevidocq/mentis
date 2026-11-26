@@ -23,6 +23,7 @@ super_admin = require_roles(Role.SUPER_ADMIN)
 class RetentionIn(BaseModel):
     chats_days: int = Field(ge=0, le=retention.MAX_DAYS)
     logs_days: int = Field(ge=0, le=retention.MAX_DAYS)
+    versions_keep: int | None = Field(default=None, ge=0, le=retention.MAX_VERSIONS)  # older versions kept per document, 0 = all
 
 
 @router.get("/platform/retention")
@@ -32,7 +33,7 @@ def get_retention(db: Session = Depends(get_db), _: User = Depends(super_admin))
 
 @router.put("/platform/retention")
 def put_retention(body: RetentionIn, request: Request, db: Session = Depends(get_db), admin: User = Depends(super_admin)) -> dict:
-    cfg = retention.save_config(db, body.chats_days, body.logs_days)
+    cfg = retention.save_config(db, body.chats_days, body.logs_days, body.versions_keep)
     log_event(db, "platform.retention_updated", actor=admin, ip=client_ip(request), detail=body.model_dump())
     return cfg
 

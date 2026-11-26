@@ -100,7 +100,8 @@ def test_scanned_pdf_marked_as_ocr_with_image(super_admin):
     pages = super_admin.get(f"/api/tenants/{t['id']}/documents/versions/{vid}/pages").json()
     assert pages[0]["method"] == "ocr" and pages[0]["ocr_confidence"] > 0.6 and pages[0]["has_image"]
     img = super_admin.get(f"/api/tenants/{t['id']}/documents/versions/{vid}/pages/1/image")
-    assert img.status_code == 200 and img.content[:8] == b"\x89PNG\r\n\x1a\n"
+    assert img.status_code == 200 and img.content[:4] == b"RIFF" and img.content[8:12] == b"WEBP"
+    assert img.headers["content-type"] == "image/webp"
 
 
 def test_unreadable_pdf_fails_without_touching_active(super_admin):

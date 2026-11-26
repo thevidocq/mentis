@@ -17,6 +17,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 - **New version** of a document accepts any file name of the same type (`document_id` on upload).
 - `MENTIS_EMBEDDING_BATCH_SIZE` in `.env` now reaches api and worker (texts per request to the embedding service; 4 on hosts with little RAM). INSTALL: plan at least 8 GB RAM, or add swap.
 
+### Storage (long-term)
+- **Container logs rotated** (5 × 20 MB per container; `MENTIS_LOG_MAX_SIZE`, `MENTIS_LOG_MAX_FILES`): the default Docker driver grew without limit and could fill the disk.
+- **Deleting a document** removes its rows first and then files and vectors: before, a MinIO or Qdrant outage half-way left a document that was still listed but no longer searchable.
+- **Daily storage sweep** (with the retention purge): removes files and index entries that no row refers to (deletions while MinIO or Qdrant were down, deleted tenants). Deleting a tenant cleans files and index after the commit.
+- **Old document versions** (Retention, default keep all): keep the last 1, 3, 5 or 10 older versions per document; the version in use, the latest and pending ones are always kept. Included in configuration export/import.
+- **Page images in WebP** (about a quarter of a PNG); existing PNG images keep working.
+- **Qdrant vectors on disk** (memory-mapped) for new collections; existing ones are moved by the sweep. RAM no longer grows with the number of documents.
+- MinIO deletions in batches of 1,000 (was one request per file).
+- `backup.sh`: keeps the newest 7 complete backups (`MENTIS_BACKUP_KEEP`), checks free space first, removes a backup that failed half-way.
+- `check.sh`: Storage section (free disk, volume sizes, backups, reclaimable images and build cache, log rotation). INSTALL: "Storage over time" and image prune after upgrades.
+
 ### Fixed
 - On a phone the menu did not close after choosing a customer on the same page.
 - `backup.sh` failed with "No such image" when the api image id of the container it used no longer existed (after rebuilds): it now uses the running container and the image by name (`mentis-api`). Same for `restore.sh`.
