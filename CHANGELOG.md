@@ -6,6 +6,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added
+- **Integration lookups: Standard or Function calling**, per customer (Settings → Integrations for tenant admins; Tenants → LLM for super-admins). *Standard* (default) is the existing mode. *Function calling* lets the model read each result and ask for further lookups (ticket → host → alerts), up to 3 steps and 8 lookups per question, with native tool calling for Anthropic, OpenAI Chat and the Responses API (`services/llm/tools.py`, `services/integrations/tool_loop.py`). Same guards: the chat's integrations only, declared read operations, argument patterns, read-only HTTP client, audit. A model or provider without function calling falls back to Standard without reading twice (`integration.tools_unavailable`). Tenant admins change it only when the customer uses its own LLM chosen by them; `GET/PUT /tenants/{id}/integration-mode` (authorization matrix), `tenant.integration_mode` in the logs, `integration.planned` carries the mode and rounds; exported and imported with the configuration (`integration_mode`).
+- Help: *Customer settings* explains both modes (strengths, requirements, cost, the accepted risk, who chooses, recommendation); super-admin help updated.
+
 ## [0.4.0] - 2026-11-26
 
 ### Added
