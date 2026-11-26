@@ -202,6 +202,8 @@ def import_config(db: Session, data: dict, apply: bool) -> list[str]:
             moved = "base_url" in fields and cur.api_key_enc and not llm_config.same_origin(cur.base_url, fields["base_url"])
             plan.append(f"Update AI provider {p['name']}" + (" (new address: API key to enter again)" if moved else ""))
             if apply:
+                if cur.is_default and fields.get("role", cur.role) != cur.role:
+                    cur.is_default = False  # a default moving to the other role must not be a second default there
                 for f, v in fields.items():
                     setattr(cur, f, v)
                 if moved:  # the stored key is never sent to an address it was not saved for
@@ -219,6 +221,10 @@ def import_config(db: Session, data: dict, apply: bool) -> list[str]:
                 for p in existing.values():
                     if p.role == role:
                         p.is_default = p.name == default
+        if apply:  # like adding one by hand: a role with models always has a default
+            same = [p for p in existing.values() if p.role == role]
+            if same and not any(p.is_default for p in same):
+                same[0].is_default = True
 
     tenants = {t.name.lower(): t for t in db.scalars(select(Tenant))}
     for t in data.get("tenants", []):
@@ -228,6 +234,8 @@ def import_config(db: Session, data: dict, apply: bool) -> list[str]:
             cur = next((x for x in tenants.values() if x.is_global), None)
         settings = {**DEFAULT_TENANT_SETTINGS, **(t.get("settings") or {})}
         for key, field in (("llm", "llm_provider_id"), ("llm_fallback", "llm_fallback_id"), ("checker", "checker_provider_id")):
+            if key not in t:  # files exported before 0.3.6 have no checker: keep the current choice
+                continue
             ref = t.get(key)
             if ref and ref not in known:
                 plan.append(f"Tenant {name}: AI provider {ref} not found, keeping the current choice")
@@ -245,17 +253,20 @@ def import_config(db: Session, data: dict, apply: bool) -> list[str]:
         else:
             names = {str(p.id): n for n, p in existing.items()}
             cs = cur.settings or {}
+            # A key missing from the file (older export) keeps the current value.
             changed = (not cur.is_global and cur.status != t.get("status", cur.status)) or any(
-                cs.get(k, DEFAULT_TENANT_SETTINGS[k]) != settings[k] for k in DEFAULT_TENANT_SETTINGS) or (
-                names.get(str(cs.get("llm_provider_id"))) != t.get("llm") or names.get(str(cs.get("llm_fallback_id"))) != t.get("llm_fallback")
-                or names.get(str(cs.get("checker_provider_id"))) != t.get("checker") or cs.get("answer_check", "warn") != t.get("answer_check", "warn"))
+                cs.get(k, DEFAULT_TENANT_SETTINGS[k]) != settings[k] for k in DEFAULT_TENANT_SETTINGS) or any(
+                key in t and names.get(str(cs.get(field))) != t[key]
+                for key, field in (("llm", "llm_provider_id"), ("llm_fallback", "llm_fallback_id"), ("checker", "checker_provider_id"))) or (
+                "answer_check" in t and cs.get("answer_check", "warn") != t["answer_check"])
             if changed:
                 plan.append(f"Update tenant {cur.name}")
         if apply and cur is not None:
             if not cur.is_global:
                 cur.status = t.get("status", cur.status)
             merged = {**(cur.settings or {}), **{k: v for k, v in settings.items() if k in DEFAULT_TENANT_SETTINGS}}
-            merged["answer_check"] = t.get("answer_check", "warn")
+            if "answer_check" in t or "answer_check" not in merged:
+                merged["answer_check"] = t.get("answer_check", "warn")
             for field in ("llm_provider_id", "llm_fallback_id", "checker_provider_id"):
                 if field in settings and (settings[field] is None or isinstance(settings[field], str)):
                     if settings[field] is None:

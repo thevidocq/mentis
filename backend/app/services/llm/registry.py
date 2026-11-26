@@ -57,6 +57,8 @@ def call_provider(cfg: dict, system: str, turns: list[Turn], timeout: float = 12
         raise LLMError(f"{cfg['name']} timed out") from None
     except httpx.HTTPError as e:
         raise LLMError(f"{cfg['name']} not reachable: {e.__class__.__name__}") from None
+    except (httpx.InvalidURL, ValueError):  # e.g. UnicodeError: a host name IDNA cannot encode ("api..x.com")
+        raise LLMError(f"{cfg['name']}: invalid address") from None
     if r.status_code != 200:
         raise status_error(cfg["name"], r.status_code, r.text, cfg["api_key"])
     try:
@@ -93,8 +95,10 @@ def list_models(cfg: dict, timeout: float = 15) -> list[dict]:
         raise LLMError(f"{name} timed out") from None
     except httpx.HTTPError as e:
         raise LLMError(f"{name} not reachable: {e.__class__.__name__}") from None
+    except (httpx.InvalidURL, ValueError):  # e.g. UnicodeError: a host name IDNA cannot encode
+        raise LLMError(f"{name}: invalid address") from None
     if r.status_code != 200:
-        raise status_error(name, r.status_code, r.text)
+        raise status_error(name, r.status_code, r.text, cfg.get("api_key"))
     try:
         items = r.json().get("data") or []
     except (ValueError, AttributeError):
@@ -121,6 +125,8 @@ def ping(cfg: dict, timeout: float = 5) -> tuple[bool, str]:
             r = client.get(url, headers=headers)
     except httpx.HTTPError as e:
         return False, f"not reachable: {e.__class__.__name__}"
+    except (httpx.InvalidURL, ValueError):  # e.g. UnicodeError: a host name IDNA cannot encode
+        return False, "invalid address"
     if r.status_code == 200:
         return True, cfg["model"]
     return False, str(status_error(cfg["name"], r.status_code, r.text, cfg["api_key"]))
