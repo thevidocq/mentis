@@ -1,6 +1,6 @@
 # Installing Mentis
 
-> Version 0.3.4. Release notes and upgrade commands: [docs/releases/](docs/releases/).
+> Version 0.3.5. Release notes and upgrade commands: [docs/releases/](docs/releases/).
 
 ## Requirements
 
@@ -13,7 +13,7 @@
 ```bash
 git clone https://github.com/thevidocq/mentis.git
 cd mentis
-git checkout v0.3.4        # a release; main is the development version
+git checkout v0.3.5        # a release; main is the development version
 cp .env.example .env
 chmod 600 .env             # secrets: readable by the owner only
 sed -i "s/^MENTIS_SECRET_KEY=.*/MENTIS_SECRET_KEY=$(openssl rand -hex 32)/" .env
@@ -129,7 +129,7 @@ docker compose ps worker
 docker compose logs -f worker
 ```
 
-Embeddings: the `embeddings` container runs BAAI/bge-m3 (Hugging Face TEI, CPU). **On first start it downloads the model (about 2.3 GB)**; until then the Embeddings line on Service status is Down and uploads fail with "Indexing failed" (use Retry afterwards). Follow it with `docker compose logs -f embeddings`. Limits: `MENTIS_EMBEDDINGS_CPUS` / `MENTIS_EMBEDDINGS_MEMORY`.
+Embeddings: the `embeddings` container runs BAAI/bge-m3 (Hugging Face TEI, CPU). **On first start it downloads the model (about 2.3 GB)**; until then the Embeddings line on Service status is Down and uploads fail with "Indexing failed" (use Retry afterwards). Follow it with `docker compose logs -f embeddings`. Limits: `MENTIS_EMBEDDINGS_CPUS` / `MENTIS_EMBEDDINGS_MEMORY`. RAM: plan at least 8 GB for the whole host; with less, add swap and set `MENTIS_EMBEDDING_BATCH_SIZE=4` (texts per request), or uploads fail with "The document search service is not available" when the embedding service runs out of memory and restarts.
 
 More workers in parallel: `MENTIS_WORKER_REPLICAS=3` in `.env`, then `docker compose up -d`.
 

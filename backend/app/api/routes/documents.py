@@ -179,6 +179,7 @@ async def upload(
     request: Request,
     file: UploadFile = File(...),
     note: str | None = Form(default=None, max_length=500),
+    document_id: uuid.UUID | None = Form(default=None),  # "New version" of this document, whatever the file name
     db: Session = Depends(get_db),
     user: User = Depends(admins),
 ) -> VersionOut:
@@ -193,7 +194,16 @@ async def upload(
         raise HTTPException(422, str(e)) from None
 
     name_key = checked.filename.lower()
-    doc = db.scalar(select(Document).where(Document.tenant_id == tenant.id, Document.name_key == name_key))
+    if document_id is not None:
+        doc = db.scalar(select(Document).where(Document.id == document_id, Document.tenant_id == tenant.id))
+        if doc is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found.")
+        latest = db.scalar(select(DocumentVersion).where(DocumentVersion.document_id == doc.id)
+                           .order_by(DocumentVersion.version.desc()).limit(1))
+        if latest is not None and latest.file_type != checked.file_type:
+            raise HTTPException(422, f"A new version must be a {latest.file_type.upper()} file, like the previous ones.")
+    else:
+        doc = db.scalar(select(Document).where(Document.tenant_id == tenant.id, Document.name_key == name_key))
     if doc is None:
         doc = Document(tenant_id=tenant.id, name=checked.filename, name_key=name_key, created_by=user.id)
         db.add(doc)
