@@ -351,3 +351,37 @@ def test_greeting_gets_a_hint_not_an_llm_call(super_admin, fake_llm):
     alfa, _ = _setup(super_admin)
     a = super_admin.post("/api/chats", json={"tenant_id": alfa["id"], "message": "Ciao!"}).json()["answer"]
     assert a["status"] == "not_found" and "Alfa's procedures" in a["content"] and fake_llm.requests == []
+
+
+def test_unexpected_check_error_keeps_the_answer(super_admin, fake_llm, monkeypatch):
+    from app.services.answer_check import runner
+
+    def boom(*a, **kw):
+        raise RuntimeError("bug")
+    monkeypatch.setattr(runner, "before_save", boom)
+    _provider(super_admin)
+    alfa, _ = _setup(super_admin)
+    an = _analyst(super_admin)
+    r = an.post("/api/chats", json={"tenant_id": alfa["id"], "message": "Who handles brute force escalation?"})
+    assert r.status_code == 201, r.text
+    assert r.json()["answer"]["status"] == "ok" and r.json()["answer"]["check"]["level2"] == "unavailable"
+
+
+def test_grouped_citation_markers_become_citations(super_admin, fake_llm):
+    _provider(super_admin)
+    alfa, _ = _setup(super_admin)
+    an = _analyst(super_admin)
+    fake_llm.reply_override = '{"answer": "Call Mario Rossi [1, 9] or check headers [1,2].", "not_found": false}'
+    a = an.post("/api/chats", json={"tenant_id": alfa["id"], "message": "brute force escalation"}).json()["answer"]
+    assert "[1, 9]" not in a["content"] and "[1,2]" not in a["content"]
+    assert [c["n"] for c in a["citations"]][:1] == [1] and "[1]" in a["content"]
+
+
+def test_customer_name_with_quotes_keeps_the_passage_tag_well_formed():
+    from types import SimpleNamespace
+
+    from app.services import prompts
+    p = SimpleNamespace(is_general=False, tenant_name='Acme "EU" source="x', document_name="d.docx", version=1,
+                        page_label="Page 1", heading=None, text="Call 111")
+    tag = prompts.passages_block([p]).splitlines()[1]
+    assert tag.count('"') == 6 and "customer=\"Acme 'EU' source='x\"" in tag

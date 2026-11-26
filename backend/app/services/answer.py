@@ -125,6 +125,9 @@ def _cited(answer_text: str, passages) -> tuple[str, list[dict]]:
             return f"[{n}]"
         return ""
 
+    # Grouped markers ("[1, 2]") are split first, so each number is checked like a single one.
+    answer_text = re.sub(r"\[(\d{1,3}(?:\s*,\s*\d{1,3})+)\]",
+                         lambda m: "".join(f"[{n.strip()}]" for n in m.group(1).split(",")), answer_text)
     text = re.sub(r"\[(\d{1,3})\]", keep, answer_text)
     citations = []
     for n in order:
