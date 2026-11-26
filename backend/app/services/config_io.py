@@ -20,7 +20,7 @@ from app.services import llm_config, mail, retention, syslog
 from app.services import tenants as tenant_svc
 
 FORMAT = "mentis-config/1"
-_PROVIDER_FIELDS = ("kind", "base_url", "model", "options", "is_default")
+_PROVIDER_FIELDS = ("kind", "base_url", "model", "options", "is_default", "role")
 # Platform settings that travel, per section. Anything else in a file (secrets, the embedding
 # model the index was built with, keys of a newer version) is ignored.
 _PLATFORM_KEYS = {
@@ -76,7 +76,7 @@ def export_config(db: Session, tenant_ids: set | None = None) -> dict:
     by_id = {str(p.id): p.name for p in providers}
     smtp = {k: v for k, v in _setting(db, "smtp").items() if not k.endswith("_enc")}
     emb = {k: v for k, v in _setting(db, "embedding").items() if k in ("url", "model")}
-    ret = {k: v for k, v in retention.get_config(db).items() if k in ("chats_days", "logs_days")}
+    ret = {k: v for k, v in retention.get_config(db).items() if k in ("chats_days", "logs_days", "versions_keep")}
     tenants = []
     for t in db.scalars(select(Tenant).order_by(Tenant.is_global.desc(), Tenant.name)):
         if tenant_ids is not None and t.id not in tenant_ids:
@@ -87,6 +87,8 @@ def export_config(db: Session, tenant_ids: set | None = None) -> dict:
             "settings": {k: s.get(k, v) for k, v in DEFAULT_TENANT_SETTINGS.items()},
             "llm": by_id.get(str(s.get("llm_provider_id"))) if s.get("llm_provider_id") else None,
             "llm_fallback": by_id.get(str(s.get("llm_fallback_id"))) if s.get("llm_fallback_id") else None,
+            "checker": by_id.get(str(s.get("checker_provider_id"))) if s.get("checker_provider_id") else None,
+            "answer_check": s.get("answer_check", "warn"),
         })
     data = {"format": FORMAT, "mentis_version": __version__, "exported_at": utcnow().isoformat(), "tenants": tenants}
     if tenant_ids is None:
@@ -114,6 +116,9 @@ def _check(data: dict) -> None:
             v = platform["retention"].get(k)
             if not isinstance(v, int) or isinstance(v, bool) or not 0 <= v <= retention.MAX_DAYS:
                 raise ImportError_(f"Retention {k} must be a number of days between 0 and {retention.MAX_DAYS}.")
+        vk = platform["retention"].get("versions_keep", 0)  # optional: files exported before 0.3.5 lack it
+        if not isinstance(vk, int) or isinstance(vk, bool) or not 0 <= vk <= retention.MAX_VERSIONS:
+            raise ImportError_(f"Retention versions_keep must be between 0 and {retention.MAX_VERSIONS}.")
     for t in data.get("tenants", []):
         if not isinstance(t, dict) or not isinstance(t.get("name"), str) or not t["name"].strip():
             raise ImportError_("Every tenant needs a name.")
@@ -140,6 +145,11 @@ def _check(data: dict) -> None:
             raise ImportError_(f"AI provider {p['name']}: {problem}")
         if not isinstance(p.get("is_default", False), bool):
             raise ImportError_(f"AI provider {p['name']}: is_default must be true or false.")
+        if p.get("role", "answers") not in ("answers", "checker"):
+            raise ImportError_(f"AI provider {p['name']}: role must be answers or checker.")
+    for t in data.get("tenants", []):
+        if t.get("answer_check", "warn") not in ("warn", "hide", "off"):
+            raise ImportError_(f"Tenant {t.get('name')}: answer_check must be warn, hide or off.")
 
 
 def import_config(db: Session, data: dict, apply: bool) -> list[str]:
@@ -167,10 +177,11 @@ def import_config(db: Session, data: dict, apply: bool) -> list[str]:
     if "retention" in platform:
         r = platform["retention"]
         cur = retention.get_config(db)
-        if (r.get("chats_days"), r.get("logs_days")) != (cur["chats_days"], cur["logs_days"]):
-            plan.append(f"Set retention: chats {r.get('chats_days')} days, logs {r.get('logs_days')} days")
+        vk = int(r.get("versions_keep", cur.get("versions_keep", 0)))
+        if (r.get("chats_days"), r.get("logs_days"), vk) != (cur["chats_days"], cur["logs_days"], cur.get("versions_keep", 0)):
+            plan.append(f"Set retention: chats {r.get('chats_days')} days, logs {r.get('logs_days')} days, old versions kept {vk or 'all'}")
             if apply:
-                cur.update(chats_days=int(r["chats_days"]), logs_days=int(r["logs_days"]))
+                cur.update(chats_days=int(r["chats_days"]), logs_days=int(r["logs_days"]), versions_keep=vk)
                 row = db.get(PlatformSetting, retention.KEY)
                 if row is None:
                     db.add(PlatformSetting(key=retention.KEY, value=cur))
@@ -199,12 +210,15 @@ def import_config(db: Session, data: dict, apply: bool) -> list[str]:
         db.flush()
     # Providers this import adds count as existing for the plan too, so the dry run matches the apply.
     known = set(existing) | {p["name"] for p in data.get("llm_providers", [])}
-    default = next((p["name"] for p in data.get("llm_providers", []) if p.get("is_default")), None)
-    if default and default in known and not (default in existing and existing[default].is_default):
-        plan.append(f"Make {default} the default AI provider")
-        if apply:
-            for p in existing.values():
-                p.is_default = p.name == default
+    # One default per role (answers; answer check). Files exported before 0.3.6 have no role: answers.
+    for role in ("answers", "checker"):
+        default = next((p["name"] for p in data.get("llm_providers", []) if p.get("is_default") and p.get("role", "answers") == role), None)
+        if default and default in known and not (default in existing and existing[default].is_default):
+            plan.append(f"Make {default} the default {'AI provider' if role == 'answers' else 'answer checker'}")
+            if apply:
+                for p in existing.values():
+                    if p.role == role:
+                        p.is_default = p.name == default
 
     tenants = {t.name.lower(): t for t in db.scalars(select(Tenant))}
     for t in data.get("tenants", []):
@@ -213,7 +227,7 @@ def import_config(db: Session, data: dict, apply: bool) -> list[str]:
         if t.get("general"):
             cur = next((x for x in tenants.values() if x.is_global), None)
         settings = {**DEFAULT_TENANT_SETTINGS, **(t.get("settings") or {})}
-        for key, field in (("llm", "llm_provider_id"), ("llm_fallback", "llm_fallback_id")):
+        for key, field in (("llm", "llm_provider_id"), ("llm_fallback", "llm_fallback_id"), ("checker", "checker_provider_id")):
             ref = t.get(key)
             if ref and ref not in known:
                 plan.append(f"Tenant {name}: AI provider {ref} not found, keeping the current choice")
@@ -233,14 +247,16 @@ def import_config(db: Session, data: dict, apply: bool) -> list[str]:
             cs = cur.settings or {}
             changed = (not cur.is_global and cur.status != t.get("status", cur.status)) or any(
                 cs.get(k, DEFAULT_TENANT_SETTINGS[k]) != settings[k] for k in DEFAULT_TENANT_SETTINGS) or (
-                names.get(str(cs.get("llm_provider_id"))) != t.get("llm") or names.get(str(cs.get("llm_fallback_id"))) != t.get("llm_fallback"))
+                names.get(str(cs.get("llm_provider_id"))) != t.get("llm") or names.get(str(cs.get("llm_fallback_id"))) != t.get("llm_fallback")
+                or names.get(str(cs.get("checker_provider_id"))) != t.get("checker") or cs.get("answer_check", "warn") != t.get("answer_check", "warn"))
             if changed:
                 plan.append(f"Update tenant {cur.name}")
         if apply and cur is not None:
             if not cur.is_global:
                 cur.status = t.get("status", cur.status)
             merged = {**(cur.settings or {}), **{k: v for k, v in settings.items() if k in DEFAULT_TENANT_SETTINGS}}
-            for field in ("llm_provider_id", "llm_fallback_id"):
+            merged["answer_check"] = t.get("answer_check", "warn")
+            for field in ("llm_provider_id", "llm_fallback_id", "checker_provider_id"):
                 if field in settings and (settings[field] is None or isinstance(settings[field], str)):
                     if settings[field] is None:
                         merged.pop(field, None)

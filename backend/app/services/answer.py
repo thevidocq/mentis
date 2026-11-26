@@ -9,9 +9,9 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models import Chat, ChatMessage, Role, Tenant, User
-from app.services.setup import GENERAL_NAME
-from app.services import access, chat_visibility, llm, prompts, retrieval
+from app.services import access, answer_check, chat_visibility, llm, prompts, retrieval
 from app.services.llm_config import providers_for
+from app.services.setup import GENERAL_NAME
 
 HISTORY_TURNS = 6
 
@@ -30,6 +30,9 @@ class Answer:
     input_tokens: int | None = None
     output_tokens: int | None = None
     passages: int = 0
+    # For the answer check (not stored): the passages given to the model, and the model that answered.
+    passage_texts: dict[int, str] = field(default_factory=dict)
+    used: dict | None = None
 
 
 def all_label(user: User | None) -> str:
@@ -143,7 +146,8 @@ def not_found_text(scope_label: str) -> str:
     return f"Not found in {target}. No document in use covers this question."
 
 
-def answer(db: Session, chat: Chat, question: str, first: bool) -> Answer:
+def answer(db: Session, chat: Chat, question: str, first: bool, correction: str | None = None) -> Answer:
+    """`correction`: problems of a first draft found by the answer check, for a second attempt."""
     tenants, scope_label, scope_tenant = scope_tenants(db, chat)
     history = _history(db, chat)
     s = get_settings()
@@ -161,8 +165,12 @@ def answer(db: Session, chat: Chat, question: str, first: bool) -> Answer:
 
     want_followups = (scope_tenant.settings or {}).get("suggested_followups", True) if scope_tenant else True
     system = prompts.system_prompt(followups=want_followups, title=first)
-    turns = [llm.Turn(m.role, m.content) for m in history]
-    turns.append(llm.Turn("user", prompts.user_message(question, passages, scope_label)))
+    # A flagged earlier answer goes back with a note, so its error does not spread to the next answers.
+    turns = [llm.Turn(m.role, m.content + (answer_check.history_note(m.check) if m.role == "assistant" else "")) for m in history]
+    message = prompts.user_message(question, passages, scope_label)
+    if correction:
+        message += f"\n\nA previous draft of this answer was rejected: {correction}. Answer again strictly from the passages."
+    turns.append(llm.Turn("user", message))
 
     primary, fallback = providers_for(db, scope_tenant)
     reply, used, latency = llm.call_with_failover(primary, fallback, system, turns)
@@ -187,5 +195,6 @@ def answer(db: Session, chat: Chat, question: str, first: bool) -> Answer:
         tenants=names or [scope_label],
         title=(title or question)[:60] if first else None,
         provider_name=used["name"], model=used["model"], latency_ms=latency,
+        passage_texts={i: p.text for i, p in enumerate(passages, start=1)}, used=used,
         input_tokens=reply.input_tokens, output_tokens=reply.output_tokens, passages=len(passages),
     )

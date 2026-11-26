@@ -6,15 +6,41 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [0.3.6] - 2026-11-26
+
+### Added
+- **Answer check, against hallucinations.** Level 1 (always on, no model): phone numbers, e-mails, IPs, times, durations, percentages, dates and codes in the answer must be in the passages (normalised: "085 1112233" = "+39 085 111 2233", "30 minuti" = "30 minutes"); answers without citations are flagged. Level 2: a checker model verifies each cited statement against its passages (general LLMs with JSON verdicts; MiniCheck-style fact-checkers recognised by name). Per customer (LLM page): **Show a warning** (default), **Hide the answer** (one rewrite, then "Not found"; hidden text kept for audit only), or level 1 only.
+- Chat: the wrong value or statement is highlighted and a quiet line under the answer says which level found it (Level 1, Level 2, Level 1 + 2), with **Open source ›**; "Matches the sources", "Checking…", "Check not available". Same in shared chats. Flagged answers go back to the LLM as history with a note, so the error does not spread.
+- **AI providers**: sections **Answers** and **Answer check**; **Use for** in Add provider (technical fields under **Advanced**); one default per section, **Set as default** on the row (adding a model never changes it); **Test** of a checker plants an error and checks it is caught. Per customer: a specific checker (a customer with its own LLM is checked by that LLM unless one is chosen).
+- Logs: `chat.checked` (mode, level, issues, model, tokens). LLM usage: rows "<checker> · answer check".
+
+### Changed
+- Answers are generated with **temperature 0**; models that refuse the parameter are asked again without it.
+
+Migration 0012 (`llm_providers.role`, `chat_messages.answer_check`).
+
+
 ## [0.3.5] - 2026-11-26
 
 ### Changed
 - **Documents as a document browser**: the list on the left (search, All / In use / To review, documents needing attention grouped first with a quiet badge) and the selected document on the right: state, Approve/Reject or Retry when needed, **New version**, Download, a ⋯ menu (Rename, Versions, Delete), and the tabs Preview, Text read, Versions, Test a question; details and recent versions on the right on wide screens. On a phone: list, then the document with a back button.
+- **Documents overview** when the page opens (instead of the first document): documents in use, pages read and OCR, passages searchable, questions in chats on the customer in the last 30 days, what needs attention with Retry / Review, content by type, last indexed, oldest in use, pages to check, recent activity (`GET /tenants/{id}/documents/overview`, in the authorization matrix).
 - **Chat answers** sit in a light frame (hairline fading from the top-left corner, faint teal trail, very light shadow); the customer is a small text line, no longer a rounded badge, also in the chat header. Lighter citation numbers and follow-up chips; the Sources line under the answer is now a small button (only as wide as its text) that opens the panel on the right.
 
 ### Added
 - **New version** of a document accepts any file name of the same type (`document_id` on upload).
 - `MENTIS_EMBEDDING_BATCH_SIZE` in `.env` now reaches api and worker (texts per request to the embedding service; 4 on hosts with little RAM). INSTALL: plan at least 8 GB RAM, or add swap.
+
+### Storage (long-term)
+- **Container logs rotated** (5 × 20 MB per container; `MENTIS_LOG_MAX_SIZE`, `MENTIS_LOG_MAX_FILES`): the default Docker driver grew without limit and could fill the disk.
+- **Deleting a document** removes its rows first and then files and vectors: before, a MinIO or Qdrant outage half-way left a document that was still listed but no longer searchable.
+- **Daily storage sweep** (with the retention purge): removes files and index entries that no row refers to (deletions while MinIO or Qdrant were down, deleted tenants). Deleting a tenant cleans files and index after the commit.
+- **Old document versions** (Retention, default keep all): keep the last 1, 3, 5 or 10 older versions per document; the version in use, the latest and pending ones are always kept. Included in configuration export/import.
+- **Page images in WebP** (about a quarter of a PNG); existing PNG images keep working.
+- **Qdrant vectors on disk** (memory-mapped) for new collections; existing ones are moved by the sweep. RAM no longer grows with the number of documents.
+- MinIO deletions in batches of 1,000 (was one request per file).
+- `backup.sh`: keeps the newest 7 complete backups (`MENTIS_BACKUP_KEEP`), checks free space first, removes a backup that failed half-way.
+- `check.sh`: Storage section (free disk, volume sizes, backups, reclaimable images and build cache, log rotation). INSTALL: "Storage over time" and image prune after upgrades.
 
 ### Fixed
 - On a phone the menu did not close after choosing a customer on the same page.

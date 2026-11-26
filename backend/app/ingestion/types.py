@@ -19,7 +19,7 @@ class ExtractedPage:
     method: str = "native"          # native | ocr
     ocr_confidence: float | None = None
     tables: int = 0
-    image: bytes | None = None      # PNG render for the preview (PDF pages)
+    image: bytes | None = None      # WebP render for the preview (PDF pages)
     flags: list[str] = field(default_factory=list)
 
     def finalize(self) -> "ExtractedPage":

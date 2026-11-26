@@ -56,7 +56,9 @@ def ensure_collection(tenant_id, dim: int) -> str:
             raise VectorIndexError(f"The embedding model changed (vector size {size} → {dim}). Reindex from Embedding and Qdrant.",
                                    public=True)
         return name
-    c.create_collection(name, vectors_config=models.VectorParams(size=dim, distance=models.Distance.COSINE))
+    # Vectors on disk (memory-mapped): the index grows with the documents without growing the RAM it
+    # needs; the HNSW graph stays in memory, so searches stay fast.
+    c.create_collection(name, vectors_config=models.VectorParams(size=dim, distance=models.Distance.COSINE, on_disk=True))
     for key in ("document_id", "version_id"):
         c.create_payload_index(name, key, models.PayloadSchemaType.KEYWORD)
     c.create_payload_index(name, "active", models.PayloadSchemaType.BOOL)
@@ -90,6 +92,40 @@ def delete_version(tenant_id, version_id) -> None:
 def delete_document(tenant_id, document_id) -> None:
     if _exists(tenant_id):
         client().delete(collection_name(tenant_id), points_selector=models.Filter(must=[_match("document_id", document_id)]), wait=True)
+
+
+def tenant_collections() -> dict[str, str]:
+    """Collection name -> tenant id (hex) for the collections Mentis created."""
+    names = [c.name for c in client().get_collections().collections]
+    return {n: n[len("mentis_"):] for n in names if n.startswith("mentis_") and len(n) == len("mentis_") + 32}
+
+
+def version_ids(tenant_id) -> set[str]:
+    """Every version id with points in the tenant's collection (payload only, no vectors)."""
+    if not _exists(tenant_id):
+        return set()
+    out: set[str] = set()
+    offset = None
+    while True:
+        points, offset = client().scroll(collection_name(tenant_id), limit=2048, offset=offset,
+                                         with_payload=["version_id"], with_vectors=False)
+        out.update(str(p.payload.get("version_id")) for p in points if p.payload)
+        if offset is None:
+            return out
+
+
+def move_vectors_to_disk(name: str) -> bool:
+    """Collections created before 0.3.5 keep vectors in RAM: move them to disk (Qdrant rebuilds the
+    segments in the background; searches keep working). True when a change was requested."""
+    params = client().get_collection(name).config.params.vectors
+    if getattr(params, "on_disk", None):
+        return False
+    client().update_collection(name, vectors_config={"": models.VectorParamsDiff(on_disk=True)})
+    return True
+
+
+def delete_collection(name: str) -> None:
+    client().delete_collection(name)
 
 
 def delete_tenant(tenant_id) -> None:

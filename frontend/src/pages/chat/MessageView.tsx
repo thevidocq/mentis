@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { ChatMessage } from "../../api/types";
 import { Icon } from "../../components/Icon";
 import { Markdown } from "../../components/Markdown";
+import { CheckNotes, checkMarks } from "./CheckNotes";
 import { SourcesBar } from "./Sources";
 
 export function UserMessage({ m }: { m: Pick<ChatMessage, "content"> }) {
@@ -48,11 +49,12 @@ export function AssistantMessage({ m, onFollowup, onFeedback, onRetry, busy, onS
         {m.status === "not_found" && <span className="answer-flag">Not found</span>}
       </div>
       <div className={m.status === "not_found" ? "answer not-found" : "answer"}>
-        <Markdown source={m.content} cite={cite} />
+        <Markdown source={m.content} cite={cite} marks={checkMarks(m.check)} />
       </div>
       {m.citations.length > 0 && (
         <SourcesBar citations={m.citations} active={sourcesOpen} onOpen={() => onSources(null)} />
       )}
+      <CheckNotes check={m.check} onOpenSource={m.citations.length ? () => onSources(null) : undefined} />
       {m.followups.length > 0 && onFollowup && (
         <div className="followups">
           {m.followups.map((f) => (
@@ -76,6 +78,7 @@ export function AssistantMessage({ m, onFollowup, onFeedback, onRetry, busy, onS
         {m.provider_name && (
           <span className="muted small answer-model" title={m.model ?? ""}>
             {m.provider_name}{m.latency_ms != null ? ` · ${(m.latency_ms / 1000).toFixed(1)} s` : ""}
+            {m.check?.checker && m.check.level2 !== "off" ? ` · checked by ${m.check.checker.name}` : ""}
           </span>
         )}
       </div>

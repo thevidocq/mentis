@@ -36,9 +36,10 @@ def _render(pdf, index: int, dpi: int) -> Image.Image:
     return page.render(scale=render_scale(width, height, dpi)).to_pil()
 
 
-def _png(image: Image.Image) -> bytes:
+def _preview(image: Image.Image) -> bytes:
+    """Page image for the preview: WebP, about a quarter of the size of a PNG (scans especially)."""
     buf = io.BytesIO()
-    image.save(buf, format="PNG", optimize=True)
+    image.convert("RGB").save(buf, format="WEBP", quality=80, method=4)
     return buf.getvalue()
 
 
@@ -73,7 +74,7 @@ def parse_pdf(data: bytes, limits: ParseLimits) -> ParseResult:
                 else:
                     ocr_text, conf = ocr_image(_render(pdf, i, OCR_DPI), limits.ocr_languages)
                     page.text, page.method, page.ocr_confidence = normalize_text(ocr_text), "ocr", conf
-                page.image = _png(_render(pdf, i, PREVIEW_DPI))
+                page.image = _preview(_render(pdf, i, PREVIEW_DPI))
                 pages.append(page.finalize())
     finally:
         pdf.close()

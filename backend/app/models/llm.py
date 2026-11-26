@@ -17,4 +17,6 @@ class LlmProvider(IdMixin, CreatedMixin, Base):
     api_key_enc: Mapped[str | None] = mapped_column(Text)
     # e.g. {"reasoning_effort": "medium", "max_tokens": 1500}
     options: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    # answers: writes the answers; checker: checks them against the sources (one default per role).
+    role: Mapped[str] = mapped_column(String(12), default="answers", server_default="answers", nullable=False)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

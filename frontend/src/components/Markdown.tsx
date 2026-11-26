@@ -1,28 +1,57 @@
 // Minimal Markdown renderer for the help pages: builds React elements, never injects HTML.
 // Supports: # ## ### headings, paragraphs, - and 1. lists (one nested level, 4 spaces),
 // > notes, ``` code blocks, | tables |, **bold**, *italic* and `code` inline.
-// With `cite`, [n] markers in chat answers become citation links.
+// With `cite`, [n] markers in chat answers become citation links. With `marks`, those exact
+// passages of the source are highlighted (answer check findings).
 
 import { ReactNode } from "react";
 
 type Cite = (n: number, key: string) => ReactNode;
 
+const OPEN = "\uE000";
+const CLOSE = "\uE001";
+
+/** Text with highlight markers -> nodes; `state.open` carries a highlight across bold or code. */
+function marked(text: string, key: string, state: { open: boolean }): ReactNode[] {
+  if (!text.includes(OPEN) && !text.includes(CLOSE)) return [state.open ? <mark key={key} className="check-mark">{text}</mark> : text];
+  const out: ReactNode[] = [];
+  text.split(/([\uE000\uE001])/).forEach((part, i) => {
+    if (part === OPEN) state.open = true;
+    else if (part === CLOSE) state.open = false;
+    else if (part) out.push(state.open ? <mark key={`${key}m${i}`} className="check-mark">{part}</mark> : part);
+  });
+  return out;
+}
+
+/** Insert highlight markers around the first occurrence of each mark (longest first). */
+function withMarks(source: string, marks: string[]): string {
+  let s = source;
+  for (const m of [...new Set(marks.filter((x) => x && x.trim().length > 1))].sort((a, b) => b.length - a.length)) {
+    const at = s.indexOf(m);
+    if (at < 0 || s.slice(0, at).split(OPEN).length !== s.slice(0, at).split(CLOSE).length) continue; // not found, or inside another
+    if (s.slice(at, at + m.length).includes(OPEN) || s.slice(at, at + m.length).includes(CLOSE)) continue;
+    s = s.slice(0, at) + OPEN + m + CLOSE + s.slice(at + m.length);
+  }
+  return s;
+}
+
 function inline(text: string, cite?: Cite): ReactNode[] {
+  const state = { open: false };
   const out: ReactNode[] = [];
   const re = cite ? /(\*\*[^*]+\*\*|`[^`]+`|\*[^*\s][^*]*\*|\[\d{1,3}\])/g : /(\*\*[^*]+\*\*|`[^`]+`|\*[^*\s][^*]*\*)/g;
   let last = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
-    if (m.index > last) out.push(text.slice(last, m.index));
+    if (m.index > last) out.push(...marked(text.slice(last, m.index), `t${last}`, state));
     const tok = m[0];
     const k = `${m.index}`;
-    if (tok.startsWith("**")) out.push(<strong key={k}>{tok.slice(2, -2)}</strong>);
-    else if (tok.startsWith("`")) out.push(<code key={k}>{tok.slice(1, -1)}</code>);
+    if (tok.startsWith("**")) out.push(<strong key={k}>{marked(tok.slice(2, -2), k, state)}</strong>);
+    else if (tok.startsWith("`")) out.push(<code key={k}>{marked(tok.slice(1, -1), k, state)}</code>);
     else if (tok.startsWith("[") && cite) out.push(cite(Number(tok.slice(1, -1)), k));
-    else out.push(<em key={k}>{tok.slice(1, -1)}</em>);
+    else out.push(<em key={k}>{marked(tok.slice(1, -1), k, state)}</em>);
     last = m.index + tok.length;
   }
-  if (last < text.length) out.push(text.slice(last));
+  if (last < text.length) out.push(...marked(text.slice(last), `t${last}`, state));
   return out;
 }
 
@@ -44,8 +73,8 @@ function list(lines: string[], key: number, cite?: Cite): ReactNode {
 }
 
 // `breaks`: keep single line breaks inside paragraphs (extracted document text, OCR lines).
-export function Markdown({ source, breaks = false, cite }: { source: string; breaks?: boolean; cite?: Cite }) {
-  const lines = source.replace(/\r/g, "").split("\n");
+export function Markdown({ source, breaks = false, cite, marks }: { source: string; breaks?: boolean; cite?: Cite; marks?: string[] }) {
+  const lines = (marks?.length ? withMarks(source, marks) : source).replace(/\r/g, "").split("\n");
   const blocks: ReactNode[] = [];
   let i = 0;
   while (i < lines.length) {

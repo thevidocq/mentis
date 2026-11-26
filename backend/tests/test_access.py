@@ -143,7 +143,7 @@ def test_llm_choice_allowed_per_tenant_and_minimal_provider_view(super_admin, fa
     ta = _user(super_admin, "ta@example.com", "tenant_admin", tenant_ids=[alfa["id"]])
     providers = ta.get("/api/llm/providers").json()
     assert providers == [{"id": p["id"], "name": "Claude", "kind": None, "base_url": None, "model": "claude-haiku-5-5",
-                          "api_key_set": None, "options": None, "is_default": True}]
+                          "api_key_set": None, "options": None, "is_default": True, "role": "answers"}]
     assert ta.put(f"/api/tenants/{alfa['id']}/llm", json={"provider_id": p["id"]}).status_code == 200
     # The super-admin takes the choice away; the tenant admin cannot give it back.
     assert ta.patch(f"/api/tenants/{alfa['id']}", json={"settings": {"admin_can_set_llm": True}}).status_code == 403

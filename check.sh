@@ -83,5 +83,36 @@ for svc in postgres qdrant minio redis embeddings; do
 done
 
 echo
+echo "Storage:"
+# Free space where Docker keeps volumes and images, and where backups are written.
+root=$(docker info -f '{{.DockerRootDir}}' 2>/dev/null || echo /var/lib/docker)
+for path in "$root" "$PWD"; do
+  [ -d "$path" ] || continue
+  read -r size used avail pct mount <<<"$(df -Ph "$path" | awk 'NR==2 {print $2, $3, $4, $5, $6}')"
+  p=${pct%%%}
+  if [ "${p:-0}" -ge 90 ]; then bad "disk $mount ($path) ${pct} full, $avail free of $size"
+  elif [ "${p:-0}" -ge 80 ]; then warn "disk $mount ($path) ${pct} full, $avail free of $size"
+  else ok "disk $mount ($path) ${pct} used, $avail free of $size"; fi
+done
+# Data volumes (documents, page images, index, database).
+for vol in minio-data qdrant-data postgres-data embeddings-data; do
+  name="$(basename "$PWD")_$vol"
+  mp=$(docker volume inspect -f '{{.Mountpoint}}' "$name" 2>/dev/null) || continue
+  sz=$(du -sh "$mp" 2>/dev/null | cut -f1)
+  [ -n "$sz" ] && ok "volume $vol: $sz" || ok "volume $vol: size needs root (sudo ./check.sh)"
+done
+if [ -d backups ]; then
+  n=$(ls -1d backups/mentis-* 2>/dev/null | wc -l)
+  ok "backups/: $n backups, $(du -sh backups 2>/dev/null | cut -f1) (copy them off this server)"
+fi
+# Images and build cache left by upgrades.
+df_out=$(docker system df --format '{{.Type}}={{.Reclaimable}}' 2>/dev/null)
+img=$(printf '%s\n' "$df_out" | grep '^Images=' | cut -d= -f2)
+cache=$(printf '%s\n' "$df_out" | grep '^Build Cache=' | cut -d= -f2)
+[ -n "$img$cache" ] && ok "reclaimable: images ${img:-0B}, build cache ${cache:-0B} (free with: docker image prune -f && docker builder prune -f)"
+logcfg=$(docker inspect -f '{{.HostConfig.LogConfig.Config}}' "$(docker compose ps -q api | head -1)" 2>/dev/null)
+case "$logcfg" in *max-size*) ok "container logs rotated" ;; *) warn "container logs not rotated: docker compose up -d (v0.3.5+)" ;; esac
+
+echo
 if [ "$fail" -eq 0 ]; then echo "All checks passed."; else echo "Some checks failed. See: docker compose logs --tail=100"; fi
 exit "$fail"

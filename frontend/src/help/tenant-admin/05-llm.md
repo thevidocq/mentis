@@ -7,7 +7,19 @@
 - **LLM for answers**: *Platform default* uses the model chosen by the super-admin. Pick another one from the list if your customer needs it, for example an internal model (gpt-oss, Ollama) when documents must not reach a cloud provider.
 - **Fallback when it fails**: used only if the first model does not respond. Leave it on *None*, or pick an internal one, if the customer's data must stay internal.
 
+- **Model that checks the answers**: the model that re-reads each answer against its sources (level 2). By default the platform's checker, or your customer's own LLM when you chose one above, so its data stays with that provider.
+
 The list shows the models added by the super-admin (name and model). Analysts see the model's name under each answer.
+
+## Answer check
+
+When an answer does not match its sources:
+
+- **Show a warning** (recommended): the analyst sees the answer with what is not in the sources highlighted, and which level found it.
+- **Hide the answer**: the answer is checked before it is shown; if it fails, it is written again once, then replaced by *Not found*. Answers take a second or two longer. Hidden answers are kept for audit, never shown.
+- **Don't check with a model**: only level 1 runs (contacts, times and codes compared with the sources, no model, no cost).
+
+You can change this even when the super-admin chooses the models of your customer.
 
 ## Usage
 

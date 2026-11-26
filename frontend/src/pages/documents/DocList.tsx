@@ -20,7 +20,7 @@ function meta(d: DocSummary): string {
   return d.active ? `v${v.version}${pages}` : `v${d.latest.version} · ${new Date(d.latest.uploaded_at).toLocaleDateString()}`;
 }
 
-export function DocList({ docs, selected, onSelect }: { docs: DocSummary[]; selected: string | null; onSelect: (id: string) => void }) {
+export function DocList({ docs, selected, onSelect, onOverview }: { docs: DocSummary[]; selected: string | null; onSelect: (id: string) => void; onOverview: () => void }) {
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const review = docs.filter((d) => attention(d)).length;
@@ -51,6 +51,11 @@ export function DocList({ docs, selected, onSelect }: { docs: DocSummary[]; sele
         ))}
       </div>
       <div className="doc-items">
+        {docs.length > 0 && (
+          <button className={`doc-item doc-overview-link${selected ? "" : " on"}`} aria-current={!selected} onClick={onOverview}>
+            <Icon name="bars" /><span className="doc-item-text"><span className="doc-item-name">Overview</span></span>
+          </button>
+        )}
         {groups.length === 0 && <p className="muted small doc-empty">{docs.length ? "No document matches." : "No documents yet. Upload procedures, escalation matrices and runbooks."}</p>}
         {groups.map((g) => (
           <section key={g.label} aria-label={g.label}>

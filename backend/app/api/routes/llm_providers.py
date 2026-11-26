@@ -27,6 +27,7 @@ class ProviderIn(BaseModel):
     api_key: str | None = None  # write-only; omit to keep, "" to clear
     options: dict = Field(default_factory=dict)
     is_default: bool = False
+    role: str = Field(default=llm_config.ANSWERS, pattern="^(answers|checker)$")  # writes answers, or checks them
 
 
 class ProviderOut(BaseModel):
@@ -38,6 +39,7 @@ class ProviderOut(BaseModel):
     api_key_set: bool | None = None
     options: dict | None = None
     is_default: bool
+    role: str = llm_config.ANSWERS
 
 
 class ModelsIn(BaseModel):
@@ -55,11 +57,13 @@ class ModelOption(BaseModel):
 class TenantLlmIn(BaseModel):
     provider_id: uuid.UUID | None = None  # None = platform default
     fallback_id: uuid.UUID | None = None
+    checker_id: uuid.UUID | None = None   # None = platform default checker (or the customer's own LLM)
+    answer_check: str | None = Field(default=None, pattern="^(warn|hide|off)$")  # None = unchanged
 
 
 def _out(p: LlmProvider) -> ProviderOut:
     return ProviderOut(id=p.id, name=p.name, kind=p.kind, base_url=p.base_url, model=p.model,
-                       api_key_set=bool(p.api_key_enc), options=p.options or {}, is_default=p.is_default)
+                       api_key_set=bool(p.api_key_enc), options=p.options or {}, is_default=p.is_default, role=p.role)
 
 
 def _validate(body: ProviderIn) -> None:
@@ -69,8 +73,14 @@ def _validate(body: ProviderIn) -> None:
 
 
 def _set_default(db: Session, p: LlmProvider) -> None:
-    db.execute(update(LlmProvider).where(LlmProvider.id != p.id).values(is_default=False))
+    """One default per role: the default answering model, and the default checker."""
+    db.execute(update(LlmProvider).where(LlmProvider.id != p.id, LlmProvider.role == p.role).values(is_default=False))
     p.is_default = True
+
+
+def _in_use(db: Session, p: LlmProvider) -> list[str]:
+    keys = ("llm_provider_id", "llm_fallback_id", "checker_provider_id")
+    return [t.name for t in db.scalars(select(Tenant)) if str(p.id) in [(t.settings or {}).get(k) for k in keys]]
 
 
 @router.get("/llm/kinds")
@@ -109,25 +119,26 @@ def list_providers(db: Session = Depends(get_db), user: User = Depends(current_u
     if user.role == Role.SUPER_ADMIN.value:
         return [_out(p) for p in rows]
     # Tenant admins only need to recognise a model: no addresses, keys or prices.
-    return [ProviderOut(id=p.id, name=p.name, model=p.model, is_default=p.is_default) for p in rows]
+    return [ProviderOut(id=p.id, name=p.name, model=p.model, is_default=p.is_default, role=p.role) for p in rows]
 
 
 @router.post("/llm/providers", response_model=ProviderOut, status_code=201)
 def create_provider(body: ProviderIn, request: Request, db: Session = Depends(get_db), admin: User = Depends(super_admin)) -> ProviderOut:
     _validate(body)
     p = LlmProvider(name=body.name.strip(), kind=body.kind, base_url=body.base_url.rstrip("/"), model=body.model.strip(),
-                    api_key_enc=crypto.encrypt(body.api_key) if body.api_key else None, options=body.options)
+                    api_key_enc=crypto.encrypt(body.api_key) if body.api_key else None, options=body.options, role=body.role)
     db.add(p)
     try:
         db.flush()
     except IntegrityError:
         db.rollback()
         raise HTTPException(409, "A provider with this name already exists.") from None
-    first = db.scalar(select(LlmProvider.id).where(LlmProvider.id != p.id)) is None
+    # The first model of a role becomes its default; adding another never changes the default by itself.
+    first = db.scalar(select(LlmProvider.id).where(LlmProvider.id != p.id, LlmProvider.role == p.role)) is None
     if body.is_default or first:
         _set_default(db, p)
     db.commit()
-    log_event(db, "llm.provider_created", actor=admin, target=p.name, ip=client_ip(request), detail={"kind": p.kind, "model": p.model})
+    log_event(db, "llm.provider_created", actor=admin, target=p.name, ip=client_ip(request), detail={"kind": p.kind, "model": p.model, "role": p.role})
     return _out(p)
 
 
@@ -140,6 +151,14 @@ def update_provider(provider_id: uuid.UUID, body: ProviderIn, request: Request, 
     if body.api_key is None and p.api_key_enc and not llm_config.same_origin(p.base_url, body.base_url):
         # Otherwise the stored key would be sent to the new address without the admin ever typing it.
         raise HTTPException(422, "Enter the API key again when you change the provider's address.")
+    if body.role != p.role:
+        if _in_use(db, p):
+            raise HTTPException(409, f"In use by: {', '.join(_in_use(db, p))}. Change their LLM first.")
+        if p.is_default:
+            raise HTTPException(409, "Make another model the default first.")
+        p.role = body.role
+        if db.scalar(select(LlmProvider.id).where(LlmProvider.id != p.id, LlmProvider.role == p.role)) is None:
+            body.is_default = True
     p.name, p.kind, p.base_url, p.model, p.options = body.name.strip(), body.kind, body.base_url.rstrip("/"), body.model.strip(), body.options
     if body.api_key is not None:
         p.api_key_enc = crypto.encrypt(body.api_key) if body.api_key else None
@@ -159,18 +178,30 @@ def delete_provider(provider_id: uuid.UUID, request: Request, db: Session = Depe
     p = db.get(LlmProvider, provider_id)
     if p is None:
         raise HTTPException(404, "Provider not found.")
-    users = [t.name for t in db.scalars(select(Tenant)) if str(p.id) in ((t.settings or {}).get("llm_provider_id"), (t.settings or {}).get("llm_fallback_id"))]
+    users = _in_use(db, p)
     if users:
         raise HTTPException(409, f"In use by: {', '.join(users)}. Change their LLM first.")
-    was_default, name = p.is_default, p.name
+    was_default, name, role = p.is_default, p.name, p.role
     db.delete(p)
     db.flush()
     if was_default:
-        nxt = db.scalar(select(LlmProvider).order_by(LlmProvider.created_at))
+        nxt = db.scalar(select(LlmProvider).where(LlmProvider.role == role).order_by(LlmProvider.created_at))
         if nxt:
             nxt.is_default = True
     db.commit()
     log_event(db, "llm.provider_deleted", level="warning", actor=admin, target=name, ip=client_ip(request))
+
+
+@router.post("/llm/providers/{provider_id}/default", response_model=ProviderOut)
+def make_default(provider_id: uuid.UUID, request: Request, db: Session = Depends(get_db), admin: User = Depends(super_admin)) -> ProviderOut:
+    """Set as default of its role (answers, or answer check)."""
+    p = db.get(LlmProvider, provider_id)
+    if p is None:
+        raise HTTPException(404, "Provider not found.")
+    _set_default(db, p)
+    db.commit()
+    log_event(db, "llm.provider_default", actor=admin, target=p.name, ip=client_ip(request), detail={"role": p.role})
+    return _out(p)
 
 
 @router.post("/llm/providers/{provider_id}/test")
@@ -178,11 +209,35 @@ def test_provider(provider_id: uuid.UUID, db: Session = Depends(get_db), _: User
     p = db.get(LlmProvider, provider_id)
     if p is None:
         raise HTTPException(404, "Provider not found.")
+    if p.role == llm_config.CHECKER:
+        return _test_checker(p)
     try:
         reply = llm.call_provider(llm.provider_config(p), "Reply with the single word: ready", [llm.Turn("user", "Are you ready?")], timeout=60)
     except llm.LLMError as e:
         return {"ok": False, "error": str(e)}
     return {"ok": True, "reply": reply.text[:200]}
+
+
+SAMPLE_PASSAGE = ("Brute force attacks on VPN accounts: call the SOC on-call contact Mario Rossi, phone +39 085 111 2233. "
+                  "Critical incidents must be escalated within 30 minutes.")
+SAMPLE_ANSWER = "Call **Mario Rossi**, +39 085 111 2233 [1]. Critical incidents must be escalated within **2 hours** [1]."
+
+
+def _test_checker(p: LlmProvider) -> dict:
+    """The checker gets a sample answer with a planted error (2 hours instead of 30 minutes)."""
+    from app.services import answer_check
+
+    try:
+        issues, verdict = answer_check.level2(llm.provider_config(p), SAMPLE_ANSWER, {1: SAMPLE_PASSAGE})
+    except llm.LLMError as e:
+        return {"ok": False, "error": str(e)}
+    caught = any("2 hours" in i["text"] for i in issues)
+    wrong = [i for i in issues if "2 hours" not in i["text"]]
+    if caught and not wrong:
+        return {"ok": True, "reply": f"caught the planted error ({verdict.latency_ms / 1000:.1f} s)"}
+    if not caught:
+        return {"ok": False, "error": "the checker did not catch the planted error (2 hours instead of 30 minutes)"}
+    return {"ok": False, "error": "the checker also rejected a correct statement"}
 
 
 # --- Tenant choice ---------------------------------------------------------------
@@ -204,21 +259,37 @@ def _editable(user: User, t: Tenant) -> bool:
 def get_tenant_llm(tenant_id: uuid.UUID, db: Session = Depends(get_db), user: User = Depends(current_user)) -> dict:
     t = _tenant_for(db, user, tenant_id)
     s = t.settings or {}
+    from app.services import answer_check
+
     return {"provider_id": s.get("llm_provider_id"), "fallback_id": s.get("llm_fallback_id"), "editable": _editable(user, t),
-            "admin_can_set_llm": bool(s.get("admin_can_set_llm", True))}
+            "admin_can_set_llm": bool(s.get("admin_can_set_llm", True)),
+            "checker_id": s.get("checker_provider_id"), "answer_check": answer_check.mode_of(s)}
 
 
 @router.put("/tenants/{tenant_id}/llm")
 def put_tenant_llm(tenant_id: uuid.UUID, body: TenantLlmIn, request: Request, db: Session = Depends(get_db), user: User = Depends(current_user)) -> dict:
     t = _tenant_for(db, user, tenant_id)
-    if not _editable(user, t):
+    s = t.settings or {}
+    same_models = (str(body.provider_id) if body.provider_id else None, str(body.fallback_id) if body.fallback_id else None,
+                   str(body.checker_id) if body.checker_id else None) == (s.get("llm_provider_id"), s.get("llm_fallback_id"), s.get("checker_provider_id"))
+    # When the super-admin chooses the models, the tenant admin can still set what the answer check does.
+    if not _editable(user, t) and not same_models:
         raise HTTPException(403, "The super-admin chooses the LLM of this customer.")
-    for pid in (body.provider_id, body.fallback_id):
-        if pid is not None and db.get(LlmProvider, pid) is None:
+    for pid, role in ((body.provider_id, llm_config.ANSWERS), (body.fallback_id, llm_config.ANSWERS), (body.checker_id, llm_config.CHECKER)):
+        if pid is None:
+            continue
+        p = db.get(LlmProvider, pid)
+        if p is None:
             raise HTTPException(422, "Unknown provider.")
+        if p.role != role:
+            raise HTTPException(422, f"{p.name} is not a model for {'answers' if role == llm_config.ANSWERS else 'the answer check'}.")
     t.settings = {**(t.settings or {}), "llm_provider_id": str(body.provider_id) if body.provider_id else None,
-                  "llm_fallback_id": str(body.fallback_id) if body.fallback_id else None}
+                  "llm_fallback_id": str(body.fallback_id) if body.fallback_id else None,
+                  "checker_provider_id": str(body.checker_id) if body.checker_id else None}
+    if body.answer_check is not None:
+        t.settings = {**t.settings, "answer_check": body.answer_check}
     db.commit()
     log_event(db, "tenant.llm_updated", actor=user, tenant_id=t.id, target=t.name, ip=client_ip(request),
-              detail={"provider_id": t.settings["llm_provider_id"], "fallback_id": t.settings["llm_fallback_id"]})
+              detail={"provider_id": t.settings["llm_provider_id"], "fallback_id": t.settings["llm_fallback_id"],
+                      "checker_id": t.settings["checker_provider_id"], "answer_check": t.settings.get("answer_check", "warn")})
     return get_tenant_llm(tenant_id, db, user)

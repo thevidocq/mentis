@@ -7,6 +7,9 @@
 # packed into backups/mentis-<date>.tar.gpg and the unencrypted copy is removed.
 #   MENTIS_BACKUP_GPG_RECIPIENT=<key id or email>   public key: this server cannot decrypt its backups
 #   MENTIS_BACKUP_PASSPHRASE_FILE=/root/.mentis-backup-pass   symmetric AES-256 with a passphrase file
+#
+# Rotation: with the default destination, only the newest MENTIS_BACKUP_KEEP complete backups (default 7)
+# stay in backups/; 0 keeps them all. A backup that fails half-way is removed, so it never replaces a good one.
 set -euo pipefail
 cd "$(dirname "$0")"
 # Every file written here is readable by the owner only.
@@ -25,9 +28,23 @@ if [ -n "$GPG_RECIPIENT$PASSPHRASE_FILE" ]; then
   [ -z "$PASSPHRASE_FILE" ] || [ -r "$PASSPHRASE_FILE" ] || { echo "Cannot read MENTIS_BACKUP_PASSPHRASE_FILE=$PASSPHRASE_FILE"; exit 1; }
 fi
 
+KEEP="$(setting MENTIS_BACKUP_KEEP)"; KEEP="${KEEP:-7}"
+DEFAULT_DEST=0; [ -z "${1:-}" ] && DEFAULT_DEST=1
 DEST="${1:-backups/mentis-$(date +%Y%m%d-%H%M%S)}"
 mkdir -p "$DEST"
 chmod 700 "$DEST"
+# Free space: a backup needs about as much as the data it copies (compressed, usually less).
+avail_kb=$(df -Pk "$DEST" | awk 'NR==2 {print $4}')
+last=$(ls -1dt backups/mentis-* 2>/dev/null | head -1 || true)
+need_kb=$([ -n "$last" ] && du -sk "$last" | awk '{print int($1 * 1.2)}' || echo 0)
+if [ "${need_kb:-0}" -gt "${avail_kb:-0}" ]; then
+  echo "Not enough free disk space for a backup: about $((need_kb / 1024)) MB needed, $((avail_kb / 1024)) MB free."
+  rmdir "$DEST" 2>/dev/null || true
+  exit 1
+fi
+complete=0
+cleanup_partial() { [ "$complete" -eq 1 ] || { echo "Backup failed: removing the incomplete $DEST"; rm -rf "$DEST" "$DEST.tar.gpg"; }; }
+trap cleanup_partial EXIT
 DEST="$(cd "$DEST" && pwd)"
 
 # The running container of a service; a stopped one only if none runs. A stopped leftover (an old
@@ -55,10 +72,10 @@ archive minio /data minio.tar.gz
 
 echo "- Vector index (Qdrant, paused for a few seconds)"
 docker compose pause qdrant >/dev/null
-trap 'docker compose unpause qdrant >/dev/null 2>&1 || true' EXIT
+trap 'docker compose unpause qdrant >/dev/null 2>&1 || true; cleanup_partial' EXIT
 archive qdrant /qdrant/storage qdrant.tar.gz
 docker compose unpause qdrant >/dev/null
-trap - EXIT
+trap cleanup_partial EXIT
 
 echo "- Settings (.env)"
 install -m 600 .env "$DEST/env.backup"
@@ -82,4 +99,16 @@ if [ -n "$GPG_RECIPIENT$PASSPHRASE_FILE" ]; then
   DEST="$DEST.tar.gpg"
 fi
 
+complete=1
 du -sh "$DEST" | awk '{print "Done: " $2 " (" $1 ")"}'
+
+# Rotation of the default folder: complete backups only (a manifest, or an encrypted archive).
+if [ "$DEFAULT_DEST" -eq 1 ] && [ "$KEEP" -gt 0 ] 2>/dev/null; then
+  ls -1dt backups/mentis-* 2>/dev/null | while read -r b; do
+    if [ -f "$b/manifest.txt" ] || [ "${b%.tar.gpg}" != "$b" ]; then echo "$b"; fi
+  done | tail -n +"$((KEEP + 1))" | while read -r old; do
+    echo "Removing old backup $old (keeping the newest $KEEP)"
+    rm -rf "$old"
+  done || true
+fi
+echo "Keep a copy off this server: backups on the same disk do not survive a disk failure."

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.models import LlmProvider, Tenant
 from app.services.llm import KINDS, provider_config
 
-OPTION_KEYS = {"reasoning_effort", "max_tokens", "price_in", "price_out"}
+OPTION_KEYS = {"reasoning_effort", "max_tokens", "price_in", "price_out", "temperature"}
 
 
 def provider_problem(kind, base_url, options) -> str | None:
@@ -28,6 +28,9 @@ def provider_problem(kind, base_url, options) -> str | None:
     unknown = set(options) - OPTION_KEYS
     if unknown:
         return f"Unknown options: {', '.join(sorted(unknown))}."
+    t = options.get("temperature")
+    if t is not None and (not isinstance(t, int | float) or isinstance(t, bool) or not 0 <= t <= 2):
+        return "Temperature must be between 0 and 2."
     mt = options.get("max_tokens")
     if mt is not None and (not isinstance(mt, int) or isinstance(mt, bool) or not 100 <= mt <= 16000):
         return "Max tokens must be between 100 and 16000."
@@ -45,8 +48,30 @@ def same_origin(a: str | None, b: str | None) -> bool:
         return False
 
 
-def default_provider(db: Session) -> LlmProvider | None:
-    return db.scalar(select(LlmProvider).where(LlmProvider.is_default.is_(True)))
+ANSWERS, CHECKER = "answers", "checker"
+
+
+def default_provider(db: Session, role: str = ANSWERS) -> LlmProvider | None:
+    return db.scalar(select(LlmProvider).where(LlmProvider.is_default.is_(True), LlmProvider.role == role))
+
+
+def checker_for(db: Session, tenant: Tenant | None, answered_by: dict | None) -> dict | None:
+    """Model that checks an answer (level 2):
+    1. the checker chosen for this customer;
+    2. a customer with its own LLM: that LLM (its data stays with the provider the customer chose);
+    3. the platform's default checker;
+    4. the model that wrote the answer."""
+    s = (tenant.settings or {}) if tenant else {}
+    chosen = _get(db, s.get("checker_provider_id"))
+    if chosen is not None:
+        return provider_config(chosen)
+    own = _get(db, s.get("llm_provider_id"))
+    if own is not None:
+        return provider_config(own)
+    default = default_provider(db, CHECKER)
+    if default is not None:
+        return provider_config(default)
+    return answered_by
 
 
 def _get(db: Session, pid) -> LlmProvider | None:

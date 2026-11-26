@@ -38,7 +38,7 @@ from app.models import (
     VersionStatus,
 )
 from app.models.base import utcnow
-from app.services import access, jobs, retrieval, storage, versions
+from app.services import access, doc_overview, jobs, retrieval, storage, versions
 from app.services.embeddings import EmbeddingError
 from app.services.vector_index import VectorIndexError
 from app.services.logs import log_event
@@ -249,6 +249,12 @@ async def upload(
     return _vout(version)
 
 
+@router.get("/overview")
+def overview(tenant_id: uuid.UUID, db: Session = Depends(get_db), user: User = Depends(admins)) -> dict:
+    """What answers can use today, what needs attention, recent changes (counts only, no content)."""
+    return doc_overview.build(db, _tenant(db, user, tenant_id))
+
+
 @router.get("/{document_id}", response_model=DocumentDetail)
 def get_document(tenant_id: uuid.UUID, document_id: uuid.UUID, db: Session = Depends(get_db), user: User = Depends(admins)) -> DocumentDetail:
     tenant = _tenant(db, user, tenant_id)
@@ -313,7 +319,7 @@ def page_image(tenant_id: uuid.UUID, version_id: uuid.UUID, index: int, db: Sess
     page = db.scalar(select(VersionPage).where(VersionPage.version_id == v.id, VersionPage.index == index))
     if page is None or not page.image_key:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No image for this page.")
-    return Response(storage.get_storage().get(page.image_key), media_type="image/png",
+    return Response(storage.get_storage().get(page.image_key), media_type=storage.image_type(page.image_key),
                     headers={"X-Content-Type-Options": "nosniff"})
 
 
