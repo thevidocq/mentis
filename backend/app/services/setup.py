@@ -9,6 +9,7 @@ from app.models import Role, Tenant, User
 from app.models.base import utcnow
 
 GENERAL_SLUG = "general"
+GENERAL_NAME = "General Knowledge Base"  # general knowledge only, no customer context
 
 
 class SetupError(ValueError):
@@ -29,7 +30,7 @@ def create_first_admin(db: Session, email: str, full_name: str, password: str) -
     # Creating the General tenant first makes a concurrent second setup fail on its unique slug.
     try:
         if db.scalar(select(Tenant).where(Tenant.slug == GENERAL_SLUG)) is None:
-            db.add(Tenant(name="General", slug=GENERAL_SLUG, is_global=True))
+            db.add(Tenant(name=GENERAL_NAME, slug=GENERAL_SLUG, is_global=True))
             db.flush()
         admin = User(email=email.strip().lower(), full_name=full_name.strip(), password_hash=hash_password(password),
                      role=Role.SUPER_ADMIN.value, password_changed_at=utcnow())

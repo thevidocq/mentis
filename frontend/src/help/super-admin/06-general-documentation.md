@@ -1,14 +1,15 @@
-# General documentation
+# General Knowledge Base
 
-**General** holds documents that apply to every customer: shared playbooks, SOC-wide procedures, tool guides.
+The **General Knowledge Base** holds **general knowledge** used in the answers of every customer: how to handle a type of threat, SOC-wide playbooks, best practices, tool guides.
+
+It must contain **no customer context**: no customer names, contacts, systems, escalation chains. Those go in the customer's own documents, which can be more specific and win when the two disagree.
+
+## Who reads it
+
+Everyone: every tenant admin and analyst uses it in the chat, nothing to tick. A customer can turn it off for all its chats (Settings → Include the General Knowledge Base), and an analyst can turn it off for a single chat with the **Knowledge Base** chip.
 
 ## Who manages it
 
-The super-admin does not upload documents. General is managed by the **tenant admins who have General** among their customers: they pick **General** in the customer selector and use the **Documents** page as for any customer. Give General to at least one tenant admin from **Users**.
+The super-admin does not upload documents. Tick **Can manage the General Knowledge Base** (Users → edit or invite a tenant admin) only for the SOC admins who maintain it. It is off by default; "All customers" does not include it. A tenant admin who manages it can give the same permission to other tenant admins.
 
-General is ticked by default for every new tenant admin and analyst; untick it for users who must not see or manage it. Every upload, approval and deletion is recorded in **Logs** with the user's name.
-
-## How it is used
-
-- Every customer's answers include General documentation, unless that customer turns it off in its settings, and only for users who have General.
-- When General and a customer's own procedure disagree (escalation, SLA), the customer's procedure wins.
+Those admins pick **General Knowledge Base** in the customer selector and use the **Documents** page. **Every new version needs approval** before it is used, because it reaches every customer. Every upload, approval and deletion is recorded in **Logs** with the user's name.

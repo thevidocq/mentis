@@ -45,7 +45,7 @@ def user_out(db: Session, user: User) -> UserOut:
     # The tenants the user can see now (all of them with all_tenants), General first.
     return UserOut(id=user.id, email=user.email, full_name=user.full_name, role=user.role,
                    tenants=[TenantRef(id=t.id, name=t.name, is_general=t.is_global) for t in access.tenants(db, user)],
-                   all_tenants=user.all_tenants,
+                   all_tenants=user.all_tenants, can_manage_general=access.manages_general(user),
                    totp_enabled=user.totp_enabled, preferences=user.preferences or {})
 
 PURPOSE_MFA = "mfa"

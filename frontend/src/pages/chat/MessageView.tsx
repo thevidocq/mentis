@@ -43,7 +43,7 @@ export function AssistantMessage({ m, onFollowup, onFeedback, onRetry, busy }: P
   return (
     <div className="msg-assistant">
       <div className="answer-meta">
-        {m.tenants.map((t) => <span key={t} className={`pill${t === "General" || t === "All customers" ? "" : " accent"}`}>{t}</span>)}
+        {m.tenants.map((t) => <span key={t} className={`pill${t === "General Knowledge Base" || t.startsWith("All ") ? "" : " accent"}`}>{t}</span>)}
         {m.status === "not_found" && <span className="pill warn">Not found</span>}
       </div>
       <div className={m.status === "not_found" ? "answer not-found" : "answer"}>

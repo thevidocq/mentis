@@ -22,6 +22,7 @@ class UserOut(BaseModel):
     role: str
     tenants: list[TenantRef] = []  # tenant admins and analysts: the customers they see
     all_tenants: bool = False      # every customer, including future ones
+    can_manage_general: bool = False  # tenant admins who manage the General Knowledge Base
     totp_enabled: bool
     preferences: dict = {}
 

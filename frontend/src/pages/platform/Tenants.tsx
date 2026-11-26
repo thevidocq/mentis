@@ -26,7 +26,7 @@ export function Tenants() {
   return (
     <>
       <PageHead title="Tenants">
-        <span className="muted">{customers} {customers === 1 ? "customer" : "customers"} · 1 General</span>
+        <span className="muted">{customers} {customers === 1 ? "customer" : "customers"} · General Knowledge Base</span>
         <button className="btn btn-primary spacer" onClick={() => setEditing("new")}><Icon name="plus" />Onboard tenant</button>
       </PageHead>
       <div className="page-body">
@@ -40,7 +40,7 @@ export function Tenants() {
               {tenants.map((t) => (
                 <tr key={t.id}>
                   <td><strong>{t.name}</strong><div className="muted small">{t.slug}</div></td>
-                  <td>{t.is_global ? <span className="pill accent">Cross-customer</span> : "Customer"}</td>
+                  <td>{t.is_global ? <span className="pill accent">Knowledge base</span> : "Customer"}</td>
                   <td>{t.users}</td>
                   <td><span className={`pill ${statusPill(t.status)}`}>{t.status}</span></td>
                   <td>
@@ -48,7 +48,7 @@ export function Tenants() {
                       {!t.is_global && <button className="icon-btn" aria-label={`LLM of ${t.name}`} title="LLM" onClick={() => setLlmFor(t)}><Icon name="brain" /></button>}
                       <button className="icon-btn" aria-label={`Edit ${t.name}`} onClick={() => setEditing(t)}><Icon name="pencil" /></button>
                       {t.is_global ? (
-                        <span className="icon-btn" style={{ border: 0, color: "var(--muted)" }} title="The General tenant cannot be deleted"><Icon name="lock" /></span>
+                        <span className="icon-btn" style={{ border: 0, color: "var(--muted)" }} title="The General Knowledge Base cannot be deleted"><Icon name="lock" /></span>
                       ) : (
                         <button className="icon-btn danger" aria-label={`Delete ${t.name}`} onClick={() => setDeleting(t)}><Icon name="trash" /></button>
                       )}

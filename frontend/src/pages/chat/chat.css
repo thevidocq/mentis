@@ -101,3 +101,10 @@
   .source-row { padding: 8px 6px; }
   .sources-toggle { padding: 9px 10px; }
 }
+.gkb-switch { display: inline-flex; }
+.composer { position: relative; }
+.scope-chip.on { color: var(--accent-text); border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
+.scope-chip.off { color: var(--muted); text-decoration: line-through; }
+.gkb-confirm { position: absolute; bottom: calc(100% + 8px); left: 0; right: 0; max-width: 420px; z-index: 20; display: flex; flex-direction: column; gap: 8px;
+  padding: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35); }
+.composer-bar .gkb-confirm .btn-sm { width: auto; padding: 0 12px; white-space: nowrap; }

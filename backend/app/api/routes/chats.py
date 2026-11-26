@@ -56,6 +56,7 @@ class ChatSummary(BaseModel):
     scope_tenant_id: uuid.UUID | None
     scope_name: str
     updated_at: datetime
+    use_general: bool = True  # General Knowledge Base searched with the customer
 
 
 class ChatOut(ChatSummary):
@@ -65,6 +66,7 @@ class ChatOut(ChatSummary):
 
 class NewChat(BaseModel):
     tenant_id: uuid.UUID | None = None  # None = All customers
+    use_general: bool = True            # turned off only explicitly by the user
     message: str = Field(min_length=1, max_length=MAX_QUESTION)
 
 
@@ -73,7 +75,8 @@ class NewMessage(BaseModel):
 
 
 class Rename(BaseModel):
-    title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
+    title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)] | None = None
+    use_general: bool | None = None
 
 
 class Feedback(BaseModel):
@@ -103,7 +106,7 @@ def _scope_name(db: Session, chat: Chat) -> str:
 
 def _summary(db: Session, chat: Chat) -> ChatSummary:
     return ChatSummary(id=chat.id, title=chat.title, scope_tenant_id=chat.scope_tenant_id,
-                       scope_name=_scope_name(db, chat), updated_at=chat.updated_at)
+                       scope_name=_scope_name(db, chat), updated_at=chat.updated_at, use_general=chat.use_general)
 
 
 def _msg(m: ChatMessage, hidden: bool = False) -> MessageOut:
@@ -210,7 +213,7 @@ def list_chats(q: str | None = Query(None, max_length=200), limit: int = Query(1
     chats = db.scalars(stmt.order_by(Chat.updated_at.desc()).limit(limit)).all()
     names = {t.id: t.name for t in db.scalars(select(Tenant))}
     every = answering.all_label(user)
-    return [ChatSummary(id=c.id, title=c.title, scope_tenant_id=c.scope_tenant_id, updated_at=c.updated_at,
+    return [ChatSummary(id=c.id, title=c.title, scope_tenant_id=c.scope_tenant_id, updated_at=c.updated_at, use_general=c.use_general,
                         scope_name=every if c.scope_tenant_id is None else names.get(c.scope_tenant_id, "Deleted customer"))
             for c in chats]
 
@@ -218,7 +221,7 @@ def list_chats(q: str | None = Query(None, max_length=200), limit: int = Query(1
 @router.post("", response_model=Exchange, status_code=status.HTTP_201_CREATED)
 def new_chat(body: NewChat, request: Request, db: Session = Depends(get_db), user: User = Depends(readers)) -> Exchange:
     _check_scope(db, user, body.tenant_id)
-    chat = Chat(user_id=user.id, scope_tenant_id=body.tenant_id)
+    chat = Chat(user_id=user.id, scope_tenant_id=body.tenant_id, use_general=body.use_general)
     db.add(chat)
     db.flush()
     return _ask(db, user, chat, body.message, True, request)
@@ -246,11 +249,17 @@ def ask(chat_id: uuid.UUID, body: NewMessage, request: Request, db: Session = De
 
 @router.patch("/{chat_id}", response_model=ChatSummary)
 def rename(chat_id: uuid.UUID, body: Rename, db: Session = Depends(get_db), user: User = Depends(readers)) -> ChatSummary:
+    """Rename the chat, or turn the General Knowledge Base on or off for its next questions."""
     chat = _own_chat(db, user, chat_id)
-    title = body.title.strip()
-    if not title:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "The title cannot be empty.")
-    chat.title, chat.title_locked = title, True
+    if body.title is not None:
+        title = body.title.strip()
+        if not title:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "The title cannot be empty.")
+        chat.title, chat.title_locked = title, True
+    if body.use_general is not None and body.use_general != chat.use_general:
+        chat.use_general = body.use_general
+        log_event(db, "chat.general_knowledge", actor=user, tenant_id=chat.scope_tenant_id, target=str(chat.id),
+                  detail={"use_general": chat.use_general}, commit=False)
     db.commit()
     return _summary(db, chat)
 

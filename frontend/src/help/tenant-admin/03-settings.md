@@ -2,9 +2,9 @@
 
 Open **Settings**. Changes apply at once.
 
-## Include General documentation
+## Include the General Knowledge Base
 
-On by default. Answers also use the cross-customer knowledge base maintained by the platform. When General and your procedures disagree (escalation, SLA), your procedure wins. Turn it off if answers for your customer must use only your documentation.
+On by default. Answers also use the General Knowledge Base (general knowledge shared by all customers, maintained by the SOC). When it and your procedures disagree (escalation, SLA), your procedure wins. Turn it off if answers for your customer must use only your documentation; analysts can also turn it off for a single chat.
 
 ## Approve new document versions before publishing
 

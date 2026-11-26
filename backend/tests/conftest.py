@@ -7,12 +7,12 @@ os.environ["MENTIS_WEB_SETUP"] = "true"
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.pool import StaticPool
 
 from app.core import db as db_module
 from app.main import create_app
-from app.models import Base
+from app.models import Base, Tenant
 
 HEADERS = {"X-Mentis-Request": "1"}
 PASSWORD = "Correct-Horse-42"
@@ -59,6 +59,26 @@ def run_jobs(c):
         ingest_version(vid) if name == "ingest" else reindex_all()
 
 
+def approve_general(c):
+    """Process queued jobs, then approve the General Knowledge Base versions waiting for it
+    (they always need approval) through the API, like a tenant admin who manages it."""
+    from sqlalchemy import select as _select
+
+    from app.core import db as _db
+    from app.models import DocumentVersion, Tenant as _Tenant
+    from app.models.document import Approval
+
+    run_jobs(c)
+    db = next(_db.get_db())
+    gkb = db.scalar(_select(_Tenant).where(_Tenant.is_global.is_(True)))
+    pending = db.scalars(_select(DocumentVersion.id).where(DocumentVersion.tenant_id == gkb.id,
+                                                            DocumentVersion.approval == Approval.PENDING)).all()
+    db.close()
+    for vid in pending:
+        r = c.post(f"/api/tenants/{gkb.id}/documents/versions/{vid}/approve")
+        assert r.status_code == 200, r.text
+
+
 def login(c, email, password=PASSWORD):
     """Full login (enrolling TOTP if needed). Returns the TOTP secret."""
     import pyotp
@@ -97,8 +117,11 @@ def super_admin(client, admin_setup):
 
     login(client, "admin@example.com")
     db = next(db_module.get_db())
-    db.add(User(email="content@example.com", full_name="Content Admin", password_hash=hash_password(PASSWORD),
-                role="tenant_admin", all_tenants=True))
+    content_admin = User(email="content@example.com", full_name="Content Admin", password_hash=hash_password(PASSWORD),
+                         role="tenant_admin", all_tenants=True)
+    # All customers, and the General Knowledge Base ticked explicitly (to manage it).
+    content_admin.tenants = [t for t in db.scalars(select(Tenant)) if t.is_global]
+    db.add(content_admin)
     db.commit()
     db.close()
     content = new_client(client.app)

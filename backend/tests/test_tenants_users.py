@@ -44,7 +44,7 @@ def test_create_list_and_slug(super_admin):
     assert t["status"] == "onboarding"
     assert t["settings"]["require_approval"] is False
     names = [x["name"] for x in super_admin.get("/api/tenants").json()]
-    assert names[0] == "General" and "Cliente Alfa S.p.A." in names
+    assert names[0] == "General Knowledge Base" and "Cliente Alfa S.p.A." in names
     assert super_admin.post("/api/tenants", json={"name": "cliente alfa s.p.a."}).status_code == 409
 
 
@@ -58,7 +58,7 @@ def test_update_tenant_and_settings(super_admin):
 
 def test_general_cannot_be_deleted_or_disabled(super_admin):
     g = _general(super_admin)
-    r = super_admin.request("DELETE", f"/api/tenants/{g['id']}", json={"confirm_name": "General"})
+    r = super_admin.request("DELETE", f"/api/tenants/{g['id']}", json={"confirm_name": "General Knowledge Base"})
     assert r.status_code == 400
     assert super_admin.patch(f"/api/tenants/{g['id']}", json={"status": "disabled"}).status_code == 400
 
@@ -109,7 +109,7 @@ def test_analyst_sees_its_tenants_but_cannot_admin(super_admin):
     _invite_and_accept(super_admin, "an@example.com", "analyst", tenant_ids=[alfa["id"], g["id"]])
     an = new_client(super_admin.app)
     login(an, "an@example.com")
-    assert [t["name"] for t in an.get("/api/tenants").json()] == ["General", "Alfa"]
+    assert [t["name"] for t in an.get("/api/tenants").json()] == ["General Knowledge Base", "Alfa"]
     assert an.get("/api/users").status_code == 403
     assert an.post("/api/invitations", json={"email": "z@example.com", "full_name": "Z", "role": "analyst"}).status_code == 403
 
@@ -118,7 +118,6 @@ def test_invitation_validation(super_admin):
     g = _general(super_admin)
     bad = [
         {"email": "a@example.com", "full_name": "A", "role": "tenant_admin"},                           # no customer
-        {"email": "a@example.com", "full_name": "A", "role": "analyst"},                                # no customer
         {"email": "a@example.com", "full_name": "A", "role": "super_admin", "tenant_ids": [g["id"]]},  # super-admin with customers
         {"email": "a@example.com", "full_name": "A", "role": "wizard"},
     ]

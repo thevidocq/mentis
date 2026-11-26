@@ -18,6 +18,7 @@ export function ChatPage() {
   const [scopes, setScopes] = useState<ScopeOption[]>([]);
   const [scopesLoaded, setScopesLoaded] = useState(false);
   const [draftScope, setDraftScope] = useState<ScopeOption | null>(null);
+  const [draftGeneral, setDraftGeneral] = useState(true); // on by default; turned off only explicitly
   const [chat, setChat] = useState<ChatFull | null>(null);
   const [pending, setPending] = useState<{ text: string; chat: string | undefined } | null>(null); // question waiting for its answer
   const [error, setError] = useState<string | null>(null);
@@ -60,6 +61,18 @@ export function ChatPage() {
   const scope: ScopeOption | null = chat ? { id: chat.scope_tenant_id, name: chat.scope_name } : draftScope;
   const unavailable = chat && !chat.scope_available ? "This customer is no longer available. Start a new chat." : undefined;
 
+  // The General Knowledge Base switch: before the first question it is part of the new chat; after,
+  // it applies to the next questions of this chat.
+  async function setUseGeneral(v: boolean) {
+    if (!chat) return setDraftGeneral(v);
+    try {
+      const s = await chatApi.setGeneral(chat.id, v);
+      setChat((c) => (c && c.id === s.id ? { ...c, use_general: s.use_general } : c));
+    } catch (e) {
+      setError(errorText(e));
+    }
+  }
+
   async function send(text: string) {
     if (pending || loadingChat) return;
     const from = chatId;
@@ -67,7 +80,7 @@ export function ChatPage() {
     setError(null);
     try {
       if (!chat) {
-        const ex = await chatApi.create(draftScope?.id ?? null, text);
+        const ex = await chatApi.create(draftScope?.id ?? null, text, draftGeneral);
         if (shown.current === from) {
           setChat({ ...ex.chat, scope_available: true, messages: [ex.question, ex.answer] });
           navigate(`/chat/${ex.chat.id}`);
@@ -96,6 +109,7 @@ export function ChatPage() {
     setChat(null);
     setError(null);
     setDraftScope(scopes[0] ?? null); // every new chat starts on the first option (all your customers, when you have several)
+    setDraftGeneral(true);
 
     navigate("/chat");
   }
@@ -158,7 +172,8 @@ export function ChatPage() {
         </div>
         <div className="chat-bottom">
           <Composer scopes={scopes} scope={scope} locked={locked} disabled={!!pending || loadingChat || !!unavailable} disabledReason={unavailable}
-            onScope={setDraftScope} onSend={send} />
+            onScope={setDraftScope} onSend={send}
+            useGeneral={chat ? chat.use_general !== false : draftGeneral} onUseGeneral={setUseGeneral} />
           <div className="muted small chat-disclaimer">Mentis answers only from the documents in use. Check the sources before acting.</div>
         </div>
       </main>

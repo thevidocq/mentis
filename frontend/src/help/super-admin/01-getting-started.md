@@ -8,7 +8,7 @@ The first super-admin is created on the server with `docker compose exec api pyt
 
 1. **Email (SMTP)**: configure the mail server and send a test email, so invitations are delivered automatically.
 2. **Tenants**: onboard each customer.
-3. **Users**: invite the tenant admins and the analysts, ticking the customers each one sees. Give **General** to at least one tenant admin, who will upload the documents shared by all customers.
+3. **Users**: invite the tenant admins and the analysts, ticking the customers each one sees. Give **Can manage the General Knowledge Base** to at least one tenant admin, who will upload the documents shared by all customers.
 4. **AI providers**: add at least one LLM (choose the model from the list the provider offers) and test it. Without it the chat cannot answer.
 5. **Service status**: check that everything is operational, including the ingestion worker.
 6. **Retention** and **Logs → Syslog forwarding**: set how long data is kept and, if you have a SIEM, forward the events.
@@ -22,6 +22,6 @@ The first super-admin is created on the server with `docker compose exec api pyt
 | Tenant admin | The ticked customers, or all | Documents, settings, LLM (if allowed) and users of those customers; chat on them |
 | Analyst | The ticked customers, or all | Chat consultation (read-only) |
 
-Tenant admins and analysts see only the customers ticked on their account. **General** (the shared documentation) is ticked by default and can be removed. **All customers, including future ones** gives every customer, also those created later.
+Tenant admins and analysts see only the customers ticked on their account. The **General Knowledge Base** (general knowledge, no customer context) is read by everyone; only tenant admins with **Can manage the General Knowledge Base** change it.
 
 > Keep at least two super-admins, so a lost phone never locks you out of the platform.

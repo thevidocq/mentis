@@ -97,8 +97,12 @@ tr:last-child td { border-bottom: 0; }
 .user-link { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-top: 1px solid var(--border); color: var(--text); text-decoration: none; }
 .avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--raised); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 13px; }
 .main { flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column; }
-.page-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 18px 32px; background: var(--surface); border-bottom: 1px solid var(--border); min-height: 72px; }
-.page-body { padding: 24px 32px; display: flex; flex-direction: column; gap: 16px; }
+/* Desktop pages keep a readable width (like Equalizer): content aligned left, never stretched
+   across wide monitors. The header is part of the page, not a full-width bar. */
+:root { --page-max: 1200px; --page-max-wide: 1560px; }
+.page-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 32px 40px 8px; width: 100%; max-width: var(--page-max); }
+.page-body { padding: 16px 40px 40px; display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: var(--page-max); }
+.page-head.wide, .page-body.wide { max-width: var(--page-max-wide); } /* data-heavy tables (Logs) */
 
 /* Centered pages (login, setup, invite, account) */
 .center-page { min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px 16px; gap: 20px; }
@@ -248,3 +252,4 @@ tr.clickable:hover td { background: var(--raised); }
 .customer-panel-head { padding: 8px 10px 2px; }
 .customer-panel-empty { padding: 8px 10px; }
 .tenant-picker-list { display: flex; flex-direction: column; gap: 8px; max-height: 260px; overflow-y: auto; padding-right: 4px; }
+.gkb-banner { border-left: 3px solid var(--accent); line-height: 1.5; }

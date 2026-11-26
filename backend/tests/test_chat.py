@@ -1,7 +1,7 @@
 import pytest
 
 from app.services import llm
-from tests.conftest import login, new_client, run_jobs
+from tests.conftest import approve_general, login, new_client, run_jobs
 from tests.fake_llm import FakeLLM
 from tests.test_indexing import _docx, _general, _tenant, _upload
 from tests.test_tenants_users import _invite_and_accept
@@ -27,7 +27,7 @@ def _setup(c):
     _upload(c, alfa["id"], "Escalation.docx", _docx("Escalate brute force attacks to Mario Rossi phone 111"))
     _upload(c, beta["id"], "Escalation.docx", _docx("Escalate brute force attacks to Anna Verdi phone 222"))
     _upload(c, _general(c)["id"], "Runbook.docx", _docx("Phishing triage checklist: check headers and sender reputation"))
-    run_jobs(c)
+    approve_general(c)
     return alfa, beta
 
 
@@ -239,16 +239,16 @@ def test_scopes_and_tenant_admin_limits(super_admin, fake_llm):
     alfa, beta = _setup(super_admin)
     an = _analyst(super_admin)
     scopes = an.get("/api/chats/scopes").json()
-    assert [s["name"] for s in scopes] == ["All customers", "Alfa", "Beta", "General"] and scopes[-1]["is_general"]
+    assert [s["name"] for s in scopes] == ["All customers", "Alfa", "Beta", "General Knowledge Base"] and scopes[-1]["is_general"]
     # General alone: only the shared documentation is searched.
     g = an.post("/api/chats", json={"tenant_id": _general(super_admin)["id"], "message": "brute force escalation"}).json()
-    assert g["chat"]["scope_name"] == "General" and g["answer"]["status"] == "not_found"
+    assert g["chat"]["scope_name"] == "General Knowledge Base" and g["answer"]["status"] == "not_found"
     g = an.post("/api/chats", json={"tenant_id": _general(super_admin)["id"], "message": "phishing triage checklist"}).json()
     assert g["answer"]["status"] == "ok" and all(c["is_general"] for c in g["answer"]["citations"])
     _invite_and_accept(super_admin, "ta@example.com", "tenant_admin", alfa["id"])
     ta = new_client(super_admin.app)
     login(ta, "ta@example.com")
-    assert [s["name"] for s in ta.get("/api/chats/scopes").json()] == ["Alfa"]
+    assert [s["name"] for s in ta.get("/api/chats/scopes").json()] == ["Alfa", "General Knowledge Base"]
     assert ta.post("/api/chats", json={"tenant_id": beta["id"], "message": "x"}).status_code == 403
     # "All my customers" for a tenant admin covers only its own tenants.
     own_all = ta.post("/api/chats", json={"tenant_id": None, "message": "brute force escalation"}).json()
@@ -299,8 +299,9 @@ def test_tenant_admin_of_several_tenants(super_admin, fake_llm):
     ta = new_client(super_admin.app)
     login(ta, "ta@example.com")
     me = ta.get("/api/auth/me").json()
-    assert sorted(t["name"] for t in me["tenants"]) == ["Alfa", "Beta"]
-    assert sorted(t["name"] for t in ta.get("/api/tenants").json()) == ["Alfa", "Beta"]
+    # Reads the General Knowledge Base (chat) without managing it.
+    assert sorted(t["name"] for t in me["tenants"]) == ["Alfa", "Beta", "General Knowledge Base"] and me["can_manage_general"] is False
+    assert sorted(t["name"] for t in ta.get("/api/tenants").json()) == ["Alfa", "Beta"]  # what it administers
     # Documents, settings and LLM of both; not of Gamma.
     for t in (alfa, beta):
         assert ta.get(f"/api/tenants/{t['id']}/documents").status_code == 200
@@ -308,7 +309,7 @@ def test_tenant_admin_of_several_tenants(super_admin, fake_llm):
     assert ta.get(f"/api/tenants/{gamma['id']}/documents").status_code == 404
     assert ta.patch(f"/api/tenants/{gamma['id']}", json={"settings": {"include_general": False}}).status_code in (403, 404)
     # Chat: @ lists its customers plus "All my customers"; that scope searches both, not Gamma.
-    assert [s["name"] for s in ta.get("/api/chats/scopes").json()] == ["All my customers", "Alfa", "Beta"]
+    assert [s["name"] for s in ta.get("/api/chats/scopes").json()] == ["All my customers", "Alfa", "Beta", "General Knowledge Base"]
     ta.post("/api/chats", json={"tenant_id": None, "message": "brute force escalation"})
     sent = fake_llm.requests[-1]["body"]["messages"][-1]["content"]
     assert "Mario Rossi" in sent and "Anna Verdi" in sent

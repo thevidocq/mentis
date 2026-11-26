@@ -7,7 +7,7 @@ interface Head { kind: "head"; label: string }
 
 /**
  * Customer switcher for many customers: a button that opens a panel with a search box.
- * Order: General, the last customers used, then all the others alphabetically.
+ * Order: the General Knowledge Base, the last customers used, then all the others alphabetically.
  */
 export function CustomerSelect({ tenants, current, recent, onSelect }: {
   tenants: TenantRef[]; current: TenantRef | null; recent: string[]; onSelect: (id: string) => void;
@@ -93,7 +93,7 @@ export function CustomerSelect({ tenants, current, recent, onSelect }: {
                   className={`${me === active ? "active" : ""}${current?.id === r.tenant.id ? " current" : ""}`}
                   onMouseEnter={() => setActive(me)} onMouseDown={(e) => { e.preventDefault(); pick(r.tenant); }}>
                   <span>{r.tenant.name}</span>
-                  {r.tenant.is_general && <span className="muted small">shared</span>}
+                  {r.tenant.is_general && <span className="muted small">all customers</span>}
                   {current?.id === r.tenant.id && <Icon name="check" size={14} />}
                 </li>
               );

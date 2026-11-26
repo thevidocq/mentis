@@ -4,7 +4,7 @@ import pytest
 
 from app.services import llm
 from tests import samples
-from tests.conftest import login, new_client, run_jobs
+from tests.conftest import approve_general, login, new_client, run_jobs
 from tests.fake_llm import FakeLLM
 from tests.test_chat import _provider
 from tests.test_indexing import _docx, _general, _tenant, _upload
@@ -32,7 +32,7 @@ def _world(sa):
     _upload(sa, alfa["id"], "Escalation.docx", _docx("Escalate brute force attacks to Mario Rossi phone 111"))
     _upload(sa, beta["id"], "Escalation.docx", _docx("Escalate brute force attacks to Anna Verdi phone 222"))
     _upload(sa, g["id"], "Runbook.docx", _docx("Brute force attacks: lock the account first, then escalate"))
-    run_jobs(sa)
+    approve_general(sa)
     return alfa, beta, g
 
 
@@ -55,22 +55,27 @@ def test_analyst_sees_only_its_customers(super_admin, fake_llm):
     _provider(super_admin)
     alfa, beta, g = _world(super_admin)
     an = _user(super_admin, "an@example.com", "analyst", tenant_ids=[alfa["id"], g["id"]])
-    assert [s["name"] for s in an.get("/api/chats/scopes").json()] == ["Alfa", "General"]
+    assert [s["name"] for s in an.get("/api/chats/scopes").json()] == ["Alfa", "General Knowledge Base"]
     assert an.post("/api/chats", json={"tenant_id": beta["id"], "message": "x"}).status_code == 403
     an.post("/api/chats", json={"tenant_id": None, "message": "brute force attacks escalate"})
     sent = fake_llm.requests[-1]["body"]["messages"][-1]["content"]
     assert "Mario Rossi" in sent and "Anna Verdi" not in sent and "lock the account" in sent  # General included
-    # Without General ticked, General is not searched.
+    # Everyone reads the General Knowledge Base, nothing to tick; turning it off for a chat is explicit.
     an2 = _user(super_admin, "an2@example.com", "analyst", tenant_ids=[alfa["id"]])
-    an2.post("/api/chats", json={"tenant_id": alfa["id"], "message": "brute force attacks escalate"})
+    c = an2.post("/api/chats", json={"tenant_id": alfa["id"], "message": "brute force attacks escalate"}).json()
+    assert "lock the account" in fake_llm.requests[-1]["body"]["messages"][-1]["content"] and c["chat"]["use_general"] is True
+    assert an2.patch(f"/api/chats/{c['chat']['id']}", json={"use_general": False}).json()["use_general"] is False
+    an2.post(f"/api/chats/{c['chat']['id']}/messages", json={"message": "brute force attacks escalate"})
     assert "lock the account" not in fake_llm.requests[-1]["body"]["messages"][-1]["content"]
+    off = an2.post("/api/chats", json={"tenant_id": None, "message": "brute force attacks escalate", "use_general": False}).json()
+    assert off["chat"]["use_general"] is False and "lock the account" not in fake_llm.requests[-1]["body"]["messages"][-1]["content"]
 
 
 def test_all_customers_includes_future_ones(super_admin, fake_llm):
     _provider(super_admin)
     _world(super_admin)
     an = _user(super_admin, "an@example.com", "analyst", all_tenants=True)
-    assert [s["name"] for s in an.get("/api/chats/scopes").json()] == ["All customers", "Alfa", "Beta", "General"]
+    assert [s["name"] for s in an.get("/api/chats/scopes").json()] == ["All customers", "Alfa", "Beta", "General Knowledge Base"]
     _tenant(super_admin, "Gamma")
     assert "Gamma" in [s["name"] for s in an.get("/api/chats/scopes").json()]
     # A ticked analyst does not get the new customer.

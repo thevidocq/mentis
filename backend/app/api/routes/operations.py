@@ -54,7 +54,7 @@ def get_usage(days: int = Query(30, ge=1, le=3650), since: datetime | None = Non
         raise HTTPException(403, "Not allowed for your role.")
     until = until or utcnow()
     since = since or until - timedelta(days=days)
-    own = access.tenant_ids(db, user) if user.role == Role.TENANT_ADMIN.value else None
+    own = {t.id for t in access.managed(db, user)} if user.role == Role.TENANT_ADMIN.value else None
     data = usage_svc.usage(db, since, until, tenant_ids=own)
     if own is not None:  # prices and costs are the platform's business
         for r in data["rows"]:

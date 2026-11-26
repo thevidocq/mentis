@@ -10,6 +10,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 Security release: authorization matrix over every API route, penetration test (report in `docs/security/pentest-v0.3.2.md`), infrastructure hardening, frontend review.
 
+### Changed
+- **Desktop layout like Equalizer**: page title and content keep a readable width (1200 px, Logs 1560 px) aligned left, instead of stretching across wide monitors; the page header is part of the page, not a full-width bar.
+- **General Knowledge Base** (was "General"): general knowledge only (threat-handling procedures, playbooks, best practices), never customer context; a banner on its Documents page says so.
+  - Everyone reads it in the chat, no tick needed. For tenant admins the tick now means **Can manage the General Knowledge Base**: off by default, not implied by "All customers", granted only by those who have it.
+  - Every new version needs approval before it is used (it reaches every customer).
+  - In the chat the **Knowledge Base** chip is on by default next to the customer; turning it off for a chat is explicit, with a confirmation, and logged (`chat.general_knowledge`).
+  - Migration 0010: renames the tenant, removes the now meaningless ticks of analysts, adds `chats.use_general`. Tenant admins who had General keep the management permission: review them in Users.
+
 ### Security
 - API answers (documents, page images, originals, chats, logs, errors) are sent with `Cache-Control: no-store`: the browser no longer keeps tenant data on disk, e.g. page images were cached for an hour on shared PCs.
 - The tenant admin's current and recent customers are stored per user in the browser: on a shared PC the next user no longer starts on (or sees the order of) the previous user's customers; the old shared keys are removed.

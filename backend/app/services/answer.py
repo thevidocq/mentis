@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models import Chat, ChatMessage, Role, Tenant, User
+from app.services.setup import GENERAL_NAME
 from app.services import access, chat_visibility, llm, prompts, retrieval
 from app.services.llm_config import providers_for
 
@@ -39,7 +40,8 @@ def scope_tenants(db: Session, chat: Chat) -> tuple[list[Tenant], str, Tenant | 
     """Tenants searched for this chat, the scope label, and the scope tenant (None = all the user's customers).
 
     Access is checked again on every question: a customer removed from the user is not searched.
-    General is searched when the user has it and the customer includes it.
+    The General Knowledge Base is searched with the customer(s) unless the user turned it off for
+    this chat or the customer turned it off in its settings.
     """
     owner = db.get(User, chat.user_id)
     if owner is None:
@@ -48,12 +50,12 @@ def scope_tenants(db: Session, chat: Chat) -> tuple[list[Tenant], str, Tenant | 
     general = next((t for t in visible if t.is_global), None)
     if chat.scope_tenant_id is None:
         customers = [t for t in visible if not t.is_global]
-        return customers + ([general] if general and customers else []), all_label(owner), None
+        return customers + ([general] if general and customers and chat.use_general else []), all_label(owner), None
     tenant = next((t for t in visible if t.id == chat.scope_tenant_id), None)
     if tenant is None:
         return [], "Unknown customer", None
     tenants = [tenant]
-    if general is not None and not tenant.is_global and (tenant.settings or {}).get("include_general", True):
+    if general is not None and not tenant.is_global and chat.use_general and (tenant.settings or {}).get("include_general", True):
         tenants.append(general)
     return tenants, tenant.name, tenant
 
@@ -125,7 +127,7 @@ def _cited(answer_text: str, passages) -> tuple[str, list[dict]]:
     for n in order:
         p = passages[n - 1]
         citations.append({
-            "n": n, "tenant": "General" if p.is_general else p.tenant_name, "tenant_id": str(p.tenant_id), "is_general": p.is_general,
+            "n": n, "tenant": GENERAL_NAME if p.is_general else p.tenant_name, "tenant_id": str(p.tenant_id), "is_general": p.is_general,
             "document": p.document_name, "version": p.version, "page": p.page_label, "heading": p.heading,
             "text": p.text[:600],
         })
@@ -176,7 +178,7 @@ def answer(db: Session, chat: Chat, question: str, first: bool) -> Answer:
 
     names = list(dict.fromkeys(c["tenant"] for c in citations if not c["is_general"]))
     if any(c["is_general"] for c in citations):
-        names.append("General")
+        names.append(GENERAL_NAME)
     return Answer(
         status="not_found" if is_not_found else "ok",
         content=text or not_found_text(scope_label),

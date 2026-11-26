@@ -5,7 +5,9 @@ export const chatApi = {
   scopes: () => api<ScopeOption[]>("/chats/scopes"),
   list: (q = "") => api<ChatSummary[]>(`/chats${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ""}`),
   get: (id: string) => api<ChatFull>(`/chats/${id}`),
-  create: (tenantId: string | null, message: string) => api<Exchange>("/chats", { method: "POST", body: { tenant_id: tenantId, message } }),
+  create: (tenantId: string | null, message: string, useGeneral = true) =>
+    api<Exchange>("/chats", { method: "POST", body: { tenant_id: tenantId, message, use_general: useGeneral } }),
+  setGeneral: (id: string, useGeneral: boolean) => api<ChatSummary>(`/chats/${id}`, { method: "PATCH", body: { use_general: useGeneral } }),
   ask: (id: string, message: string) => api<Exchange>(`/chats/${id}/messages`, { method: "POST", body: { message } }),
   rename: (id: string, title: string) => api<ChatSummary>(`/chats/${id}`, { method: "PATCH", body: { title } }),
   remove: (id: string) => api<void>(`/chats/${id}`, { method: "DELETE" }),

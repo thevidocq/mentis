@@ -11,7 +11,7 @@ In the app: **Help** in the left menu. Each profile sees its own guide plus the 
 - [Users and invitations](../frontend/src/help/super-admin/03-users.md)
 - [Email (SMTP)](../frontend/src/help/super-admin/04-email.md)
 - [Service status and operations](../frontend/src/help/super-admin/05-status-operations.md)
-- [General documentation](../frontend/src/help/super-admin/06-general-documentation.md)
+- [General Knowledge Base](../frontend/src/help/super-admin/06-general-documentation.md)
 - [Embedding and Qdrant](../frontend/src/help/super-admin/07-embedding-qdrant.md)
 - [AI providers](../frontend/src/help/super-admin/08-ai-providers.md)
 - [Logs](../frontend/src/help/super-admin/09-logs.md)
