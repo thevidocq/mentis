@@ -273,3 +273,16 @@ def test_a_broken_check_never_breaks_the_chat(super_admin, fake_llm, monkeypatch
     _mode(super_admin, alfa["id"], "hide")
     ex, msg = _ask(an, alfa["id"])
     assert ex["answer"]["status"] == "ok" and msg["check"]["level2"] == "unavailable"
+
+
+def test_a_crash_around_the_check_keeps_the_answer(super_admin, fake_llm, monkeypatch):
+    from app.api.routes import chats as chat_routes
+
+    def boom(*a, **kw):
+        raise ValueError("bug")
+    _provider(super_admin)
+    alfa, _ = _setup(super_admin)
+    an = _analyst(super_admin)
+    monkeypatch.setattr(chat_routes.check_runner, "before_save", boom)
+    ex, msg = _ask(an, alfa["id"])
+    assert ex["answer"]["status"] == "ok" and msg["check"]["level2"] == "unavailable"

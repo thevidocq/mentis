@@ -28,6 +28,7 @@ from app.services.vector_index import VectorIndexError
 from app.services.logs import log_event
 from app.services.public_errors import public_message
 
+_log = logging.getLogger("mentis.chats")
 router = APIRouter(prefix="/chats", tags=["chats"])
 # Super-admins manage the platform: no chat, no customer content.
 readers = require_roles(Role.TENANT_ADMIN, Role.ANALYST)
