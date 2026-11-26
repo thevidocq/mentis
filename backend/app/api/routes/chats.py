@@ -200,8 +200,13 @@ def list_chats(q: str | None = Query(None, max_length=200), limit: int = Query(1
     stmt = select(Chat).where(Chat.user_id == user.id)
     if q and q.strip():
         like = f"%{q.strip().lower()}%"
-        in_messages = select(ChatMessage.chat_id).where(ChatMessage.content.ilike(like))
-        stmt = stmt.where(Chat.title.ilike(like) | Chat.id.in_(in_messages))
+        # Questions are the user's own; answers are searched only in chats on a customer the user
+        # still sees, so search cannot hint at answers hidden after an access change.
+        visible = list(access.tenant_ids(db, user))
+        in_questions = select(ChatMessage.chat_id).where(ChatMessage.role == "user", ChatMessage.content.ilike(like))
+        in_answers = (select(ChatMessage.chat_id).join(Chat, Chat.id == ChatMessage.chat_id)
+                      .where(ChatMessage.role == "assistant", ChatMessage.content.ilike(like), Chat.scope_tenant_id.in_(visible)))
+        stmt = stmt.where(Chat.title.ilike(like) | Chat.id.in_(in_questions) | Chat.id.in_(in_answers))
     chats = db.scalars(stmt.order_by(Chat.updated_at.desc()).limit(limit)).all()
     names = {t.id: t.name for t in db.scalars(select(Tenant))}
     every = answering.all_label(user)

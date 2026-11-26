@@ -47,6 +47,9 @@ def test_answers_of_a_customer_removed_from_the_user_are_hidden(super_admin, fak
         # Feedback answers with the message: hidden as well.
         r = an.post(f"/api/chats/{chat['chat']['id']}/messages/{answer['id']}/feedback", json={"value": 1})
         assert r.status_code == 200 and "BETASECRET" not in r.text
+    # Search does not hint at hidden answers either.
+    assert an.get("/api/chats", params={"q": "betasecret"}).json() == []
+    assert len(an.get("/api/chats", params={"q": "brute force attacks"}).json()) == 2  # own questions still found
     # Answers on a customer still assigned stay readable.
     kept = an.get(f"/api/chats/{on_alfa['chat']['id']}").json()["messages"][1]
     assert kept["content"] != HIDDEN and kept["citations"]

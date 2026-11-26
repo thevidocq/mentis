@@ -88,7 +88,9 @@ def provider_models(body: ModelsIn, db: Session = Depends(get_db), _: User = Dep
     api_key = body.api_key or None
     if api_key is None and body.provider_id is not None:
         p = db.get(LlmProvider, body.provider_id)
-        api_key = crypto.decrypt(p.api_key_enc) if p is not None and p.api_key_enc else None
+        # The stored key goes only to the address it was saved for.
+        if p is not None and p.api_key_enc and p.base_url == body.base_url.rstrip("/"):
+            api_key = crypto.decrypt(p.api_key_enc)
     try:
         models = llm.list_models({"name": "The provider", "kind": body.kind, "base_url": body.base_url.rstrip("/"), "api_key": api_key})
     except llm.LLMError as e:
@@ -133,6 +135,9 @@ def update_provider(provider_id: uuid.UUID, body: ProviderIn, request: Request, 
     p = db.get(LlmProvider, provider_id)
     if p is None:
         raise HTTPException(404, "Provider not found.")
+    # A stored key is never sent to a new address: it could be pointed at a server that records it.
+    if p.api_key_enc and body.base_url.rstrip("/") != p.base_url and not body.api_key:
+        raise HTTPException(422, "Enter the API key again when you change the URL.")
     p.name, p.kind, p.base_url, p.model, p.options = body.name.strip(), body.kind, body.base_url.rstrip("/"), body.model.strip(), body.options
     if body.api_key is not None:
         p.api_key_enc = crypto.encrypt(body.api_key) if body.api_key else None

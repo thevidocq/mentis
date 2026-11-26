@@ -32,3 +32,12 @@ def test_list_models_uses_the_stored_key_and_reports_errors(super_admin, fake_ll
 def test_list_models_is_super_admin_only(super_admin, fake_llm):  # noqa: F811
     an = _analyst(super_admin)
     assert an.post("/api/llm/models", json={"kind": "anthropic", "base_url": "https://api.anthropic.com"}).status_code == 403
+
+
+def test_stored_key_never_goes_to_a_new_url(super_admin, fake_llm):  # noqa: F811
+    p = _provider(super_admin)
+    super_admin.post("/api/llm/models", json={"kind": "openai_chat", "base_url": "https://evil.example.com/v1", "provider_id": p["id"]})
+    assert all("sk-test" not in str(h) for h in [m["headers"] for m in fake_llm.model_requests])
+    body = {k: p[k] for k in ("name", "kind", "model", "options")} | {"base_url": "https://evil.example.com"}
+    assert super_admin.put(f"/api/llm/providers/{p['id']}", json=body).status_code == 422
+    assert super_admin.put(f"/api/llm/providers/{p['id']}", json=body | {"api_key": "sk-new"}).status_code == 200
