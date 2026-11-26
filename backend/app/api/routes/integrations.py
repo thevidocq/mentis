@@ -127,6 +127,7 @@ def _connector(db: Session, plugin: str) -> Connector:
 
 def _origins(c: Connector, config: dict) -> set[str] | None:
     try:
+        c.read_posts(config)  # validates the rest of the address (e.g. a tenant id in a token URL)
         return {o.lower() for o in c.origins(config)}
     except Exception:  # noqa: BLE001 - an address the plugin cannot read
         return None
@@ -183,7 +184,7 @@ def create_integration(tenant_id: uuid.UUID, body: IntegrationIn, request: Reque
     if problem:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, problem)
     if _origins(c, config) is None:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Check the address.")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Check the address (or the tenant / region fields).")
     inst = Integration(tenant_id=t.id, plugin=body.plugin, name=body.name.strip(), config=config,
                        enabled=True if body.enabled is None else body.enabled)
     store_secrets(inst, secrets)

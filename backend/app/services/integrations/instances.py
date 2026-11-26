@@ -197,19 +197,20 @@ def run(db: Session, inst: Integration, c: Connector, operation: str, args: dict
     except ValueError as e:
         raise IntegrationFailed(f"{label}: {e}", f"invalid arguments: {e}") from None
     secrets = secrets_of(inst)
-    ctx, http = _context(inst, c, secrets, timeout)
+    http = None
     t0 = time.perf_counter()
     detail = {"integration": str(inst.id), "name": inst.name, "plugin": inst.plugin, "operation": operation, "purpose": purpose,
               "object": {k: v for k, v in clean.items() if op.params[k].identifier},
               "chat": str(chat_id) if chat_id else None}
     try:
+        ctx, http = _context(inst, c, secrets, timeout)  # inside: an address the plugin cannot read raises too
         records = _clean(c.run(ctx, operation, clean))
     except Exception as e:  # noqa: BLE001 - a plugin error must never break the chat
         if not isinstance(e, ConnectorError):
             _log.exception("integration %s (%s) failed", inst.id, inst.plugin)
         cause = _redact(str(e), secrets)[:300]
         log_event(db, "integration.called", kind="audit", level="error", actor=actor, tenant_id=inst.tenant_id,
-                  target=str(inst.id), detail={**detail, "ok": False, "cause": cause, "requests": http.requests,
+                  target=str(inst.id), detail={**detail, "ok": False, "cause": cause, "requests": http.requests if http else 0,
                                                "latency_ms": round((time.perf_counter() - t0) * 1000)}, commit=False)
         raise IntegrationFailed(_public(e, label), cause) from None
     log_event(db, "integration.called", actor=actor, tenant_id=inst.tenant_id, target=str(inst.id),
@@ -221,8 +222,8 @@ def run(db: Session, inst: Integration, c: Connector, operation: str, args: dict
 def test(db: Session, inst: Integration, c: Connector, timeout: float = 15) -> tuple[bool, str]:
     """(ok, detail) for the admin: a public message on failure, never secrets or reply bodies."""
     secrets = secrets_of(inst)
-    ctx, _ = _context(inst, c, secrets, timeout)
     try:
+        ctx, _ = _context(inst, c, secrets, timeout)
         return True, str(c.test_connection(ctx))[:200]
     except ConnectorError as e:
         return False, _redact(str(e), secrets)[:300]

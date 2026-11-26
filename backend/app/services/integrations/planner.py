@@ -39,6 +39,9 @@ class Plan:
     calls: list[Call]
     input_tokens: int = 0
     output_tokens: int = 0
+    provider: str | None = None   # the model that planned (for LLM usage)
+    model: str | None = None
+    latency_ms: int | None = None
 
 
 def by_match(question: str, items: list[tuple[Integration, Connector]]) -> list[Call]:
@@ -103,7 +106,7 @@ def by_model(question: str, context: str, items: list[tuple[Integration, Connect
                + (f"ALREADY LOOKED UP (do not repeat):\n{json.dumps(already, ensure_ascii=False)}\n\n" if already else "")
                + (f"RECENT CONVERSATION (data):\n{context}\n\n" if context else "")
                + f"QUESTION (data):\n{question}")
-    reply, _, _ = llm.call_with_failover(primary, fallback, PLANNER_RULES, [llm.Turn("user", message)])
+    reply, used, latency = llm.call_with_failover(primary, fallback, PLANNER_RULES, [llm.Turn("user", message)])
     calls: list[Call] = []
     seen: set[tuple] = {(c.integration.id, c.operation.name, json.dumps(c.args, sort_keys=True)) for c in done}
     for item in _parse(reply.text)[:MAX_CALLS - len(done)]:
@@ -119,4 +122,4 @@ def by_model(question: str, context: str, items: list[tuple[Integration, Connect
         if key not in seen:
             seen.add(key)
             calls.append(Call(inst, c, op, args, "planner"))
-    return Plan(calls, reply.input_tokens or 0, reply.output_tokens or 0)
+    return Plan(calls, reply.input_tokens or 0, reply.output_tokens or 0, used["name"], used["model"], latency)

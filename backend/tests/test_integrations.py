@@ -218,3 +218,30 @@ def test_tenant_deletion_and_config_export(super_admin, desk, fake_llm):
     left = db.scalars(select(Integration)).all()
     assert [(i.name, i.enabled, i.secrets_enc) for i in left] == [("Alfa desk", False, None)]
     db.close()
+
+
+def test_safe_links_keep_document_addresses_as_text():
+    from app.services.answer import _safe_links
+
+    record = f"{URL}/browse/FAKE-12"
+    sources = ["Escalate on the portal https://portal.acme.example/soc within 30 minutes"]
+    text = (f"[FAKE-12]({record}) [1], [portal](https://portal.acme.example/soc) or https://portal.acme.example/soc. "
+            "Not [this](https://evil.example.com/a), nor https://evil.example.com/b.")
+    out = _safe_links(text, {record}, sources)
+    assert f"[FAKE-12]({record})" in out
+    assert "portal (https://portal.acme.example/soc)" in out and "https://portal.acme.example/soc." in out
+    assert "evil.example.com" not in out and out.endswith("nor [link removed].")
+
+
+def test_integration_with_unreadable_address_never_breaks_the_chat(super_admin, desk, fake_llm, monkeypatch):
+    alfa, beta, ta, inst = _world(super_admin)
+    an = _analyst(super_admin)
+
+    def broken(self, config):
+        raise ConnectorError("bad address", retryable=False)
+
+    monkeypatch.setattr(FakeDesk, "origins", broken)
+    r = an.post("/api/chats", json={"tenant_id": alfa["id"], "integration_ids": [inst["id"]], "message": "brute force FAKE-12"})
+    assert r.status_code == 201 and r.json()["answer"]["status"] == "ok"
+    assert "*FakeDesk (Alfa desk) could not be read right now*" in r.json()["answer"]["content"]
+    assert ta.post(f"/api/tenants/{alfa['id']}/integrations/{inst['id']}/test").json()["ok"] is False

@@ -139,7 +139,8 @@ class Jira(Connector):
             open_only = (args.get("scope") or "open").lower() == "open"
             return self._search(ctx, f'text ~ "{words}"', open_only)
         if operation == "issues_for_host":
-            return self._search(ctx, f'text ~ "{_words(args["host"])}"', True)
+            # The host name as an exact phrase (its pattern allows only letters, digits, ".", "_" and "-").
+            return self._search(ctx, f'text ~ "\\"{args["host"]}\\""', True)
         raise ConnectorError(f"Unknown operation {operation}", retryable=False)
 
     # --- Requests --------------------------------------------------------------------------

@@ -1,6 +1,8 @@
-"""LLM usage per customer and provider, from the chat.answered and chat.checked log events (metadata only).
+"""LLM usage per customer and provider, from the chat.answered, chat.checked and integration.planned
+log events (metadata only).
 
 Answer checks (level 2) are rows of their own, "<checker> · answer check": one per checked answer.
+Choosing integration lookups (#) too: "<provider> · integration lookups", one per question.
 
 Usage follows log retention: events older than the log retention period are gone.
 """
@@ -24,7 +26,7 @@ def _price(providers: dict[str, LlmProvider], name: str | None) -> tuple[float |
 
 def usage(db: Session, since: datetime, until: datetime, tenant_ids: set[uuid.UUID] | None = None) -> dict:
     """Rows per (customer, provider). tenant_ids restricts to those customers (tenant admins)."""
-    stmt = select(AuditEvent).where(AuditEvent.action.in_(("chat.answered", "chat.checked")), AuditEvent.ts >= since, AuditEvent.ts < until)
+    stmt = select(AuditEvent).where(AuditEvent.action.in_(("chat.answered", "chat.checked", "integration.planned")), AuditEvent.ts >= since, AuditEvent.ts < until)
     if tenant_ids is not None:
         stmt = stmt.where(AuditEvent.tenant_id.in_(tenant_ids))
     names = {t.id: t.name for t in db.scalars(select(Tenant))}
@@ -32,11 +34,12 @@ def usage(db: Session, since: datetime, until: datetime, tenant_ids: set[uuid.UU
     rows: dict[tuple, dict] = {}
     for e in db.scalars(stmt):
         d = e.detail or {}
-        check = e.action == "chat.checked"
+        check = e.action != "chat.answered"  # a side call (answer check, integration lookups), not a question
         if check and not d.get("provider"):
             continue  # level 1 only: no model was called
         customer = "All customers" if e.tenant_id is None else names.get(e.tenant_id, "Deleted customer")
-        label = f"{d['provider']} · answer check" if check else (d.get("provider") or "—")
+        side = "integration lookups" if e.action == "integration.planned" else "answer check"
+        label = f"{d['provider']} · {side}" if check else (d.get("provider") or "—")
         key = (customer, label)
         r = rows.setdefault(key, {"customer": customer, "tenant_id": str(e.tenant_id) if e.tenant_id else None,
                                   "provider": label, "price_of": d.get("provider"), "check": check, "questions": 0, "answered": 0,
@@ -62,7 +65,7 @@ def usage(db: Session, since: datetime, until: datetime, tenant_ids: set[uuid.UU
         out.append({**r, "avg_latency_ms": round(total / n) if n else None, "cost_usd": cost})
     out.sort(key=lambda r: (-r["questions"], r["customer"]))
     totals = {k: sum(r[k] for r in out if not r["check"]) for k in ("questions", "answered", "not_found", "errors")}
-    totals["checks"] = sum(r["questions"] for r in out if r["check"])
+    totals["checks"] = sum(r["questions"] for r in out if r["check"] and r["provider"].endswith("· answer check"))
     totals.update({k: sum(r[k] for r in out) for k in ("input_tokens", "output_tokens")})
     costs = [r["cost_usd"] for r in out if r["cost_usd"] is not None]
     totals["cost_usd"] = round(sum(costs), 4) if costs else None

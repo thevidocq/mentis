@@ -75,8 +75,11 @@ export function Composer({ scopes, scope, locked, disabled, disabledReason, onSc
     ta.current?.focus();
   }
 
+  // A "#word" being typed to pick an integration is not part of the question; "#12" in a sentence is.
+  const question = (t: string) => (hashPicker?.typed ? t.replace(HASH, "$1") : t).replace(AT, "$1").trim();
+
   function send() {
-    const q = text.replace(AT, "$1").replace(HASH, "$1").trim();
+    const q = question(text);
     if (!q || disabled) return;
     onSend(q);
     setText("");
@@ -178,7 +181,7 @@ export function Composer({ scopes, scope, locked, disabled, disabledReason, onSc
             </button>
           )}
           <span className="spacer muted small composer-hint">Enter to send · Shift+Enter new line</span>
-          <button type="button" className="btn btn-primary btn-sm composer-send" aria-label="Send" disabled={disabled || !text.replace(AT, "$1").replace(HASH, "$1").trim()} onClick={send}>
+          <button type="button" className="btn btn-primary btn-sm composer-send" aria-label="Send" disabled={disabled || !question(text)} onClick={send}>
             <Icon name="send" />
           </button>
         </div>

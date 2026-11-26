@@ -188,8 +188,7 @@ def answer(db: Session, chat: Chat, question: str, first: bool, correction: str 
             content = (f"I answer questions about {_whose(scope_label)} procedures from the documents in use, "
                        "for example: *Who do I call for a brute-force alert?* or *What is the SLA for a critical incident?*")
         return Answer(status="not_found", content=content, tenants=[scope_label],
-                      title=question[:60] if first else None, live_notes=live.notes, live_calls=live.calls, live=live,
-                      input_tokens=live.input_tokens or None, output_tokens=live.output_tokens or None)
+                      title=question[:60] if first else None, live_notes=live.notes, live_calls=live.calls, live=live)
 
     want_followups = (scope_tenant.settings or {}).get("suggested_followups", True) if scope_tenant else True
     system = prompts.system_prompt(followups=want_followups, title=first)
@@ -206,7 +205,7 @@ def answer(db: Session, chat: Chat, question: str, first: bool, correction: str 
     # PostgreSQL text columns refuse NUL (raw or written as \u0000 in the JSON).
     raw_answer = (data["answer"] if data else reply.text.strip()).replace("\x00", "")
     allowed = _allowed_links(live.passages)
-    text, citations = _cited(_safe_links(raw_answer, allowed), passages)
+    text, citations = _cited(_safe_links(raw_answer, allowed, [p.text for p in passages]), passages)
     flag = data.get("not_found") if data else False
     if isinstance(flag, str):  # weak models write "false" / "true"
         flag = flag.strip().lower() in ("true", "yes", "1")
@@ -228,7 +227,7 @@ def answer(db: Session, chat: Chat, question: str, first: bool, correction: str 
         title=(title or question)[:60] if first else None,
         provider_name=used["name"], model=used["model"], latency_ms=latency,
         passage_texts={i: p.text for i, p in enumerate(passages, start=1)}, used=used,
-        input_tokens=_add(reply.input_tokens, live.input_tokens), output_tokens=_add(reply.output_tokens, live.output_tokens),
+        input_tokens=reply.input_tokens, output_tokens=reply.output_tokens,
         passages=len(passages), live_notes=live.notes, live_calls=live.calls, live=live,
         live_links=[] if is_not_found else _missing_links(text, citations),
     )
@@ -247,17 +246,38 @@ def _allowed_links(live_passages) -> set[str]:
     return out
 
 
-def _safe_links(text: str, allowed: set[str]) -> str:
-    """Only links that came from live records stay links. Any other Markdown link (made up by the
-    model, or written inside a ticket by an attacker) keeps its text and loses the address; bare
-    addresses that are not record links are cut out."""
-    def link(m: re.Match) -> str:
-        return m.group(0) if m.group(2) in allowed else m.group(1)
+def _safe_links(text: str, allowed: set[str], sources: list[str]) -> str:
+    """Only the pages of live records found for this question stay Markdown links.
 
-    text = _MD_LINK.sub(link, text)
-    parts = re.split(r"(\[[^\]\n]{1,300}\]\(\S{1,1000}?\))", text)  # keep the allowed Markdown links intact
-    return "".join(p if i % 2 else _BARE_URL.sub(lambda m: m.group(0) if m.group(0) in allowed else "[link removed]", p)
-                   for i, p in enumerate(parts))
+    An address written in a passage (e.g. a portal in a procedure) stays, as plain text; any other
+    address (made up by the model, or planted in a ticket to be shown as a link) is removed, so the
+    answer never offers a link the sources do not contain.
+    """
+    def known(url: str) -> bool:
+        return url in allowed or any(url in src for src in sources)
+
+    def link(m: re.Match) -> str:
+        label, url = m.group(1), m.group(2)
+        if url in allowed:
+            return m.group(0)
+        return f"{label} ({url})" if known(url) and url != label else label
+
+    parts = re.split(r"(\[[^\]\n]{1,300}\]\(\S{1,1000}?\))", text)
+    out = []
+    for i, part in enumerate(parts):
+        if i % 2:
+            out.append(_MD_LINK.sub(link, part))
+        else:
+            out.append(_BARE_URL.sub(_bare(known), part))
+    return "".join(out)
+
+
+def _bare(known):
+    def sub(m: re.Match) -> str:
+        url = m.group(0)
+        core = url.rstrip(".,;:!?")
+        return url if known(core) else "[link removed]" + url[len(core):]
+    return sub
 
 
 def _missing_links(text: str, citations: list[dict]) -> list[tuple[str, str]]:
@@ -267,11 +287,6 @@ def _missing_links(text: str, citations: list[dict]) -> list[tuple[str, str]]:
         if c.get("kind") == "integration" and c.get("url") and c["url"] not in text and (c["document"], c["url"]) not in out:
             out.append((c["document"], c["url"]))
     return out
-
-def _add(tokens: int | None, extra: int) -> int | None:
-    """Answer tokens plus the integration planner's, so LLM usage counts both."""
-    return (tokens or 0) + extra if tokens is not None or extra else None
-
 
 def _context_text(history: list[ChatMessage]) -> str:
     """The last exchange, short, so the planner can resolve "this ticket" or "that host"."""

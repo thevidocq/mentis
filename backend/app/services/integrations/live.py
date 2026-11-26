@@ -11,6 +11,7 @@ from app.services import llm
 from app.services.integrations import planner
 from app.services.integrations.instances import IntegrationFailed, for_chat, run
 from app.services.integrations.passages import IntegrationPassage, to_passages
+from app.services.logs import log_event
 
 _log = logging.getLogger("mentis.integrations")
 
@@ -44,6 +45,11 @@ def gather(db: Session, chat: Chat, question: str, context: str, primary: dict |
         plan = planner.Plan([])
     calls = [*calls, *plan.calls][:planner.MAX_CALLS]
     out.input_tokens, out.output_tokens = plan.input_tokens, plan.output_tokens
+    if plan.provider:  # LLM usage: "<provider> · integration lookups" (metadata only)
+        log_event(db, "integration.planned", kind="system", tenant_id=chat.scope_tenant_id, target=str(chat.id),
+                  detail={"provider": plan.provider, "model": plan.model, "input_tokens": plan.input_tokens,
+                          "output_tokens": plan.output_tokens, "latency_ms": plan.latency_ms, "calls": len(plan.calls)},
+                  commit=False)
     for call in calls:
         out.calls += 1
         try:

@@ -137,8 +137,10 @@ def _llm_status(db: Session) -> list[dict]:
 
 
 def _integration_status(db: Session, limit: int = 25) -> list[dict]:
-    """One line per active integration of an enabled plugin: its Test, with a short timeout."""
+    """One line per active integration of an enabled plugin: its Test with a short timeout, all in
+    parallel, so a few unreachable systems do not hold the page for minutes."""
     import time
+    from concurrent.futures import ThreadPoolExecutor
 
     from sqlalchemy import select
 
@@ -149,20 +151,27 @@ def _integration_status(db: Session, limit: int = 25) -> list[dict]:
     rows = db.execute(select(Integration, Tenant).join(Tenant, Tenant.id == Integration.tenant_id)
                       .where(Integration.enabled.is_(True), Tenant.status != "disabled")
                       .order_by(Tenant.name, Integration.name)).all()
-    out = []
+    items = []
     for inst, tenant in rows:
         c = integrations.usable_connector(db, inst.plugin) if inst.plugin in on else None
-        if c is None:
-            continue
-        name = f"{c.manifest.label}: {tenant.name} · {inst.name}"
-        if len(out) >= limit:
-            out.append({"name": "More integrations", "category": "Integrations", "state": "ok", "latency_ms": None,
-                        "detail": f"only the first {limit} are checked here"})
-            break
+        if c is not None:
+            items.append((inst, c, f"{c.manifest.label}: {tenant.name} · {inst.name}"))
+    if not items:
+        return []
+
+    def check(item):
+        inst, c, _ = item
         t0 = time.perf_counter()
-        ok, detail = integrations.test(db, inst, c, timeout=5)
-        out.append({"name": name, "category": "Integrations", "state": "ok" if ok else "down",
-                    "latency_ms": round((time.perf_counter() - t0) * 1000), "detail": detail})
+        ok, detail = integrations.test(db, inst, c, timeout=5)  # no query: the row is already loaded
+        return ok, detail, round((time.perf_counter() - t0) * 1000)
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(check, items[:limit]))
+    out = [{"name": name, "category": "Integrations", "state": "ok" if ok else "down", "latency_ms": ms, "detail": detail}
+           for (_, _, name), (ok, detail, ms) in zip(items[:limit], results, strict=True)]
+    if len(items) > limit:
+        out.append({"name": "More integrations", "category": "Integrations", "state": "ok", "latency_ms": None,
+                    "detail": f"only the first {limit} are checked here"})
     return out
 
 

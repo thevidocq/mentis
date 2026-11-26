@@ -42,7 +42,8 @@ def test_projects_limit_keys_and_searches(fake_http, ok):
     assert jira.run(c, "get_issue", {"key": "HR-1"}) == []
     assert c.http.requests == []
     jira.run(c, "issues_for_host", {"host": "ws-042"})
-    assert "project in (SOC, SEC)" in c.http.requests[0]["params"]["jql"]
+    jql = c.http.requests[0]["params"]["jql"]
+    assert jql.startswith('text ~ "\\"ws-042\\"" AND statusCategory != Done') and "project in (SOC, SEC)" in jql
 
 
 def test_missing_issue_is_nothing_found(fake_http, ok):

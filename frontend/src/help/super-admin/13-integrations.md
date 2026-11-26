@@ -27,7 +27,7 @@ Whatever a plugin does, the core:
 
 - **Service status** has one line per active integration (its Test, category *Integrations*).
 - **Logs**: `integration.called` (who, which integration, which operation and object, ok or the cause), `integration.created`, `.updated`, `.deleted`, `.tested`, `chat.integrations` (an analyst chose integrations for a chat) and `platform.integrations` (types enabled or disabled).
-- LLM usage includes the short planning call that chooses the lookups for a question.
+- **LLM usage** has a row *<model> · integration lookups* for the short call that chooses the lookups of each question (`integration.planned` in Logs).
 
 ## Configuration export
 
