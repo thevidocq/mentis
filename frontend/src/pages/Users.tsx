@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState, useRef } from "react";
 import { api, errorText } from "../api/client";
 import { AdminUser, Invitation, InvitationCreated, ROLE_LABEL, Role, Tenant, TenantRef } from "../api/types";
 import { useCurrentTenant } from "../auth/currentTenant";
@@ -214,6 +214,14 @@ function InviteForm({ isSuper, canGiveAll, tenants, myTenant, onClose, onDone }:
   // General is on by default, plus the customer the tenant admin is working on.
   const general = tenants.find((t) => t.is_global)?.id;
   const [access, setAccess] = useState<Access>({ tenantIds: [general, myTenant].filter((x): x is string => !!x && x !== undefined).filter((x, i, a) => a.indexOf(x) === i), all: false });
+  // The customer list may arrive after the form opened: General is still ticked by default then.
+  const generalTicked = useRef(!!general);
+  useEffect(() => {
+    if (general && !generalTicked.current) {
+      generalTicked.current = true;
+      setAccess((a) => (a.tenantIds.includes(general) ? a : { ...a, tenantIds: [general, ...a.tenantIds] }));
+    }
+  }, [general]);
   const [result, setResult] = useState<InvitationCreated | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
