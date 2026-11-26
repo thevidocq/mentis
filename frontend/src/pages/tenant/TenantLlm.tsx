@@ -88,7 +88,10 @@ export function TenantLlmForm({ tenantId, onSaved }: { tenantId: string; onSaved
         <div className="notice">The super-admin chooses the LLM of this customer.</div>
         <div><span className="muted small">LLM for answers</span><br /><strong>{name(choice.provider_id) ?? `Platform default${def ? ` (${label(def)})` : ""}`}</strong></div>
         <div><span className="muted small">Fallback</span><br /><strong>{name(choice.fallback_id) ?? "None"}</strong></div>
-        <div><span className="muted small">Model that checks the answers</span><br /><strong>{name(choice.checker_id) ?? "Platform default"}</strong></div>
+        <div><span className="muted small">Model that checks the answers</span><br /><strong>{name(choice.checker_id)
+          ?? (choice.provider_id ? `The LLM for answers (${name(choice.provider_id)})`
+            : defChecker ? `Platform default (${label(defChecker)})`
+            : `None set: the model that writes the answer checks it${def ? ` (${label(def)})` : ""}`)}</strong></div>
         {checkChoice}
         <div className="row">
           <button className="btn btn-primary" onClick={save}>Save</button>

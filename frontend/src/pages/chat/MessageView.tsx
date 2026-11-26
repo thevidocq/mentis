@@ -84,7 +84,9 @@ export function AssistantMessage({ m, onFollowup, onFeedback, onRetry, busy, onS
         {m.provider_name && (
           <span className="muted small answer-model" title={m.model ?? ""}>
             {m.provider_name}{m.latency_ms != null ? ` · ${(m.latency_ms / 1000).toFixed(1)} s` : ""}
-            {m.check?.checker && m.check.level2 !== "off" ? ` · checked by ${m.check.checker.name}` : ""}
+            {m.check?.checker && m.check.level2 !== "off" ? (m.check.checker.name === m.provider_name
+              ? <span title="No separate model checks the answers: the model that wrote this answer re-read it against its sources."> · self-checked by {m.check.checker.name}</span>
+              : ` · checked by ${m.check.checker.name}`) : ""}
           </span>
         )}
       </div>
