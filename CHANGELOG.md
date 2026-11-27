@@ -6,6 +6,27 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-27
+
+### Security
+Fixes from the v0.4.0 vulnerability assessment ([docs/security/va-pt-v0.4.0.md](docs/security/va-pt-v0.4.0.md)).
+- **Answer check could say "Matches the sources" for statements it never checked** (High, C-1): substantive statements without a citation are now level-1 issues (*"cites no source"*); a statement's values must be in the passages **it** cites, not in any passage (C-2); phone numbers no longer match when truncated.
+- **Credentials bound to the account, not only the address** (High, B-1): changing a field that decides whose data the credentials open (Defender/Entra tenant ID, client IDs, CrowdStrike child CID and cloud, Jira account, deployment and projects, ServiceNow user, Vision One region; `"identity": true` in plugin schemas) requires the credentials again, also on configuration import.
+- **SSRF through integration addresses** (Medium, A-1/E-1/A-4/A-6): HTTPS only; addresses without user name, `?`, `#` or `\\`; destinations resolved once and pinned; loopback, link-local (cloud metadata), reserved and Mentis' own services always refused; private networks and plain HTTP only with the new super-admin setting **Private network addresses** (`GET/PUT /platform/integrations/settings`); proxies from the environment ignored.
+- **Slow or hostile servers** (Medium, A-3/D-1): 30 s total per plugin call (not only per read), at most 6 plugin calls at once per API process.
+- **Decompression bomb** (Medium, A-2): answers inflated in bounded steps, the 2 MB cap holds after decompression.
+- **Exports** (Medium, D-2/D-3/E-6): the ZIP cap applies to Markdown and JSON too; one ZIP prepared at a time (429 otherwise); nginx streams downloads without buffering.
+- **Prompt injection** (Medium, C-3/C-4): passage text folded (NFKC) and opening and closing passage tags neutralised in the answer prompt and in the checker prompt; the checker is told that instructions in passages are a reason to judge strictly.
+- Per-user rate limits (D-4): chat 30/min, Test / Try a lookup 20/min, exports 10/min (`MENTIS_*_RATE_PER_MINUTE`).
+- Function calling chosen by a tenant admin lapses when the customer goes back to the platform LLM or tenant admins may no longer choose it (B-2).
+- Disabled customer: no Test or Try a lookup (B-6); `#` changes refused on a chat whose customer is no longer available (B-5).
+- Status page: Jira test detail no longer shows the account name (B-4).
+- Links: addresses in brackets, `www.` and `//host` forms are removed too when not in the sources (C-5); a hidden draft no longer names the chat (C-6); backslashes refused in record links (A-7).
+- Secrets: `MENTIS_SECRET_KEY_PREVIOUS` for key rotation; a secret that cannot be decrypted is logged (E-3).
+- Build and plugins (E-4/E-5/E-8): plugins installed with a pinned build backend, no build isolation, from a bind mount, before the app code; only `mentis-*` packages register connectors, duplicate names refused.
+- Authorization matrix: the new settings route, and the integration secret is a forbidden token in every response (B-7).
+- Docs: security report, INSTALL (destinations, metadata firewall rule, limits, key rotation), help (answer check, private addresses, credentials and accounts, exports), DESIGN; release note with rollback.
+
 ### Added
 - **Integration lookups: Standard or Function calling**, per customer (Settings → Integrations for tenant admins; Tenants → LLM for super-admins). *Standard* (default) is the existing mode. *Function calling* lets the model read each result and ask for further lookups (ticket → host → alerts), up to 3 steps and 8 lookups per question, with native tool calling for Anthropic, OpenAI Chat and the Responses API (`services/llm/tools.py`, `services/integrations/tool_loop.py`). Same guards: the chat's integrations only, declared read operations, argument patterns, read-only HTTP client, audit. A model or provider without function calling falls back to Standard without reading twice (`integration.tools_unavailable`). Tenant admins change it only when the customer uses its own LLM chosen by them; `GET/PUT /tenants/{id}/integration-mode` (authorization matrix), `tenant.integration_mode` in the logs, `integration.planned` carries the mode and rounds; exported and imported with the configuration (`integration_mode`).
 ### Changed

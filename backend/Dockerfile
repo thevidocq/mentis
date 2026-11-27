@@ -21,15 +21,18 @@ RUN python -c "import pathlib, tomllib; p = tomllib.load(open('pyproject.toml', 
 FROM base AS api
 COPY --from=requirements /requirements /requirements
 RUN pip install --no-cache-dir -r /requirements/base.txt
+# Integration plugins (plugins/<name>/, build context "plugins" in docker-compose.yml): each
+# registers itself under the mentis.connectors entry point. Standard library only, no dependencies.
+# Installed before the app code (a code change does not reinstall them), with a pinned build
+# backend and no build isolation (nothing else is fetched); the folder is bind-mounted, so it
+# does not stay in an image layer.
+RUN pip install --no-cache-dir "setuptools==75.8.0"
+RUN --mount=type=bind,from=plugins,source=.,target=/plugins,rw set -e; for p in /plugins/*/; do \
+      if [ -f "$p/pyproject.toml" ]; then pip install --no-cache-dir --no-deps --no-build-isolation "$p"; fi; \
+    done
 COPY pyproject.toml ./
 COPY app ./app
 RUN pip install --no-cache-dir --no-deps .
-# Integration plugins (plugins/<name>/, build context "plugins" in docker-compose.yml): each
-# registers itself under the mentis.connectors entry point. Standard library only, no dependencies.
-COPY --from=plugins . /plugins
-RUN set -e; for p in /plugins/*/; do \
-      if [ -f "$p/pyproject.toml" ]; then pip install --no-cache-dir --no-deps "$p"; fi; \
-    done; rm -rf /plugins
 COPY alembic.ini ./
 COPY migrations ./migrations
 COPY docker-entrypoint.sh ./

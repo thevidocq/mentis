@@ -25,6 +25,9 @@ class Settings(BaseSettings):
 
     # Secret used to sign short-lived MFA challenge tokens. Must be long and random in production.
     secret_key: str = Field(default=DEV_SECRET_KEY, min_length=16)
+    # Key rotation: previous MENTIS_SECRET_KEY values, comma separated. Stored secrets encrypted with
+    # them still decrypt (and are re-encrypted with the current key when saved again).
+    secret_key_previous: str = ""
 
     # Session cookie settings.
     session_cookie_name: str = "mentis_session"
@@ -42,6 +45,10 @@ class Settings(BaseSettings):
     # Requests per minute per client IP to the endpoints usable without a session (sign-in, 2FA,
     # password reset, invitations, setup). 0 turns the limit off.
     auth_rate_per_minute: int = 30
+    # Per signed-in user, per minute: chat questions, integration Test / Try a lookup, document exports.
+    chat_rate_per_minute: int = 30
+    lookup_rate_per_minute: int = 20
+    export_rate_per_minute: int = 10
 
     # Login lockout.
     max_failed_logins: int = 5

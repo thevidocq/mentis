@@ -42,8 +42,9 @@ The answer cites the records like documents: their numbers open the **Sources** 
 
 Under each answer, a short line says whether it matches its sources:
 
-- **✓ Matches the sources**: every value and statement was found in the cited passages.
-- **⚠ Level 1 ·** a contact, time, code or other value is **not in the sources**; it is highlighted in the answer, and when the source leaves no doubt the line shows the right value ("the source says 30 minutes").
+- **✓ Matches the sources**: every statement cites a source, and every value and statement was found in the passages it cites.
+- **⚠ Level 1 ·** a statement **cites no source**, so nothing could check it: it is highlighted. Ask again, or check it yourself.
+- **⚠ Level 1 ·** a contact, time, code or other value is **not in the passages that statement cites** (a value found only in another passage, for example a ticket, does not count); it is highlighted in the answer, and when the source leaves no doubt the line shows the right value ("the source says 30 minutes").
 - **⚠ Level 2 ·** a statement is **not supported** by its sources: a model re-read the answer and the passages; the statement is highlighted.
 - **⚠ Level 1 + 2 ·** both checks found the same problem.
 - **Unverified answer**: it cites no source.

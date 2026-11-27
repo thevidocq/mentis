@@ -16,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import client_ip, require_roles
+from app.core.ratelimit import user_rate_limit
 from app.connectors import registry, schema
 from app.connectors.contract import Connector
 from app.core.db import get_db
@@ -56,6 +57,10 @@ class PluginOut(BaseModel):
 
 class PluginsIn(BaseModel):
     enabled: list[str] = Field(max_length=100)
+
+
+class IntegrationSettingsIn(BaseModel):
+    allow_private: bool  # private network addresses and plain HTTP (on-premise systems)
 
 
 class IntegrationIn(BaseModel):
@@ -123,6 +128,12 @@ def _instance(db: Session, user: User, tenant_id: uuid.UUID, integration_id: uui
     return t, inst
 
 
+def _active(t: Tenant) -> None:
+    """No calls to a disabled customer's systems (its settings can still be edited or deleted)."""
+    if t.status == "disabled":
+        raise HTTPException(status.HTTP_409_CONFLICT, "This customer is disabled.")
+
+
 def _connector(db: Session, plugin: str) -> Connector:
     c = integrations.usable_connector(db, plugin)
     if c is None:
@@ -160,6 +171,23 @@ def set_plugins(body: PluginsIn, request: Request, db: Session = Depends(get_db)
               detail={"enabled": sorted(after - before), "disabled": sorted(before - after)}, commit=False)
     db.commit()
     return list_plugins(db, admin)
+
+
+@router.get("/platform/integrations/settings")
+def get_integration_settings(db: Session = Depends(get_db), _: User = Depends(super_admin)) -> dict:
+    return {"allow_private": integrations.instances.allow_private(db)}
+
+
+@router.put("/platform/integrations/settings")
+def put_integration_settings(body: IntegrationSettingsIn, request: Request, db: Session = Depends(get_db),
+                             admin: User = Depends(super_admin)) -> dict:
+    """Private addresses (10/8, 172.16/12, 192.168/16...) and plain HTTP for on-premise systems.
+    Mentis' own services, loopback and cloud metadata stay refused either way."""
+    integrations.instances.set_allow_private(db, body.allow_private)
+    log_event(db, "platform.integrations", level="warning" if body.allow_private else "info", actor=admin,
+              ip=client_ip(request), detail={"allow_private": body.allow_private}, commit=False)
+    db.commit()
+    return {"allow_private": body.allow_private}
 
 
 # --- Tenant admin: instances ---------------------------------------------------
@@ -218,13 +246,14 @@ def update_integration(tenant_id: uuid.UUID, integration_id: uuid.UUID, body: In
         config, secrets, problem = schema.split(c, body.config, stored)
         if problem:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, problem)
-        new_origins, old_origins = _origins(c, config), _origins(c, inst.config or {})
-        if new_origins is None:
+        if _origins(c, config) is None:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Check the address.")
-        # Stored secrets go only to the addresses they were saved for (as for AI providers).
+        # Stored secrets are bound to the address and to the fields that decide whose data they open
+        # (tenant id, child CID, account, projects): changing either needs them again.
         resent = {k for k, v in body.config.items() if k in schema.secret_keys(c) and v}
-        if new_origins != old_origins and any(k not in resent for k in stored):
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "The address changed: enter the credentials again.")
+        if schema.rebinds(c, inst.config or {}, config) and any(k not in resent for k in stored):
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                                "The address or the account fields changed: enter the credentials again.")
         inst.config = config
         store_secrets(inst, secrets)
         changed.append("config")
@@ -260,6 +289,8 @@ def delete_integration(tenant_id: uuid.UUID, integration_id: uuid.UUID, request:
 def test_integration(tenant_id: uuid.UUID, integration_id: uuid.UUID, request: Request, db: Session = Depends(get_db),
                      user: User = Depends(tenant_admin)) -> dict:
     t, inst = _instance(db, user, tenant_id, integration_id)
+    _active(t)
+    user_rate_limit(request, user.id, "lookup")
     c = _connector(db, inst.plugin)
     ok, detail = integrations.test(db, inst, c)
     log_event(db, "integration.tested", kind="audit", level="info" if ok else "warning", actor=user, tenant_id=t.id,
@@ -268,10 +299,12 @@ def test_integration(tenant_id: uuid.UUID, integration_id: uuid.UUID, request: R
 
 
 @router.post("/tenants/{tenant_id}/integrations/{integration_id}/run")
-def try_lookup(tenant_id: uuid.UUID, integration_id: uuid.UUID, body: RunIn, db: Session = Depends(get_db),
+def try_lookup(tenant_id: uuid.UUID, integration_id: uuid.UUID, body: RunIn, request: Request, db: Session = Depends(get_db),
                user: User = Depends(tenant_admin)) -> dict:
     """"Try a lookup": runs one read operation, to check the configuration and the field mapping."""
     t, inst = _instance(db, user, tenant_id, integration_id)
+    _active(t)
+    user_rate_limit(request, user.id, "lookup")
     c = _connector(db, inst.plugin)
     if c.operation(body.operation) is None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Unknown operation.")
@@ -331,7 +364,8 @@ def set_mode(tenant_id: uuid.UUID, body: ModeIn, request: Request, db: Session =
     if not current["editable"]:
         raise HTTPException(status.HTTP_403_FORBIDDEN, current["reason"])
     if body.mode != current["mode"]:
-        t.settings = {**(t.settings or {}), "integration_mode": body.mode}
+        by = "super_admin" if user.role == Role.SUPER_ADMIN.value else "tenant_admin"
+        t.settings = {**(t.settings or {}), "integration_mode": body.mode, "integration_mode_by": by}
         log_event(db, "tenant.integration_mode", actor=user, tenant_id=t.id, target=t.name, ip=client_ip(request),
                   detail={"from": current["mode"], "to": body.mode}, commit=False)
         db.commit()

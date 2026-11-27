@@ -48,6 +48,18 @@ class RateLimiter:
             del self._hits[next(iter(self._hits))]
 
 
+def user_rate_limit(request: Request, user_id, name: str) -> None:
+    """Per-user limits for expensive actions (LLM calls, calls to customer systems, exports)."""
+    limits: dict | None = getattr(request.app.state, "user_limits", None)
+    limiter = (limits or {}).get(name)
+    if limiter is None:
+        return
+    wait = limiter.hit(f"{name}:{user_id}")
+    if wait is not None:
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Too many requests. Wait a moment and try again.",
+                            headers={"Retry-After": str(int(wait) + 1)})
+
+
 def auth_rate_limit(request: Request) -> None:
     """FastAPI dependency for the unauthenticated auth endpoints."""
     limiter: RateLimiter | None = getattr(request.app.state, "auth_limiter", None)

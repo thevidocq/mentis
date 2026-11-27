@@ -115,7 +115,9 @@ class Connector:
 
     manifest: Manifest
     # JSON Schema (object) of the configuration form. Properties with "secret": true are stored
-    # encrypted and never shown again; "format": "uri" fields are addresses.
+    # encrypted and never shown again; "format": "uri" fields are addresses; "identity": true marks
+    # fields that decide whose data the credentials open (tenant id, child CID, account, projects,
+    # region): changing one requires the secrets again, like changing the address.
     config_schema: dict = {"type": "object", "properties": {}}
     operations: tuple[Operation, ...] = ()
 

@@ -4,8 +4,22 @@ The SOC vertical is the default; other verticals can replace SYSTEM_RULES later.
 """
 
 import re
+import unicodedata
 
-_CLOSE_TAG = re.compile(r"<\s*/\s*passage", re.IGNORECASE)
+# A passage tag, opening or closing, in any case or spacing; lookalike "<" signs are folded first.
+_TAG = re.compile(r"<(\s*/?\s*)(passage)", re.IGNORECASE)
+
+
+def data_text(text: str) -> str:
+    """Untrusted text (documents, live records) as it goes inside a passage: compatibility forms
+    folded (fullwidth and small "<" become "<") and every passage tag made harmless ("‹passage"),
+    so the text can neither close its passage nor open a fake one."""
+    return _TAG.sub(lambda m: "‹" + m.group(1) + m.group(2), unicodedata.normalize("NFKC", text or ""))
+
+
+def attr(text: str) -> str:
+    """A value inside a passage attribute (customer, source): no quotes, no tags, one line."""
+    return " ".join(data_text(text).replace('"', "'").replace("<", "‹").replace(">", "›").split())
 
 SYSTEM_RULES = """You are Mentis, an assistant for SOC analysts. You answer questions about customers' security operations procedures (escalations, contacts, SLAs, runbooks, playbooks).
 
@@ -47,8 +61,8 @@ def passages_block(passages) -> str:
             where = f"{p.document_name}, read now from {p.integration_name}"
         else:
             where = f"{p.document_name} v{p.version}, {p.page_label}" + (f", section \"{p.heading}\"" if p.heading else "")
-        text = _CLOSE_TAG.sub("</ passage", p.text)  # a document cannot close its own passage (any case or spacing)
-        where, owner = where.replace('"', "'"), owner.replace('"', "'")
+        text = data_text(p.text)  # a document or record can neither close its passage nor open a fake one
+        where, owner = attr(where), attr(owner)
         lines.append(f'<passage n="{i}" customer="{owner}" source="{where}">\n{text}\n</passage>')
     return "\n".join(lines)
 

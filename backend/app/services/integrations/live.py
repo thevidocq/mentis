@@ -31,9 +31,18 @@ MODES = ("standard", "tools")
 
 
 def mode_of(settings: dict | None) -> str:
-    """Per customer: "standard" (one planned round, every provider) or "tools" (function calling)."""
-    m = (settings or {}).get("integration_mode")
-    return m if m in MODES else "standard"
+    """Per customer: "standard" (one planned round, every provider) or "tools" (function calling).
+
+    Function calling chosen by a tenant admin holds only while that admin still chooses the LLM
+    (the customer's own LLM, and tenant admins allowed to set it): otherwise it is standard again."""
+    s = settings or {}
+    m = s.get("integration_mode")
+    if m not in MODES:
+        return "standard"
+    if m == "tools" and s.get("integration_mode_by") == "tenant_admin" and not (
+            s.get("llm_provider_id") and s.get("admin_can_set_llm", True)):
+        return "standard"
+    return m
 
 
 def gather(db: Session, chat: Chat, question: str, context: str, primary: dict | None, fallback: dict | None) -> Live:

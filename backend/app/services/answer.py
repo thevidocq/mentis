@@ -234,7 +234,8 @@ def answer(db: Session, chat: Chat, question: str, first: bool, correction: str 
 
 
 _MD_LINK = re.compile(r"\[([^\]\n]{1,300})\]\((\S{1,1000}?)\)")
-_BARE_URL = re.compile(r"(?<![(\[<])\bhttps?://[^\s)\]>]+", re.IGNORECASE)
+# Any address written as text: http(s)://, scheme-relative //host, or www.host (inside brackets too).
+_BARE_URL = re.compile(r"(?:\bhttps?:|(?<![\w/:])(?=//[\w-]))//[^\s)\]>\"']+|\bwww\.[\w-]+\.[^\s)\]>\"']+", re.IGNORECASE)
 
 
 def _allowed_links(live_passages) -> set[str]:

@@ -39,7 +39,10 @@ def create_app() -> FastAPI:
     docs = get_settings().api_docs
     app = FastAPI(title="Mentis API", version=__version__, docs_url="/api/docs" if docs else None,
                   redoc_url=None, openapi_url="/api/openapi.json" if docs else None)
-    app.state.auth_limiter = RateLimiter(get_settings().auth_rate_per_minute)
+    s = get_settings()
+    app.state.auth_limiter = RateLimiter(s.auth_rate_per_minute)
+    app.state.user_limits = {"chat": RateLimiter(s.chat_rate_per_minute), "lookup": RateLimiter(s.lookup_rate_per_minute),
+                             "export": RateLimiter(s.export_rate_per_minute)}
     errors.install(app)
 
     @app.middleware("http")

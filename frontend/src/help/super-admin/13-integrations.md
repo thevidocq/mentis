@@ -14,13 +14,19 @@ Click **Enable** on the ones tenant admins may use. Turning a type off stops eve
 
 You do not see the customers' addresses or credentials: tenant admins configure them for their customers (see their Help, *Integrations*). The General Knowledge Base has no integrations.
 
+## Private network addresses
+
+By default integrations reach only **public HTTPS addresses**. **Private network addresses** (top of the page) also allows private networks (10.x, 172.16–31.x, 192.168.x) and plain HTTP, for on-premise systems reached through a VPN from the server. Mentis' own services (database, index, storage, queue, the API itself), loopback and cloud metadata addresses (169.254.169.254) are refused either way. Turn it on only if a customer needs it: it lets tenant admins point integrations at your private networks.
+
 ## What Mentis enforces
 
 Whatever a plugin does, the core:
 
 - sends only read requests: GET, and POST only to the addresses a plugin declares as reads (sign-in tokens, alert queries); PUT, PATCH and DELETE never leave Mentis;
-- sends requests, and the stored credentials, only to the addresses of that integration (redirects are not followed);
-- limits each lookup in time and size, and each question to a few lookups;
+- sends requests, and the stored credentials, only to the addresses of that integration (redirects are not followed), over HTTPS;
+- resolves the address once, refuses local, metadata, internal and (unless allowed) private destinations, and connects to the checked IP, so a DNS change cannot redirect the call;
+- limits each lookup in time (30 seconds in total) and size (2 MB, after decompression), each question to a few lookups, and runs at most 6 lookups at once;
+- limits each user to 20 Test / Try a lookup per minute and 30 chat questions per minute;
 - uses an integration only in chats on its own customer;
 - treats records as data, never as instructions, and keeps only links to the records found in answers.
 

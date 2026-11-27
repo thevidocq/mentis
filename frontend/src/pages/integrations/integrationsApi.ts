@@ -8,6 +8,9 @@ export const integrationsApi = {
   // Super-admin: installed plugins and which are enabled.
   plugins: () => api<IntegrationPlugin[]>("/platform/integrations"),
   setEnabled: (names: string[]) => api<IntegrationPlugin[]>("/platform/integrations", { method: "PUT", body: { enabled: names } }),
+  settings: () => api<{ allow_private: boolean }>("/platform/integrations/settings"),
+  setAllowPrivate: (allow_private: boolean) =>
+    api<{ allow_private: boolean }>("/platform/integrations/settings", { method: "PUT", body: { allow_private } }),
   // Tenant admin: the customer's integrations.
   list: (tenantId: string) => api<TenantIntegrations>(`/tenants/${tenantId}/integrations`),
   create: (tenantId: string, plugin: string, name: string, config: ConfigValues) =>

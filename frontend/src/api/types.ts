@@ -152,7 +152,7 @@ export interface ChatMessage {
 /** Answer check: level 1 (values in the sources) and level 2 (a model checks each statement). */
 export interface CheckIssue {
   level: (1 | 2)[];
-  kind: "value" | "statement" | "no_citations";
+  kind: "value" | "statement" | "uncited" | "no_citations";
   text: string;
   expected?: string;
   reason?: string;
