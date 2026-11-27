@@ -133,7 +133,7 @@ Embeddings: the `embeddings` container runs BAAI/bge-m3 (Hugging Face TEI, CPU).
 
 More workers in parallel: `MENTIS_WORKER_REPLICAS=3` in `.env`, then `docker compose up -d`.
 
-Parser: `MENTIS_PARSER=standard` (default). To try Docling in the lab, set `MENTIS_PARSER=docling` and `MENTIS_PARSER_EXTRAS=worker,docling` in `.env`, then `docker compose up -d --build worker` (large download: PyTorch and models).
+Parser: `MENTIS_PARSER=standard` (default). Docling reads PDF and Office files only; Markdown, JSON, CSV, YAML and pictures always use the standard readers. To try Docling in the lab, set `MENTIS_PARSER=docling` and `MENTIS_PARSER_EXTRAS=worker,docling` in `.env`, then `docker compose up -d --build worker` (large download: PyTorch and models).
 
 ### Downloads
 

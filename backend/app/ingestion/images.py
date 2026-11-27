@@ -7,7 +7,7 @@ and kept as the preview image. Phone photos are turned upright first (EXIF orien
 import io
 import struct
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 from app.ingestion.ocr import ocr_image
 from app.ingestion.text import normalize_text
@@ -60,12 +60,18 @@ def _preview(image: Image.Image) -> bytes:
 
 
 def parse_image(data: bytes, limits: ParseLimits) -> ParseResult:
-    image = Image.open(io.BytesIO(data))
-    if image.format not in ("PNG", "JPEG"):
+    try:
+        image = Image.open(io.BytesIO(data))
+    except (UnidentifiedImageError, Image.DecompressionBombError):
+        raise ValueError("The picture could not be read.") from None
+    if image.format not in ("PNG", "JPEG", "MPO"):  # MPO: phone JPEGs with a multi-picture header
         raise ValueError("not a PNG or JPEG image")
     if image.width * image.height > MAX_IMAGE_PIXELS:
         raise ValueError(f"the image is larger than {MAX_IMAGE_PIXELS // 1_000_000} million pixels")
-    image.load()
+    try:
+        image.load()
+    except (OSError, SyntaxError):  # truncated or corrupt data
+        raise ValueError("The picture is damaged and could not be read.") from None
     image = ImageOps.exif_transpose(image) or image
     if image.mode in ("RGBA", "LA", "P"):  # transparent screenshots: text on white, not on black
         rgba = image.convert("RGBA")

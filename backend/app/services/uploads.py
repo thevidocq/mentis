@@ -65,6 +65,12 @@ def _extension(name: str) -> str:
     return name.rsplit(".", 1)[-1].lower() if "." in name else ""
 
 
+def file_type_of(name: str) -> str:
+    """The file type a name stands for, aliases folded: "rule.yml" and "rule.yaml" are both yaml."""
+    ext = _extension(name)
+    return ALIASES.get(ext, ext)
+
+
 def _check_ooxml(data: bytes, file_type: str) -> None:
     limit = get_settings().max_unzipped_mb * 1024 * 1024
     try:
@@ -104,11 +110,15 @@ def _check_text(data: bytes, file_type: str) -> None:
         text = decode(data)
     except (ValueError, UnicodeDecodeError):
         raise UploadError(f"The .{file_type} file is not UTF-8 text: save it as UTF-8.") from None
+    empty = UploadError("The file has no content to read.")
+    if not text.strip():
+        raise empty
     if file_type == "json":
         import json
 
         try:
-            json.loads(text)
+            if json.loads(text) in ({}, [], None, ""):
+                raise empty
         except RecursionError:
             raise UploadError("The JSON file is nested too deeply.") from None
         except ValueError as e:
@@ -118,16 +128,20 @@ def _check_text(data: bytes, file_type: str) -> None:
         from app.ingestion.types import ParseLimits
 
         try:
-            read_rows(data, file_type, ParseLimits().max_sheet_rows)
+            rows, _ = read_rows(data, file_type, ParseLimits().max_sheet_rows)
         except ValueError as e:
             raise UploadError(f"The file is not a valid .{file_type} table ({str(e)[:80]}).") from None
+        if not any(c.strip() for r in rows for c in r):
+            raise empty
     elif file_type == "yaml":
         from app.ingestion.datafiles import yaml_documents
 
         try:
-            yaml_documents(text)
+            docs = yaml_documents(text)
         except ValueError as e:
             raise UploadError(f"The file is not valid YAML ({str(e)[:80]}).") from None
+        if not docs:
+            raise empty
 
 
 def _check_image(data: bytes, file_type: str) -> None:
@@ -143,7 +157,7 @@ def _check_image(data: bytes, file_type: str) -> None:
 
 def check_upload(filename: str, data: bytes) -> CheckedFile:
     name = safe_filename(filename)
-    ext = ALIASES.get(_extension(name), _extension(name))
+    ext = file_type_of(name)
     if ext in REFUSED_HINT:
         raise UploadError(f".{ext}: {REFUSED_HINT[ext]}.")
     if ext not in ALLOWED:

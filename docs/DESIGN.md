@@ -99,12 +99,12 @@ Uploads run as background jobs; a new version reaches answers only once indexed 
     - PPTX: one page per slide; title, text, tables, speaker notes, and OCR of pictures (screenshots, diagrams).
     - XLSX: one page per sheet as a Markdown table (values, not formulas); merged title rows become captions.
     - Markdown: one section per top-level heading. JSON: a Mentis export keeps its pages; other JSON is rendered as Markdown.
-    - CSV / TSV: one table (delimiter detected: comma, semicolon, pipe, tab), same row limit as a sheet.
-    - YAML: one section per YAML document, labelled by `title`/`name`/`id` (Sigma rules, playbooks), text kept as written in a code block; anchors are never expanded.
+    - CSV / TSV: one table (delimiter detected: comma, semicolon, pipe, tab; no consistent delimiter → one column of lines; TSV unquoted), same row limit as a sheet, at most 500 columns.
+    - YAML: one section per YAML document, labelled by `title`/`name`/`id` (Sigma rules, playbooks), text kept as written in a code block, comments with the document they precede; values counted from parser events (libyaml) before any tree is built, so anchors are never expanded and oversized files stop early.
     - PNG / JPEG: one page read with OCR (upright by EXIF, transparency on white), confidence score, the picture kept as preview.
     - The Docling parser, when on, handles PDF and Office files only; the other formats always use these readers.
 3. Quality flags per page: OCR + confidence, low confidence (< 60%), empty, merged cells, truncated.
-4. Chunks are built per page (never across pages, so citations stay exact), around 1,500 characters, tables kept whole or split by rows with the header repeated, each with its nearest heading.
+4. Chunks are built per page (never across pages, so citations stay exact), around 1,500 characters, tables kept whole or split by rows with the header repeated, fenced code blocks kept whole or split by lines with the fence repeated (a `#` line inside code is never a heading), each with its nearest heading.
 5. Embedding (OpenAI-compatible endpoint; default local TEI container with bge-m3) and upsert into the tenant's Qdrant collection (`mentis_<tenant>`), payload: tenant, document, version, chunk, active. Indexing is the last step: if it fails, the version fails and the active one stays.
 6. Activation, approval and restore update the `active` flag in Qdrant. PostgreSQL is the source of truth: every search hit is re-checked against the database (chunk, tenant, version ready and active), so a stale index can never surface a version not in use.
 7. Changing the embedding model requires a full reindex (rebuilt from stored chunks, no re-parsing); uploads are refused until it is done.
@@ -115,7 +115,7 @@ Uploads run as background jobs; a new version reaches answers only once indexed 
 
 **Preview and approval**
 
-- Side-by-side view: original page on the left (PDF page image; for DOCX/PPTX/XLSX a link to the original), extracted text on the right.
+- Side-by-side view: original page on the left (PDF page image or the PNG/JPEG picture; for the other formats a link to the original), extracted text on the right.
 - Per-page quality flags: native text vs OCR, OCR confidence, tables found, empty or unreadable pages.
 - "Test a question" box scoped to that version (works on pending versions too), showing the passages Mentis would use and their match score.
 - Optional per-tenant approval: the new version stays inactive until the admin approves it.
