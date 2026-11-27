@@ -1,7 +1,8 @@
 """Validation of uploaded documents, before anything is stored or parsed.
 
-Only four formats are accepted. A file must match its extension by content (magic bytes and,
-for Office files, internal structure). Macro-enabled and encrypted files are refused.
+Accepted: PDF, DOCX, PPTX, XLSX, Markdown (.md) and JSON (.json). A file must match its extension by
+content (magic bytes; internal structure for Office files; UTF-8 text for Markdown; valid JSON).
+Macro-enabled and encrypted files are refused.
 """
 
 import hashlib
@@ -13,7 +14,8 @@ from dataclasses import dataclass
 
 from app.core.config import get_settings
 
-ALLOWED = {"pdf", "docx", "pptx", "xlsx"}
+ALLOWED = {"pdf", "docx", "pptx", "xlsx", "md", "json"}
+ALIASES = {"markdown": "md"}  # stored and shown as .md
 REFUSED_HINT = {
     "docm": "macro-enabled Word files are not accepted; save as .docx",
     "xlsm": "macro-enabled Excel files are not accepted; save as .xlsx",
@@ -92,13 +94,31 @@ def _check_pdf(data: bytes) -> None:
         raise UploadError("The file is not a valid PDF.")
 
 
+def _check_text(data: bytes, file_type: str) -> None:
+    from app.ingestion.textfiles import decode
+
+    try:
+        text = decode(data)
+    except (ValueError, UnicodeDecodeError):
+        raise UploadError(f"The .{file_type} file is not UTF-8 text: save it as UTF-8.") from None
+    if file_type == "json":
+        import json
+
+        try:
+            json.loads(text)
+        except RecursionError:
+            raise UploadError("The JSON file is nested too deeply.") from None
+        except ValueError as e:
+            raise UploadError(f"The file is not valid JSON ({str(e)[:80]}).") from None
+
+
 def check_upload(filename: str, data: bytes) -> CheckedFile:
     name = safe_filename(filename)
-    ext = _extension(name)
+    ext = ALIASES.get(_extension(name), _extension(name))
     if ext in REFUSED_HINT:
         raise UploadError(f".{ext}: {REFUSED_HINT[ext]}.")
     if ext not in ALLOWED:
-        raise UploadError("Only PDF, DOCX, PPTX and XLSX files are accepted.")
+        raise UploadError("Only PDF, DOCX, PPTX, XLSX, Markdown (.md) and JSON files are accepted.")
     size = len(data)
     if size == 0:
         raise UploadError("The file is empty.")
@@ -106,6 +126,8 @@ def check_upload(filename: str, data: bytes) -> CheckedFile:
         raise UploadError(f"The file is larger than {get_settings().max_upload_mb} MB.")
     if ext == "pdf":
         _check_pdf(data)
+    elif ext in ("md", "json"):
+        _check_text(data, ext)
     else:
         _check_ooxml(data, ext)
     return CheckedFile(filename=name, file_type=ext, size=size, sha256=hashlib.sha256(data).hexdigest())

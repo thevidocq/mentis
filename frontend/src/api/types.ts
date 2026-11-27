@@ -79,7 +79,7 @@ export interface DocVersion {
   id: string;
   version: number;
   original_filename: string;
-  file_type: "pdf" | "docx" | "pptx" | "xlsx";
+  file_type: "pdf" | "docx" | "pptx" | "xlsx" | "md" | "json";
   size_bytes: number;
   status: VersionStatus;
   approval: Approval;

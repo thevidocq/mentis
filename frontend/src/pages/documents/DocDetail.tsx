@@ -24,7 +24,7 @@ interface Passage { score: number; page_index: number; page_label: string; headi
 const FLAG_LABEL: Record<string, string> = {
   empty: "No text", low_confidence: "Low OCR confidence", merged_cells: "Merged cells", truncated: "Truncated",
 };
-const ACCEPT = ".pdf,.docx,.pptx,.xlsx";
+const ACCEPT = ".pdf,.docx,.pptx,.xlsx,.md,.markdown,.json";
 
 interface Props {
   base: string;                // /tenants/{id}/documents

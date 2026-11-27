@@ -6,6 +6,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added
+- **Markdown and JSON uploads.** `.md` / `.markdown` (one section per top-level heading, headings in code blocks ignored; UTF-8) and `.json` (valid UTF-8 JSON). A Mentis JSON export (`mentis-document/1`) is read back with its own pages, so documentation moves between customers or installations without loss; any other JSON becomes readable Markdown (one section per top-level key or item, nested lists, arrays of flat records as tables). Validated at upload (UTF-8, no binary content, JSON parses, depth); parsed by the standard parser also when Docling is on. Upload hints, overview colours, help, README, DESIGN; tests (`test_documents.py`).
+
 ## [0.4.1] - 2026-11-27
 
 ### Security
