@@ -100,6 +100,7 @@ def before_save(db: Session, chat: Chat, question: str, first: bool, result, reg
         target = "the documentation of " + (tenant.name if tenant else "your customers")
         result.status, result.content = "not_found", HIDDEN_TEXT.format(target=target)
         result.citations, result.followups = [], []
+        result.title = None  # the hidden draft must not name the chat either (the question does)
         check = {"level2": state, "issues": [{k: v for k, v in i.items() if k in ("level", "kind")} for i in issues],
                  "checker": _checker_ref(cfg), "hidden": True, "hidden_answer": hidden}
         _log_check(db, chat, check, cfg, verdict, mode, commit=False)

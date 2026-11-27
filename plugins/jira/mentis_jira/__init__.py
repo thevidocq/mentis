@@ -86,13 +86,13 @@ class Jira(Connector):
         "properties": {
             "site_url": {"type": "string", "format": "uri", "title": "Site URL", "maxLength": 300,
                          "description": "e.g. https://acme.atlassian.net or https://jira.acme.local"},
-            "deployment": {"type": "string", "title": "Deployment", "enum": ["cloud", "datacenter"], "default": "cloud",
+            "deployment": {"identity": True, "type": "string", "title": "Deployment", "enum": ["cloud", "datacenter"], "default": "cloud",
                            "enumLabels": ["Jira Cloud", "Jira Data Center / Server"]},
-            "email": {"type": "string", "title": "Account e-mail", "maxLength": 320, "showIf": {"deployment": "cloud"}},
+            "email": {"identity": True, "type": "string", "title": "Account e-mail", "maxLength": 320, "showIf": {"deployment": "cloud"}},
             "api_token": {"type": "string", "title": "API token", "secret": True, "maxLength": 500, "showIf": {"deployment": "cloud"}},
             "pat": {"type": "string", "title": "Personal access token", "secret": True, "maxLength": 500,
                     "showIf": {"deployment": "datacenter"}},
-            "projects": {"type": "string", "title": "Projects", "maxLength": 300, "default": "",
+            "projects": {"identity": True, "type": "string", "title": "Projects", "maxLength": 300, "default": "",
                          "description": "Project keys Mentis may read, comma separated (e.g. SOC, SEC). Empty = every project the account can browse."},
             "extra_fields": {"type": "string", "title": "Extra fields", "maxLength": 500, "default": "",
                              "description": "Field mapping: more fields to read, comma separated (e.g. customfield_10010)"},
@@ -115,9 +115,8 @@ class Jira(Connector):
         return [origin_of(config.get("site_url", ""))]
 
     def test_connection(self, ctx: Context) -> str:
-        me = self._get(ctx, "/myself", {})
-        who = me.get("displayName") or me.get("emailAddress") or me.get("name") or "account"
-        return f"Connected as {clip(who, 80)}"
+        self._get(ctx, "/myself", {})
+        return "Connected: account accepted"
 
     def run(self, ctx: Context, operation: str, args: dict) -> list[Record]:
         if operation == "get_issue":

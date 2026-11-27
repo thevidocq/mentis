@@ -39,8 +39,10 @@ def desk():
     registry.set_connectors({"fakedesk": FakeDesk()})
     server = FakeDeskServer()
     connector_http.set_transport(server.transport())
+    connector_http.set_resolver(lambda host: ["93.184.216.34"])  # a public address, no DNS in tests
     yield server
     connector_http.set_transport(None)
+    connector_http.set_resolver(None)
     registry.set_connectors(None)
 
 
@@ -183,6 +185,7 @@ def test_try_lookup_and_core_guards(super_admin, desk, fake_llm):
 def test_safe_http_unit():
     seen = []
     connector_http.set_transport(httpx.MockTransport(lambda r: seen.append(r) or httpx.Response(302, headers={"location": "https://evil"})))
+    connector_http.set_resolver(lambda host: ["93.184.216.34"])
     try:
         h = connector_http.SafeHttp("P", ["https://a.example.com"], ["https://a.example.com/token"], max_requests=3)
         assert h.request("GET", "https://a.example.com/x").status == 302  # redirects are not followed
@@ -195,8 +198,10 @@ def test_safe_http_unit():
         with pytest.raises(ConnectorError):
             h.request("GET", "https://a.example.com/z")  # request cap
         assert len(seen) == 3
+        assert seen[0].headers["host"] == "a.example.com" and seen[0].url.host == "93.184.216.34"  # pinned IP, real Host
     finally:
         connector_http.set_transport(None)
+        connector_http.set_resolver(None)
 
 
 def test_tenant_deletion_and_config_export(super_admin, desk, fake_llm):

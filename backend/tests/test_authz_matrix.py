@@ -117,9 +117,11 @@ def world():
     llm.set_transport(fake.transport())
     registry.set_connectors({"fakedesk": FakeDesk()})
     connector_http.set_transport(FakeDeskServer().transport())
+    connector_http.set_resolver(lambda host: ["93.184.216.34"])
     try:
         app = create_app()
         app.state.auth_limiter = None  # thousands of sign-ins from one test client; the limiter has its own tests
+        app.state.user_limits = None   # same for the per-user limits (chat, lookups, exports)
         with TestClient(app) as c:
             c.headers.update(HEADERS)
             c.storage, c.queued = store, queued
@@ -128,6 +130,7 @@ def world():
         llm.set_transport(None)
         registry.set_connectors(None)
         connector_http.set_transport(None)
+        connector_http.set_resolver(None)
         storage.set_storage(None)
         jobs.set_runner(None)
         vector_index.set_client(None)
@@ -284,6 +287,7 @@ def forbidden_tokens(w: World, actor: str) -> dict[str, str]:
         if actor != "sa":  # the audit log names chats by id (metadata only)
             out[w.chat[owner]] = f"chat id of {owner}"
             out[w.msg[owner]] = f"message id of {owner}"
+    out["tok-SECRET-1"] = "integration secret"  # write-only: no route returns it, to anyone
     return out
 
 
@@ -569,6 +573,9 @@ def _routes(w: World) -> dict[tuple[str, str], list[Probe]]:
     # Integrations: plugins for super-admins; instances for the tenant admins of that customer only.
     add("GET", "/platform/integrations", super_only("GET", A + "/platform/integrations"))
     add("PUT", "/platform/integrations", super_only("PUT", A + "/platform/integrations", kw={"json": {"enabled": ["fakedesk"]}}))
+    add("GET", "/platform/integrations/settings", super_only("GET", A + "/platform/integrations/settings"))
+    add("PUT", "/platform/integrations/settings", super_only("PUT", A + "/platform/integrations/settings",
+                                                            kw={"json": {"allow_private": False}}))
     I = A + "/tenants/{t}/integrations"
     add("GET", "/tenants/{tenant_id}/integrations", tenant_route(w, "GET", I, obj=False))
     add("POST", "/tenants/{tenant_id}/integrations", tenant_route(

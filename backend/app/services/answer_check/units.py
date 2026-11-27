@@ -16,6 +16,7 @@ _SENT = re.compile(r"(?<=[.!?])\s+(?=[A-ZÀ-ÖØ-Þ*\"“(])")
 class Unit:
     raw: str                 # Markdown as in the answer, citations removed from the end
     cites: list[int] = field(default_factory=list)
+    intro: bool = False      # ends with ":" ("For Acme:", "The procedure is:"): introduces the next lines
 
     @property
     def plain(self) -> str:
@@ -39,7 +40,8 @@ def split(answer: str) -> list[Unit]:
             # Up to the first citation or the end, without closing punctuation: the exact text to find
             # again in the answer for highlighting ("informed by SMS [1]." -> "informed by SMS").
             raw = _CITE.split(part)[0] if _CITE.search(part) and not _CITE.sub("", part.split("[", 1)[-1]).strip(" .;:!?") else _CITE.sub("", part)
+            intro = _CITE.sub("", part).rstrip().endswith(":")
             raw = re.sub(r"[\s.;:!?]+$", "", raw.strip())
             if len(plain(raw)) >= 3:
-                units.append(Unit(raw=raw, cites=cites))
+                units.append(Unit(raw=raw, cites=cites, intro=intro))
     return units

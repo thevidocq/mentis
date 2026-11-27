@@ -11,6 +11,7 @@ import hashlib
 import json
 import logging
 import re
+import threading
 import time
 import uuid
 
@@ -26,13 +27,19 @@ from app.services.logs import log_event
 
 _log = logging.getLogger("mentis.integrations")
 
-KEY = "integrations"          # platform setting: {"enabled": ["servicenow", ...]}
+KEY = "integrations"          # platform setting: {"enabled": ["servicenow", ...], "allow_private": false}
 MAX_RECORDS = 10              # per operation
 MAX_TEXT = 3000               # characters of long text per record
 MAX_FIELDS = 30
 
 # OAuth tokens and similar per instance, dropped when the configuration changes.
 _state: dict[uuid.UUID, tuple[str, dict]] = {}
+
+# Plugin calls running at once in this process: a slow or hostile server cannot take every API
+# thread and database connection (the pool has 15).
+MAX_CONCURRENT = 6
+_slots = threading.BoundedSemaphore(MAX_CONCURRENT)
+SLOT_WAIT = 10  # seconds
 
 
 class IntegrationFailed(Exception):
@@ -52,13 +59,30 @@ def enabled_plugins(db: Session) -> set[str]:
     return {n for n in names if isinstance(n, str)}
 
 
-def set_enabled_plugins(db: Session, names: set[str]) -> None:
+def _setting(db: Session) -> dict:
     row = db.get(PlatformSetting, KEY)
-    value = {"enabled": sorted(names)}
+    return dict(row.value or {}) if row else {}
+
+
+def _save(db: Session, value: dict) -> None:
+    row = db.get(PlatformSetting, KEY)
     if row is None:
         db.add(PlatformSetting(key=KEY, value=value))
     else:
         row.value = value
+
+
+def set_enabled_plugins(db: Session, names: set[str]) -> None:
+    _save(db, {**_setting(db), "enabled": sorted(names)})
+
+
+def allow_private(db: Session) -> bool:
+    """Private network addresses and plain HTTP for integrations (on-premise systems): off by default."""
+    return _setting(db).get("allow_private") is True
+
+
+def set_allow_private(db: Session, value: bool) -> None:
+    _save(db, {**_setting(db), "allow_private": bool(value)})
 
 
 def usable_connector(db: Session, plugin: str) -> Connector | None:
@@ -149,12 +173,13 @@ def _fingerprint(inst: Integration) -> str:
     return hashlib.sha256(json.dumps([inst.plugin, inst.config, inst.secrets_enc], sort_keys=True, default=str).encode()).hexdigest()
 
 
-def _context(inst: Integration, c: Connector, secrets: dict, timeout: float) -> tuple[Context, SafeHttp]:
+def _context(inst: Integration, c: Connector, secrets: dict, timeout: float, private: bool) -> tuple[Context, SafeHttp]:
     fp = _fingerprint(inst)
     saved = _state.get(inst.id)
     state = saved[1] if saved and saved[0] == fp else {}
     _state[inst.id] = (fp, state)
-    http = SafeHttp(c.manifest.label, c.origins(inst.config or {}), c.read_posts(inst.config or {}), timeout=timeout)
+    http = SafeHttp(c.manifest.label, c.origins(inst.config or {}), c.read_posts(inst.config or {}), timeout=timeout,
+                    deadline=2 * timeout, allow_private=private)
     return Context(config=dict(inst.config or {}), secrets=secrets, http=http, state=state), http
 
 
@@ -176,7 +201,7 @@ def _clean(records: list[Record]) -> list[Record]:
 def _web(url) -> bool:
     """A link the analyst may open: http(s), no spaces or brackets that would break Markdown."""
     return (isinstance(url, str) and len(url) <= 1000 and url.lower().startswith(("https://", "http://"))
-            and not any(ch in url for ch in " \t\r\n<>()[]\"'`"))
+            and not any(ch in url for ch in " \t\r\n<>()[]\"'`\\"))
 
 
 def _public(e: Exception, label: str) -> str:
@@ -197,13 +222,16 @@ def run(db: Session, inst: Integration, c: Connector, operation: str, args: dict
     except ValueError as e:
         raise IntegrationFailed(f"{label}: {e}", f"invalid arguments: {e}") from None
     secrets = secrets_of(inst)
+    private = allow_private(db)
     http = None
     t0 = time.perf_counter()
     detail = {"integration": str(inst.id), "name": inst.name, "plugin": inst.plugin, "operation": operation, "purpose": purpose,
               "object": {k: v for k, v in clean.items() if op.params[k].identifier},
               "chat": str(chat_id) if chat_id else None}
+    if not _slots.acquire(timeout=SLOT_WAIT):
+        raise IntegrationFailed(f"{label}: too many lookups running, try again in a moment", "no free slot")
     try:
-        ctx, http = _context(inst, c, secrets, timeout)  # inside: an address the plugin cannot read raises too
+        ctx, http = _context(inst, c, secrets, timeout, private)  # inside: an address the plugin cannot read raises too
         records = _clean(c.run(ctx, operation, clean))
     except Exception as e:  # noqa: BLE001 - a plugin error must never break the chat
         if not isinstance(e, ConnectorError):
@@ -213,6 +241,8 @@ def run(db: Session, inst: Integration, c: Connector, operation: str, args: dict
                   target=str(inst.id), detail={**detail, "ok": False, "cause": cause, "requests": http.requests if http else 0,
                                                "latency_ms": round((time.perf_counter() - t0) * 1000)}, commit=False)
         raise IntegrationFailed(_public(e, label), cause) from None
+    finally:
+        _slots.release()
     log_event(db, "integration.called", actor=actor, tenant_id=inst.tenant_id, target=str(inst.id),
               detail={**detail, "ok": True, "records": len(records), "requests": http.requests,
                       "latency_ms": round((time.perf_counter() - t0) * 1000)}, commit=False)
@@ -222,11 +252,17 @@ def run(db: Session, inst: Integration, c: Connector, operation: str, args: dict
 def test(db: Session, inst: Integration, c: Connector, timeout: float = 15) -> tuple[bool, str]:
     """(ok, detail) for the admin: a public message on failure, never secrets or reply bodies."""
     secrets = secrets_of(inst)
+    private = allow_private(db)
+    if not _slots.acquire(timeout=SLOT_WAIT):
+        return False, f"{c.manifest.label}: too many lookups running, try again in a moment"
     try:
-        ctx, _ = _context(inst, c, secrets, timeout)
+        ctx, _ = _context(inst, c, secrets, timeout, private)
         return True, str(c.test_connection(ctx))[:200]
     except ConnectorError as e:
+        # Internal and private destinations are refused before any request, so the detail is safe to show.
         return False, _redact(str(e), secrets)[:300]
     except Exception:  # noqa: BLE001
         _log.exception("integration test %s (%s) failed", inst.id, inst.plugin)
         return False, f"{c.manifest.label}: the plugin failed (see the API logs)"
+    finally:
+        _slots.release()

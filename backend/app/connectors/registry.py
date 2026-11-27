@@ -1,7 +1,9 @@
 """Plugin discovery: Python entry points in the `mentis.connectors` group.
 
-Each entry point loads a `Connector` instance (or class). Plugins whose contract version differs
-from the core's are skipped with a warning. Tests replace the registry with `set_connectors`.
+Each entry point loads a `Connector` instance (or class). Only packages named `mentis-*` (the
+plugins of this repository) are loaded: an entry point added by any other installed package is
+ignored, and two packages claiming the same name are both refused. Plugins whose contract version
+differs from the core's are skipped with a warning. Tests replace the registry with `set_connectors`.
 """
 
 import logging
@@ -36,6 +38,15 @@ def _valid(name: str, c: Connector) -> bool:
     return True
 
 
+def _ours(ep) -> bool:
+    dist = getattr(ep, "dist", None)
+    name = (getattr(dist, "name", "") or "").lower().replace("_", "-")
+    if not name.startswith("mentis-"):
+        _log.warning("entry point %s from package %r ignored: not a Mentis plugin package", ep.name, name)
+        return False
+    return True
+
+
 def connectors() -> dict[str, Connector]:
     """Installed plugins by name, sorted by label."""
     global _cache
@@ -43,7 +54,12 @@ def connectors() -> dict[str, Connector]:
         return dict(_override)
     if _cache is None:
         found: dict[str, Connector] = {}
-        for ep in entry_points(group=GROUP):
+        eps = [ep for ep in entry_points(group=GROUP) if _ours(ep)]
+        names = [ep.name for ep in eps]
+        for ep in eps:
+            if names.count(ep.name) > 1:
+                _log.warning("plugin %s skipped: claimed by more than one package", ep.name)
+                continue
             try:
                 obj = ep.load()
                 c = obj() if isinstance(obj, type) else obj

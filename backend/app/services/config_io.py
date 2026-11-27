@@ -342,11 +342,8 @@ def _import_integrations(db: Session, tenant: Tenant | None, name: str, items: l
         elif cur.plugin != item["plugin"]:
             plan.append(f"{label}: different type here, skipped")
         elif cur.config != config:
-            try:
-                moved = {o.lower() for o in c.origins(cur.config or {})} != {o.lower() for o in c.origins(config)}
-            except Exception:  # noqa: BLE001
-                moved = True
-            plan.append(f"{label}: update" + (" (new address: credentials to enter again)" if moved and cur.secrets_enc else ""))
+            moved = connector_schema.rebinds(c, cur.config or {}, config)
+            plan.append(f"{label}: update" + (" (new address or account: credentials to enter again)" if moved and cur.secrets_enc else ""))
             if apply:
                 cur.config = config
                 if moved:

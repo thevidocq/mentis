@@ -1,7 +1,7 @@
 """Chats: each user sees only their own. The customer scope is chosen with the first message and never changes.
 
-Who can chat: analysts and super-admins on any customer or "All customers";
-tenant admins only on their own tenant (to check what analysts will get).
+Who can chat: analysts and tenant admins, on the customers assigned to them (or "All customers");
+super-admins have no chat.
 Log events carry metadata only, never questions or answers.
 """
 
@@ -16,6 +16,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import client_ip, require_roles
+from app.core.ratelimit import user_rate_limit
 from app.core.db import get_db
 from app.models import Chat, ChatMessage, ChatShare, Role, Tenant, User
 from app.models.base import utcnow
@@ -183,6 +184,7 @@ def _scope_usable(db: Session, chat: Chat, user: User) -> bool:
 
 def _ask(db: Session, user: User, chat: Chat, question: str, first: bool, request: Request,
          background: BackgroundTasks | None = None) -> Exchange:
+    user_rate_limit(request, user.id, "chat")
     question = question.replace("\x00", "").strip()
     if not question:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Write a question.")
@@ -220,8 +222,8 @@ def _ask(db: Session, user: User, chat: Chat, question: str, first: bool, reques
                     provider_name=result.provider_name, model=result.model, latency_ms=result.latency_ms,
                     input_tokens=result.input_tokens, output_tokens=result.output_tokens, check=check)
     db.add(a)
-    if first and result.title and not chat.title_locked:
-        chat.title = result.title.strip()[:120] or chat.title
+    if first and not chat.title_locked:
+        chat.title = (result.title or "").strip()[:120] or question.strip()[:60] or chat.title
     chat.updated_at = utcnow()
     db.commit()
     # Metadata only: never the question or the answer.
@@ -334,6 +336,8 @@ def rename(chat_id: uuid.UUID, body: Rename, db: Session = Depends(get_db), user
         log_event(db, "chat.general_knowledge", actor=user, tenant_id=chat.scope_tenant_id, target=str(chat.id),
                   detail={"use_general": chat.use_general}, commit=False)
     if body.integration_ids is not None:
+        if not _scope_usable(db, chat, user):  # the customer was disabled or removed from the user
+            raise HTTPException(status.HTTP_409_CONFLICT, "The customer of this chat is no longer available. Start a new chat.")
         chosen = _check_integrations(db, chat.scope_tenant_id, body.integration_ids)
         if chosen != list(chat.integration_ids or []):
             chat.integration_ids = chosen

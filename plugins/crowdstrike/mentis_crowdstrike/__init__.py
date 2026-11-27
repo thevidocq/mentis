@@ -42,11 +42,11 @@ class CrowdStrike(Connector):
         "type": "object",
         "required": ["cloud", "client_id", "client_secret"],
         "properties": {
-            "cloud": {"type": "string", "title": "Cloud", "enum": list(CLOUDS), "default": "us-1",
+            "cloud": {"identity": True, "type": "string", "title": "Cloud", "enum": list(CLOUDS), "default": "us-1",
                       "enumLabels": ["US-1", "US-2", "EU-1", "US-GOV-1"]},
-            "client_id": {"type": "string", "title": "API client ID", "maxLength": 200},
+            "client_id": {"identity": True, "type": "string", "title": "API client ID", "maxLength": 200},
             "client_secret": {"type": "string", "title": "API client secret", "secret": True, "maxLength": 500},
-            "member_cid": {"type": "string", "title": "Child CID (MSSP)", "maxLength": 64, "default": "",
+            "member_cid": {"identity": True, "type": "string", "title": "Child CID (MSSP)", "maxLength": 64, "default": "",
                            "description": "Only for Flight Control: the customer's CID"},
         },
     }

@@ -11,6 +11,7 @@ Formats:
 import json
 import re
 import tempfile
+import threading
 import zipfile
 from dataclasses import dataclass
 
@@ -24,6 +25,10 @@ from app.services.setup import GENERAL_NAME
 
 FORMATS = ("original", "md", "json")
 JSON_FORMAT = "mentis-document/1"
+
+# One ZIP is built at a time in this process: they go through the api's /tmp (a tmpfs shared with
+# uploads), so parallel exports must not fill it.
+_zip_slot = threading.Semaphore(1)
 
 
 class ExportError(Exception):
@@ -108,7 +113,18 @@ def _unique(name: str, used: set[str]) -> str:
 
 
 def zip_all(db: Session, tenant: Tenant, fmt: str, read_original, max_bytes: int) -> Bundle:
-    """Every document's version in use. `read_original(key) -> bytes` reads the stored file."""
+    """Every document's version in use. `read_original(key) -> bytes` reads the stored file.
+
+    One at a time (429 otherwise); every format is capped at `max_bytes` of content."""
+    if not _zip_slot.acquire(blocking=False):
+        raise ExportError(429, "Another download of all documents is being prepared. Try again in a minute.")
+    try:
+        return _zip_all(db, tenant, fmt, read_original, max_bytes)
+    finally:
+        _zip_slot.release()
+
+
+def _zip_all(db: Session, tenant: Tenant, fmt: str, read_original, max_bytes: int) -> Bundle:
     rows = db.execute(select(Document, DocumentVersion).join(DocumentVersion, DocumentVersion.document_id == Document.id)
                       .where(Document.tenant_id == tenant.id, DocumentVersion.tenant_id == tenant.id,
                              DocumentVersion.is_active.is_(True), DocumentVersion.status == VersionStatus.READY)
@@ -121,20 +137,30 @@ def zip_all(db: Session, tenant: Tenant, fmt: str, read_original, max_bytes: int
         if size > max_bytes:
             raise ExportError(413, f"The originals take {size // 1_000_000} MB, more than the {max_bytes // 1_000_000} MB "
                                    "of one download. Download them one by one, or ask the administrator to raise MENTIS_EXPORT_MAX_MB.")
-    out = tempfile.SpooledTemporaryFile(max_size=32 * 1024 * 1024)
+    too_big = ExportError(413, f"The download would exceed {max_bytes // 1_000_000} MB. Download the documents one by one, "
+                               "or ask the administrator to raise MENTIS_EXPORT_MAX_MB.")
+    out = tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024)
     used: set[str] = set()
     manifest = []
-    with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as z:
+    written = 0
+    try:
+        z = zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED)
+    except Exception:
+        out.close()
+        raise
+    try:
         for doc, v in rows:
             if fmt == "original":
-                name = _unique(stem(doc.name) + "." + v.file_type, used)
-                z.writestr(name, read_original(v.storage_key))
+                name, data = _unique(stem(doc.name) + "." + v.file_type, used), read_original(v.storage_key)
             elif fmt == "md":
-                name = _unique(stem(doc.name) + ".md", used)
-                z.writestr(name, markdown(db, tenant, doc, v))
+                name, data = _unique(stem(doc.name) + ".md", used), markdown(db, tenant, doc, v).encode()
             else:
                 name = _unique(stem(doc.name) + ".json", used)
-                z.writestr(name, json.dumps(as_json(db, tenant, doc, v), ensure_ascii=False, indent=1))
+                data = json.dumps(as_json(db, tenant, doc, v), ensure_ascii=False, indent=1).encode()
+            written += len(data)
+            if written > max_bytes:
+                raise too_big
+            z.writestr(name, data)
             manifest.append({"file": name, "document": doc.name, "version": v.version, "sha256_original": v.sha256})
         z.writestr("manifest.json", json.dumps({
             "format": "mentis-export/1", "customer": _owner(tenant), "exported_at": utcnow().isoformat(timespec="seconds"),
@@ -142,6 +168,11 @@ def zip_all(db: Session, tenant: Tenant, fmt: str, read_original, max_bytes: int
             "not_included": documents - len(manifest),
             "note": "Only documents with a version in use; documents waiting for approval or that could not be read are not included.",
         }, ensure_ascii=False, indent=1))
+        z.close()
+    except BaseException:
+        z.close()
+        out.close()
+        raise
     out.seek(0)
     return Bundle(out, len(manifest), documents - len(manifest))
 

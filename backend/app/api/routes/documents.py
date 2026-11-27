@@ -28,6 +28,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import client_ip, require_roles
+from app.core.ratelimit import user_rate_limit
 from app.core.config import get_settings
 from app.core.db import get_db
 from app.models import (
@@ -278,6 +279,7 @@ def export_all(tenant_id: uuid.UUID, request: Request, format: str = Query(patte
                db: Session = Depends(get_db), user: User = Depends(admins)) -> StreamingResponse:
     """Every document in use of the customer as a ZIP: originals, Markdown or JSON, plus manifest.json."""
     tenant = _tenant(db, user, tenant_id)
+    user_rate_limit(request, user.id, "export")
     try:
         bundle = doc_export.zip_all(db, tenant, format, _stored, get_settings().export_max_mb * 1_000_000)
     except doc_export.ExportError as e:
@@ -381,6 +383,7 @@ def export_version(tenant_id: uuid.UUID, version_id: uuid.UUID, request: Request
 
     tenant = _tenant(db, user, tenant_id)
     v = _version(db, tenant, version_id)
+    user_rate_limit(request, user.id, "export")
     try:
         doc_export.readable(v)
     except doc_export.ExportError as e:

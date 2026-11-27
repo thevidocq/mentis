@@ -111,9 +111,9 @@ def _distance(a: str, b: str) -> int:
 def _same(a: Value, b: Value) -> bool:
     if a.kind != b.kind:
         return False
-    if a.kind == "phone":  # with or without the country prefix
+    if a.kind == "phone":  # with or without the country or trunk prefix, never a truncated number
         short, long_ = sorted((a.key, b.key), key=len)
-        return long_.endswith(short) and len(short) >= 7
+        return long_.endswith(short) and len(short) >= 9 and len(long_) - len(short) <= 4
     return a.key == b.key
 
 

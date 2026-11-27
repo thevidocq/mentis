@@ -10,7 +10,7 @@ chosen by llm_config.checker_for. Per customer (tenant settings "answer_check"):
 The result is stored on the message (ChatMessage.check):
   {"level2": "pending" | "ok" | "unavailable" | "off", "issues": [...], "checker": {"name", "model"},
    "hidden": bool, "hidden_answer": str (audit only)}
-Issues: {"level": [1] | [2] | [1, 2], "kind": "value" | "statement" | "no_citations", "text", "expected"?, "reason"?}
+Issues: {"level": [1] | [2] | [1, 2], "kind": "value" | "statement" | "uncited" | "no_citations", "text", "expected"?, "reason"?}
 """
 
 from app.services.answer_check import judge as judge_mod
@@ -27,12 +27,41 @@ def mode_of(settings: dict | None) -> str:
     return m if m in MODES else DEFAULT_MODE
 
 
+def _substantive(u: units_mod.Unit) -> bool:
+    """A statement that must cite a source: not an introduction ("For Acme:"), and either a value
+    (contact, time, code...) or at least six words."""
+    return not u.intro and (bool(values.extract(u.raw)) or len(u.plain.split()) >= 6)
+
+
 def level1(content: str, citations: list[dict], passages: dict[int, str]) -> list[dict]:
-    cited = {c["n"]: passages[c["n"]] for c in citations if c.get("n") in passages}
-    issues = values.check(content, cited, list(passages.values()))
+    """Values and citations, no model.
+
+    - Each statement's values must be in the passages **that statement** cites (a value found only in
+      another passage, e.g. an attacker's ticket or another customer's document, does not count).
+    - A substantive statement without a citation is an issue ("uncited"): level 2 checks only cited
+      statements, so an uncited one would otherwise pass unchecked.
+    - An answer with no citation at all is one issue ("no_citations").
+    """
     if not citations:
+        cited = {}
+        issues = values.check(content, cited, list(passages.values()))
         issues.append({"level": [1], "kind": "no_citations", "text": ""})
-    return issues
+        return issues
+    issues: list[dict] = []
+    for u in units_mod.split(content):
+        if not u.cites:
+            if _substantive(u):
+                issues.append({"level": [1], "kind": "uncited", "text": u.raw})
+            continue
+        own = {n: passages[n] for n in u.cites if n in passages}
+        issues += values.check(u.raw, own, list(own.values()))
+    out, seen = [], set()
+    for i in issues:
+        key = (i["kind"], i["text"])
+        if key not in seen:
+            seen.add(key)
+            out.append(i)
+    return out
 
 
 def level2(cfg: dict, content: str, passages: dict[int, str]) -> tuple[list[dict], judge_mod.Verdict]:
@@ -75,7 +104,7 @@ def history_note(check: dict | None) -> str:
     issues = (check or {}).get("issues") or []
     if not issues or (check or {}).get("hidden"):  # a hidden answer is already replaced by a plain note
         return ""
-    parts = [i["text"] for i in issues if i.get("text")][:5]
+    parts = [i["text"] for i in issues if i.get("text")][:5]  # values, unsupported and uncited statements
     what = "; ".join(f'"{p[:120]}"' for p in parts) or "statements without a source"
     return (f"\n\n[Automatic check: this answer contained content not found in the sources ({what}). "
             "Do not rely on it; answer only from the passages.]")

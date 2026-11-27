@@ -7,6 +7,7 @@ const levelText = (lv: number[]) => (lv.length > 1 ? "Level 1 + 2" : `Level ${lv
 function message(i: CheckIssue): string {
   if (i.kind === "no_citations") return "Unverified answer: it cites no source. Check the documents before acting.";
   if (i.kind === "statement") return "1 statement is not supported by the sources.";
+  if (i.kind === "uncited") return "1 statement cites no source, so it was not checked.";
   return `“${i.text}” is not in the sources${i.expected ? ` (the source says ${i.expected})` : ""}.`;
 }
 

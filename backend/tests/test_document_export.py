@@ -63,7 +63,9 @@ def test_zip_limits_and_empty(super_admin, monkeypatch):
     monkeypatch.setattr(get_settings(), "export_max_mb", 0)
     r = super_admin.get(f"/api/tenants/{alfa['id']}/documents/export", params={"format": "original"})
     assert r.status_code == 413 and "one by one" in r.json()["detail"]
-    # Markdown and JSON are not limited by the size of the originals.
+    # Markdown and JSON have the same cap (the ZIP is built in the api's /tmp).
+    assert super_admin.get(f"/api/tenants/{alfa['id']}/documents/export", params={"format": "json"}).status_code == 413
+    monkeypatch.setattr(get_settings(), "export_max_mb", 300)
     assert super_admin.get(f"/api/tenants/{alfa['id']}/documents/export", params={"format": "json"}).status_code == 200
 
 

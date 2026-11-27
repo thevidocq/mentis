@@ -35,7 +35,7 @@ LEVELS = ["low", "medium", "high", "critical"]
 
 def _trend_link(url) -> str | None:
     """Workbench links from the API, only when they point to a Trend Micro host."""
-    if not isinstance(url, str) or not url.startswith("https://"):
+    if not isinstance(url, str) or not url.startswith("https://") or "\\" in url or "@" in url.split("/")[2]:
         return None
     host = (urlsplit(url).hostname or "").lower()
     return url if host.endswith((".trendmicro.com", ".trendmicro.co.jp")) else None
@@ -48,7 +48,7 @@ class VisionOne(Connector):
         "type": "object",
         "required": ["region", "api_key"],
         "properties": {
-            "region": {"type": "string", "title": "Region", "enum": list(APIS), "default": "eu",
+            "region": {"identity": True, "type": "string", "title": "Region", "enum": list(APIS), "default": "eu",
                        "enumLabels": ["United States", "Europe", "Japan", "Singapore", "Australia", "India", "Middle East and Africa"]},
             "api_key": {"type": "string", "title": "API key", "secret": True, "maxLength": 4000},
         },

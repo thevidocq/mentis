@@ -15,6 +15,27 @@ def secret_keys(c: Connector) -> set[str]:
     return {k for k, p in properties(c).items() if p.get("secret")}
 
 
+def identity_keys(c: Connector) -> set[str]:
+    """Non-secret fields that, with the address, bind the stored secrets to one customer's data."""
+    return {k for k, p in properties(c).items() if p.get("identity") and not p.get("secret")}
+
+
+def rebinds(c: Connector, old: dict, new: dict) -> bool:
+    """True when the new configuration would send the stored secrets to other data: another
+    address (origin) or another identity field (tenant id, child CID, account, projects...)."""
+    try:
+        moved = {o.lower() for o in c.origins(old or {})} != {o.lower() for o in c.origins(new or {})}
+    except Exception:  # noqa: BLE001 - an unreadable old address: treat as moved
+        moved = True
+    props = properties(c)
+
+    def value(cfg: dict, k: str):
+        v = (cfg or {}).get(k, props[k].get("default"))
+        return v.strip().lower() if isinstance(v, str) else v
+
+    return moved or any(value(old, k) != value(new, k) for k in identity_keys(c))
+
+
 def public_schema(c: Connector) -> dict:
     """The schema as sent to the browser (it is not secret, but trimmed to what the form needs)."""
     return {"type": "object", "properties": properties(c), "required": list((c.config_schema or {}).get("required", []))}
@@ -42,6 +63,15 @@ def _problem(key: str, spec: dict, value) -> str | None:
         return f"{title}: the address must start with https:// or http://."
     if spec.get("format") == "uri" and value and any(ch in value for ch in " \t\r\n"):
         return f"{title}: the address cannot contain spaces."
+    if spec.get("format") == "uri" and value:
+        from urllib.parse import urlsplit
+
+        try:
+            u = urlsplit(value)
+        except ValueError:
+            return f"{title}: invalid address."
+        if u.query or u.fragment or "?" in value or "#" in value or "\\" in value or "@" in u.netloc or not u.hostname:
+            return f"{title}: give the address only (no user name, ?, # or \\), e.g. https://acme.example.com."
     return None
 
 

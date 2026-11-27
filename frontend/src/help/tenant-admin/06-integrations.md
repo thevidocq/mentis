@@ -11,7 +11,9 @@ Integrations are **read only**: Mentis never creates, changes or closes anything
 3. Fill in the address and the credentials (see **Minimum requirements** below), then **Add**.
 4. Click **Test**: Mentis signs in and reads one item. Then **Try a lookup**: read a real ticket, host or alert to check permissions and fields.
 
-Credentials are stored encrypted and never shown again: leave a credential empty when editing to keep it. They are sent only to the address they were saved for; if you change the address, enter the credentials again.
+Credentials are stored encrypted and never shown again: leave a credential empty when editing to keep it. They are sent only to the address and the account they were saved for: if you change the address or a field that decides whose data they open (tenant ID, client ID, child CID, account e-mail, projects, region), enter the credentials again.
+
+Addresses: HTTPS, the address only (no user name, `?` or `#`), e.g. `https://acme.service-now.com`. Private network addresses and plain HTTP work only if a super-admin allows them (on-premise systems). Test and Try a lookup are not available while the customer is disabled.
 
 ## What analysts get
 

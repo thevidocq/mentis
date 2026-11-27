@@ -11,8 +11,25 @@ export function PlatformIntegrations() {
   const [plugins, setPlugins] = useState<IntegrationPlugin[] | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [allowPrivate, setAllowPrivate] = useState<boolean | null>(null);
 
-  useEffect(() => { integrationsApi.plugins().then(setPlugins).catch((e) => setMsg({ ok: false, text: errorText(e) })); }, []);
+  useEffect(() => {
+    integrationsApi.plugins().then(setPlugins).catch((e) => setMsg({ ok: false, text: errorText(e) }));
+    integrationsApi.settings().then((s) => setAllowPrivate(s.allow_private)).catch(() => setAllowPrivate(null));
+  }, []);
+
+  async function togglePrivate() {
+    if (allowPrivate === null || busy) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      setAllowPrivate((await integrationsApi.setAllowPrivate(!allowPrivate)).allow_private);
+    } catch (e) {
+      setMsg({ ok: false, text: errorText(e) });
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function toggle(p: IntegrationPlugin) {
     if (!plugins || busy) return;
@@ -37,6 +54,23 @@ export function PlatformIntegrations() {
           the credentials and addresses stay with each customer. Every integration is read only.
         </p>
         {msg && <div className={msg.ok ? "notice" : "error"} role="status">{msg.text}</div>}
+        {allowPrivate !== null && (
+          <div className={`card integration-card${allowPrivate ? " notice-warn" : ""}`}>
+            <div className="integration-main">
+              <div className="integration-name">
+                <strong>Private network addresses</strong>
+                <span className="muted small">
+                  Off: integrations reach only public HTTPS addresses. On: also private networks (10.x, 172.16–31.x, 192.168.x)
+                  and plain HTTP, for on-premise systems reached through a VPN. Mentis' own services, loopback and cloud
+                  metadata addresses stay refused either way.
+                </span>
+              </div>
+              <span className="spacer" />
+              <button type="button" role="switch" aria-checked={allowPrivate} className={`btn btn-sm${allowPrivate ? " btn-primary" : ""}`}
+                disabled={busy} onClick={togglePrivate}>{allowPrivate ? "Allowed" : "Allow"}</button>
+            </div>
+          </div>
+        )}
         {plugins && plugins.length === 0 && <div className="notice">No integration plugin is installed in this image.</div>}
         <div className="integration-list">
           {plugins?.map((p) => (

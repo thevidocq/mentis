@@ -72,6 +72,7 @@ services:
       MENTIS_ENV: production
       MENTIS_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB}
       MENTIS_SECRET_KEY: ${MENTIS_SECRET_KEY:?set MENTIS_SECRET_KEY in .env (openssl rand -hex 32)}
+      MENTIS_SECRET_KEY_PREVIOUS: ${MENTIS_SECRET_KEY_PREVIOUS:-}
       MENTIS_COOKIE_SECURE: ${MENTIS_COOKIE_SECURE:-true}
       # Proxies whose X-Forwarded-For is believed: private networks (the web container, a proxy on this host).
       MENTIS_TRUSTED_PROXIES: ${MENTIS_TRUSTED_PROXIES:-127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}

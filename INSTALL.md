@@ -137,7 +137,7 @@ Parser: `MENTIS_PARSER=standard` (default). To try Docling in the lab, set `MENT
 
 ### Downloads
 
-Tenant admins can download one document, or every document in use of a customer as a ZIP, as originals, Markdown or JSON. A ZIP of originals is limited to `MENTIS_EXPORT_MAX_MB` (default 300) and is built in the api's `/tmp` (`MENTIS_API_TMP_SIZE`, default 512m): raise both together. Markdown and JSON are small and not limited.
+Tenant admins can download one document, or every document in use of a customer as a ZIP, as originals, Markdown or JSON. A ZIP (any format) is limited to `MENTIS_EXPORT_MAX_MB` of content (default 300) and is built in the api's `/tmp` (`MENTIS_API_TMP_SIZE`, default 512m): raise both together. One ZIP is prepared at a time; nginx streams downloads without buffering them.
 
 ## Chat and LLM
 
@@ -158,6 +158,14 @@ docker compose exec api python -c "from app.connectors import registry; print(so
 ```
 
 Plugin tests run from a checkout, without services: `python -m pytest plugins/` (Python 3.12 and pytest).
+
+Destinations: integrations reach only public HTTPS addresses unless a super-admin allows private network addresses (Integrations page). Mentis' own services, loopback and cloud metadata are always refused. As a second barrier on the host, block the metadata address for containers:
+
+```bash
+sudo iptables -I DOCKER-USER -d 169.254.169.254 -j DROP
+```
+
+Per-user limits (per minute; `.env`, then `docker compose up -d api`): `MENTIS_CHAT_RATE_PER_MINUTE` (30), `MENTIS_LOOKUP_RATE_PER_MINUTE` (20, Test and Try a lookup), `MENTIS_EXPORT_RATE_PER_MINUTE` (10).
 
 ## Backup
 
@@ -183,6 +191,8 @@ echo "MENTIS_BACKUP_PASSPHRASE_FILE=/root/.mentis-backup-pass" >> .env
 ```
 
 Keep a copy of the passphrase or private key off the server: without it the backups cannot be restored.
+
+Secrets stored in the database (AI provider keys, integration credentials, SMTP password) are encrypted with `MENTIS_SECRET_KEY`, which is in `.env` and therefore in unencrypted backups: encrypt backups (above). To rotate the key, put the old value in `MENTIS_SECRET_KEY_PREVIOUS` (comma separated for several) and a new one in `MENTIS_SECRET_KEY`, then `docker compose up -d api worker`: stored secrets keep working and are encrypted with the new key when saved again. If a secret can no longer be decrypted, the API logs say so.
 
 Rotation: `./backup.sh` keeps the newest 7 complete backups in `backups/` (`MENTIS_BACKUP_KEEP`, 0 = all), refuses to start without enough free space, and removes a backup that failed half-way. Backups on the same disk do not survive a disk failure: copy them elsewhere.
 

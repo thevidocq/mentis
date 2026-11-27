@@ -57,9 +57,9 @@ class EntraId(Connector):
         "type": "object",
         "required": ["tenant_id", "client_id", "client_secret"],
         "properties": {
-            "tenant_id": {"type": "string", "title": "Entra tenant ID", "maxLength": 253,
+            "tenant_id": {"identity": True, "type": "string", "title": "Entra tenant ID", "maxLength": 253,
                           "description": "Directory (tenant) ID of the customer's Entra ID"},
-            "client_id": {"type": "string", "title": "Application (client) ID", "maxLength": 64},
+            "client_id": {"identity": True, "type": "string", "title": "Application (client) ID", "maxLength": 64},
             "client_secret": {"type": "string", "title": "Client secret", "secret": True, "maxLength": 500},
         },
     }
