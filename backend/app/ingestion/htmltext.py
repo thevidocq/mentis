@@ -25,6 +25,8 @@ BLOCKS = {"p", "div", "section", "article", "main", "blockquote", "figure", "fig
 LISTS = {"ul", "ol"}
 MAX_LIST_DEPTH = 6
 MAX_DEPTH = 200
+MAX_INLINE_DEPTH = 32   # deeper inline markup is read as plain text (keeps the cost linear)
+ANCHOR_CLASSES = ("headerlink", "hash-link", "anchor", "heading-anchor", "anchorjs-link")
 
 
 class _Out:
@@ -49,6 +51,18 @@ def _tag(el) -> str:
     return el.tag.lower() if isinstance(el.tag, str) else ""
 
 
+def _anchor(el) -> bool:
+    """A heading's permalink ("¶", "#"): site furniture, not content."""
+    if _tag(el) != "a":
+        return False
+    classes = (el.get("class") or "").lower().split()
+    return any(c in classes for c in ANCHOR_CLASSES)
+
+
+def _clean_heading(text: str) -> str:
+    return re.sub(r"[\u00b6\u200b\ufeff]", "", text).strip().rstrip("#").strip()
+
+
 def _hidden(el) -> bool:
     style = (el.get("style") or "").replace(" ", "").lower()
     return el.get("hidden") is not None or el.get("aria-hidden") == "true" or "display:none" in style
@@ -62,12 +76,12 @@ def _is_block(el) -> bool:
 def _inline(el, depth: int = 0) -> str:
     """The text of an element on one line, with **bold**, *italic* and `code`; blocks inside it
     (paragraphs in a list item, say) are separated by a space."""
-    if depth > MAX_DEPTH:
-        return ""
+    if depth > MAX_INLINE_DEPTH:
+        return el.text_content()
     parts = [el.text or ""]
     for child in el:
         tag = _tag(child)
-        if not tag or tag in SKIP or _hidden(child):
+        if not tag or tag in SKIP or _hidden(child) or _anchor(child):
             parts.append(child.tail or "")
             continue
         inner = _inline(child, depth + 1)
@@ -85,7 +99,8 @@ def _inline(el, depth: int = 0) -> str:
             inner = f" {inner} "
         parts.append(inner)
         parts.append(child.tail or "")
-    return re.sub(r"\s+", " ", "".join(parts))
+    text = "".join(parts)
+    return re.sub(r"\s+", " ", text) if depth == 0 else text
 
 
 def _inline_one(child, depth: int) -> str:
@@ -127,6 +142,8 @@ def _table(el) -> str:
 
 
 def _list(el, out: _Out, depth: int, level: int) -> None:
+    """Items as "-" or "1." lines; inside an item, text is one line, while nested lists, code blocks
+    and tables keep their own blocks, indented under the item, in their order."""
     start = el.get("start") or ""
     n = int(start) - 1 if start.isdigit() and len(start) < 7 else 0
     indent = "    " * min(level, MAX_LIST_DEPTH)
@@ -137,17 +154,48 @@ def _list(el, out: _Out, depth: int, level: int) -> None:
             continue
         n += 1
         marker = f"{n}." if _tag(el) == "ol" else "-"
-        nested = [c for c in li if _tag(c) in LISTS]
-        parts = [li.text or ""]
+        first = True
+        run = [li.text or ""]
+
+        def flush() -> None:
+            nonlocal first
+            text = re.sub(r"\s+", " ", "".join(run)).strip()
+            run.clear()
+            if text:
+                out.add(f"{indent}{marker} {text}" if first else f"{indent}    {text}")
+                first = False
+
         for c in li:
-            if c not in nested and _tag(c) and _tag(c) not in SKIP and not _hidden(c):
-                parts.append(f" {_inline(c, depth + 1)} " if _is_block(c) else _inline_one(c, depth + 1))
-            parts.append(c.tail or "")
-        text = re.sub(r"\s+", " ", "".join(parts)).strip()
-        if text:
-            out.add(f"{indent}{marker} {text}")
-        for c in nested:
-            _list(c, out, depth + 1, level + 1)
+            t = _tag(c)
+            if not t or t in SKIP or _hidden(c) or _anchor(c):
+                run.append(c.tail or "")
+                continue
+            if t in LISTS or t in ("pre", "table"):
+                if first and not re.sub(r"\s+", "", "".join(run)):
+                    out.add(f"{indent}{marker}")  # an item that starts with a block still gets its marker
+                    first = False
+                flush()
+                if t in LISTS:
+                    _list(c, out, depth + 1, level + 1)
+                else:
+                    sub = _Out(out.left)
+                    _blocks(_wrap(c), sub, depth + 1, True)
+                    for block in sub.parts:
+                        out.add("\n".join(f"{indent}    {line}" for line in block.split("\n")))
+                run.append(c.tail or "")
+                continue
+            run.append(f" {_inline(c, depth + 1)} " if _is_block(c) else _inline_one(c, depth + 1))
+            run.append(c.tail or "")
+        flush()
+
+
+def _wrap(el):
+    """A copy of `el` inside a <div>, to read it as a block on its own."""
+    div = lxml_html.Element("div")
+    copy = el.__copy__()
+    copy.tail = None
+    div.append(copy)
+    return div
 
 
 def _blocks(el, out: _Out, depth: int = 0, content: bool = False) -> None:
@@ -160,11 +208,11 @@ def _blocks(el, out: _Out, depth: int = 0, content: bool = False) -> None:
         text = re.sub(r"\s+", " ", "".join(run)).strip()
         run.clear()
         if text:
-            out.add(("> " if _tag(el) == "blockquote" else "") + text)
+            out.add(text)
 
     for child in el:
         tag = _tag(child)
-        if not tag or tag in SKIP or _hidden(child) or (tag in CHROME and not content):
+        if not tag or tag in SKIP or _hidden(child) or _anchor(child) or (tag in CHROME and not content):
             run.append(child.tail or "")
             continue
         if not _is_block(child):
@@ -173,7 +221,7 @@ def _blocks(el, out: _Out, depth: int = 0, content: bool = False) -> None:
             continue
         flush()
         if re.fullmatch(r"h[1-6]", tag):
-            text = _inline(child).strip()
+            text = _clean_heading(_inline(child))
             if text:
                 out.add(f"{'#' * int(tag[1])} {text}")
         elif tag in LISTS:
@@ -191,6 +239,11 @@ def _blocks(el, out: _Out, depth: int = 0, content: bool = False) -> None:
                 out.add(md)
         elif tag == "hr":
             out.add("---")
+        elif tag == "blockquote":
+            sub = _Out(out.left)
+            _blocks(child, sub, depth + 1, content)
+            for block in sub.parts:
+                out.add("\n".join(f"> {line}" if line.strip() else ">" for line in block.split("\n")))
         else:
             _blocks(child, out, depth + 1, content or tag in ("main", "article"))
         run.append(child.tail or "")
@@ -212,7 +265,8 @@ def to_markdown(data: bytes, content_type: str | None = None, max_chars: int = 5
         except UnicodeDecodeError:
             pass
     try:
-        doc = lxml_html.document_fromstring(data, parser=lxml_html.HTMLParser(encoding=charset) if charset else None)
+        # huge_tree: a long text node is fine here, the input is already capped (20 MB)
+        doc = lxml_html.document_fromstring(data, parser=lxml_html.HTMLParser(encoding=charset, huge_tree=True))
     except (ValueError, LookupError, etree.ParserError):
         raise ValueError("the page could not be read") from None
     title_el = doc.find(".//title")

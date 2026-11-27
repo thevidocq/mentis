@@ -74,7 +74,10 @@ def check_url(url: str) -> str:
         raise LinkError("The address must start with https://.")
     if u.username is not None or u.password is not None or "\\" in url:
         raise LinkError("Addresses with user names or backslashes are refused.")
-    return urlunsplit((u.scheme.lower(), u.netloc, u.path or "/", u.query, ""))
+    clean = urlunsplit((u.scheme.lower(), u.netloc, u.path or "/", u.query, ""))
+    if len(clean) > MAX_URL:
+        raise LinkError("Enter an address of at most 2000 characters.")
+    return clean
 
 
 def fetch_url(url: str) -> str:
@@ -201,13 +204,15 @@ def add(db: Session, tenant: Tenant, url: str, name: str | None, check: str, use
         raise LinkError("Choose how often to check the page.")
     url = check_url(url)
     fetched = fetch(url)
-    assert fetched is not None  # no conditional headers on a first read
+    if fetched is None:  # a 304 to a request without conditional headers
+        raise LinkError("The site answered HTTP 304 without content.")
     try:
         doc_name = safe_filename(name.strip()) if name and name.strip() else default_name(url, fetched)
     except UploadError as e:
         raise LinkError(str(e)) from None
-    if "." not in doc_name or doc_name.rsplit(".", 1)[1].lower() != fetched.file_type:
-        doc_name = f"{doc_name.rsplit('.', 1)[0] if '.' in doc_name else doc_name}.{fetched.file_type}"
+    if "." not in doc_name or file_type_of(doc_name) != fetched.file_type:
+        known = "." in doc_name and file_type_of(doc_name) in MIME  # "Runbook.v2" keeps its ".v2"
+        doc_name = f"{doc_name.rsplit('.', 1)[0] if known else doc_name}.{fetched.file_type}"
     if db.scalar(select(Document.id).where(Document.tenant_id == tenant.id, Document.name_key == doc_name.lower())):
         raise LinkError(f"A document named {doc_name} already exists: choose another name.")
     sha = hashlib.sha256(fetched.data).hexdigest()
@@ -229,12 +234,28 @@ def sync(db: Session, doc: Document, user_id=None) -> str:
     tenant = db.get(Tenant, doc.tenant_id)
     if tenant is None or not doc.source_url:
         return "error"
-    # One check at a time per document (the worker and a "Check now" click): lock the row, then read.
-    db.execute(select(Document.id).where(Document.id == doc.id).with_for_update())
+    latest = _latest(db, doc)
+    url, etag, modified = doc.source_url, doc.source_etag if latest else None, doc.source_modified if latest else None
+    db.rollback()  # no transaction (and no lock) held during the network read
+    try:
+        fetched = fetch(url, etag=etag, modified=modified)
+    except LinkError as e:
+        fetched, failure = None, e
+    else:
+        failure = None
+    # One check at a time per document (the worker and a "Check now" click): lock the row, then compare
+    # with the newest version, which another check may have just added.
+    if db.execute(select(Document.id).where(Document.id == doc.id).with_for_update()).first() is None:
+        db.rollback()
+        return "unchanged"  # deleted meanwhile
     db.refresh(doc)
+    if doc.source_url != url:
+        db.commit()
+        return "unchanged"
     latest = _latest(db, doc)
     try:
-        fetched = fetch(doc.source_url, etag=doc.source_etag if latest else None, modified=doc.source_modified if latest else None)
+        if failure is not None:
+            raise failure
         if fetched is None or (latest is not None and hashlib.sha256(fetched.data).hexdigest() == latest.sha256):
             result = "unchanged"
         else:

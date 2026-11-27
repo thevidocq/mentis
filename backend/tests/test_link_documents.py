@@ -136,6 +136,9 @@ def test_unreadable_pages(super_admin, site):
     assert "moved" in _add(super_admin, t["id"], "https://docs.example.com/moved").json()["detail"]
     site.pages["/bin"] = (200, "application/zip", b"PK\x03\x04", {})
     assert "cannot be read" in _add(super_admin, t["id"], "https://docs.example.com/bin").json()["detail"]
+    site.pages["/gz"] = (200, "text/html", b"not gzip at all", {"content-encoding": "gzip"})
+    r = _add(super_admin, t["id"], "https://docs.example.com/gz")
+    assert r.status_code == 422 and "compressed" in r.json()["detail"]
 
 
 def test_same_content_and_same_name_refused(super_admin, site):
@@ -213,6 +216,12 @@ def test_page_conversion():
     assert md == "# Title\n\nOne\n\nTwo"
     assert to_markdown("<p>caf\u00e9</p>".encode(), "text/html")[0] == "caf\u00e9"
     assert to_markdown("<p>caf\u00e9</p>".encode("latin-1"), "text/html; charset=iso-8859-1")[0] == "caf\u00e9"
+    md, _ = to_markdown(b"<ol><li><p>Install:</p><pre><code>pip install x\npip install y</code></pre></li></ol>")
+    assert md == "1. Install:\n\n    ```\n    pip install x\n    pip install y\n    ```"
+    assert to_markdown(b"<ul><li>a<ul><li>b</li></ul>tail</li></ul>")[0] == "- a\n\n    - b\n\n    tail"
+    md, _ = to_markdown('<h2>Setup<a class="headerlink" href="#s">\u00b6</a></h2><p>x</p>'.encode(), "text/html")
+    assert md == "## Setup\n\nx"
+    assert to_markdown(b"<blockquote><p>one</p><p>two</p></blockquote>")[0] == "> one\n\n> two"
 
 
 def test_page_conversion_is_bounded():
