@@ -1,4 +1,5 @@
-"""Maintenance in the worker: the daily retention purge and recovery of stuck document versions.
+"""Maintenance in the worker: the daily retention purge, recovery of stuck document versions and the
+checks of documentation read from links.
 
 Every worker replica runs this loop; a Redis lock makes sure only one purge runs per day.
 """
@@ -50,11 +51,33 @@ def run_recovery_once() -> dict | None:
         db.close()
 
 
+LINKS_LOCK = "mentis:maintenance:links"
+
+
+def run_link_checks_once() -> dict | None:
+    """Links whose check is due (every 10 minutes, one replica); a few per round to stay gentle."""
+    from app.services import link_sources
+
+    if not redis_connection().set(LINKS_LOCK, "1", nx=True, ex=540):
+        return None
+    db = next(get_db())
+    try:
+        counts = {"new_version": 0, "unchanged": 0, "error": 0}
+        for doc in link_sources.due(db):
+            counts[link_sources.sync(db, doc)] += 1
+        if counts["new_version"] or counts["error"]:
+            _log.info("link checks: %s", counts)
+        return counts
+    finally:
+        db.close()
+
+
 def _loop() -> None:
     time.sleep(60)  # let the worker settle after start
     tick = 0
     while True:
-        for job, name in ((run_recovery_once, "version recovery"), (run_purge_once, "retention purge")):
+        for job, name in ((run_recovery_once, "version recovery"), (run_link_checks_once, "link checks"),
+                          (run_purge_once, "retention purge")):
             if job is run_purge_once and tick % 6:
                 continue  # the purge is checked every hour, recovery every 10 minutes
             try:

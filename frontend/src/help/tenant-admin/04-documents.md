@@ -14,7 +14,7 @@ On a phone the list fills the screen; tap a document to open it, **‹** to go b
 
 ## Upload
 
-Select **Upload** above the list, or drop files on the list. You can upload several files at once; a single new document opens when it is uploaded.
+Select **Upload files** above the list, or drop files on the list. You can upload several files at once; a single new document opens when it is uploaded.
 
 Accepted: **PDF, DOCX, PPTX, XLSX, Markdown (.md, .markdown), JSON, CSV, TSV, YAML (.yaml, .yml) and pictures (PNG, .jpg, .jpeg)**, up to 50 MB each. Empty files are refused.
 
@@ -32,15 +32,34 @@ Refused, with the reason shown:
 
 A PDF that only restricts printing or copying is accepted and read normally. A PDF that needs a password to open is stored but ends as **Failed** ("The file is password-protected"): remove the password and upload it again.
 
+## Add from link
+
+**Add from link** (above the list) adds documentation published on a site: a wiki or documentation page, a Markdown or text file, a PDF, JSON, YAML or CSV, or a file on GitHub (paste the normal GitHub link of the file: Mentis reads its raw version).
+
+1. Paste the **address** (https).
+2. Optionally give a **name** (otherwise the page title or the file name).
+3. Choose how often to **check for changes**: every 6 hours, every day (default), every week, or only with **Check now**.
+
+Mentis reads the page at once: web pages are converted to text (menus, headers, footers and scripts are left out), then the document is read and indexed like an upload, with the same approval if your customer requires it.
+
+The document shows **from link** next to its name and, above the tabs, the **Read from a link** panel: the address, **Check for changes** (change it there at any time), **Last check** with its result, **Next check**, and **Check now**.
+
+- **The page changed**: a new version is created (note *Page changed*), approved like an upload when approval is on.
+- **No change**: only *Last check* is updated; no new version.
+- **The page cannot be read** (removed, moved, error, sign-in required): the version in use stays, the panel shows the reason in red and the document appears in **Needs attention** (*Link not read*) until a check succeeds.
+
+What cannot be read: pages that need a sign-in, and pages that show their text only through JavaScript (single-page apps). Only public addresses are read; private network addresses only if a super-admin allowed them (**Integrations → Private network addresses**). A linked document gets its versions from the page only: **Upload a new version** is not offered. Deleting the document stops the checks.
+
 ## Actions
 
-At the top of the document:
+At the top of the document, under its name, one line sums up the version on screen: type and size, pages or sections, how it was read (native text or OCR), when it was uploaded or read from its link, and its note. Then:
 
 - **Approve vN** / **Reject**: when the latest version waits for approval.
 - **Retry vN**: when the latest version failed (fix the cause first, e.g. the embedding service).
-- **New version**: upload a file as the next version of **this** document, whatever its file name (same file type).
 - Download icon: a menu with the formats of the version on screen: **Original** (the file as uploaded), **Markdown** (the text Mentis read, page by page, with a header: customer, version, file, date, SHA-256) and **JSON** (the same text plus the passages as indexed, with page and section: to import the documentation into another system). Markdown and JSON are available once the version has been read.
-- **⋯**: **Rename**, **Versions and restore**, **Delete document**.
+- **⋯**: **Upload a new version** (a file as the next version of **this** document, whatever its file name, same file type; not for documents read from a link), **Rename**, **Versions and restore**, **Delete document**.
+
+Warnings about how the file was read (for example *only the first 5,000 rows were read*) appear under the header. When you view an older version, a note next to the tabs takes you back to the version in use.
 
 ## Download all
 

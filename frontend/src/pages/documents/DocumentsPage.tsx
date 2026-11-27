@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { api, apiUpload, errorText } from "../../api/client";
 import type { DocSummary } from "../../api/types";
 import { Icon } from "../../components/Icon";
+import { AddLinkDialog } from "./AddLinkDialog";
 import { DocDetail } from "./DocDetail";
 import { DownloadMenu } from "./DownloadMenu";
 import { DocList } from "./DocList";
@@ -29,6 +30,7 @@ export function DocumentsPage({ tenantId, title, scopeName = "this customer", ge
   const [loadError, setLoadError] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [params, setParams] = useSearchParams();
   const input = useRef<HTMLInputElement>(null);
 
@@ -110,13 +112,16 @@ export function DocumentsPage({ tenantId, title, scopeName = "this customer", ge
             <DownloadMenu label="All" compact title="Download every document in use (ZIP)" onError={(m) => setExportError(m)}
               paths={{ original: `${base}/export?format=original`, md: `${base}/export?format=md`, json: `${base}/export?format=json` }} />
           )}
-          <button className="btn btn-primary" onClick={() => input.current?.click()}><Icon name="plus" />Upload</button>
           <input ref={input} type="file" accept={ACCEPT} multiple hidden onChange={(e) => {
             const files = e.target.files ? Array.from(e.target.files) : [];
             e.target.value = "";
             if (files.length) void upload(files);
           }} />
         </header>
+        <div className="doc-add">
+          <button className="btn btn-primary" onClick={() => input.current?.click()}><Icon name="upload" />Upload files</button>
+          <button className="btn" onClick={() => setAdding(true)}><Icon name="link" />Add from link</button>
+        </div>
         {general && (
           <div className="doc-note" role="note" title="These documents are used in the answers of every customer. Never put customer names, contacts, systems or other customer context here. Every new version needs approval.">
             <Icon name="book" size={14} /><span><strong>General knowledge only</strong>: playbooks and best practices for every customer, never customer context. New versions need approval.</span>
@@ -136,7 +141,7 @@ export function DocumentsPage({ tenantId, title, scopeName = "this customer", ge
         {loadError && <div className="error doc-error" role="alert">{loadError}</div>}
         {exportError && <div className="error doc-error" role="alert">{exportError}</div>}
         <DocList docs={docs ?? []} selected={doc?.id ?? null} onSelect={(id) => select(id)} onOverview={() => select(null)} />
-        <div className="doc-drop-hint muted small">Drop files here · PDF, Office, MD, JSON, CSV, YAML, PNG, JPG · the same file name adds a new version</div>
+        <div className="doc-drop-hint muted small">Drop files here · PDF, Office, MD, JSON, CSV, YAML, PNG, JPG · the same name adds a new version</div>
       </aside>
       {doc ? (
         <DocDetail key={doc.id} base={base} doc={doc} refreshKey={refreshKey} onChanged={() => void load()}
@@ -149,11 +154,23 @@ export function DocumentsPage({ tenantId, title, scopeName = "this customer", ge
           {docs && docs.length === 0 && (
             <div className="doc-pad doc-notready">
               <Icon name="upload" size={26} />
-              <p><strong>Upload the first document</strong><br /><span className="muted">PDF, Word, Excel, PowerPoint, Markdown, JSON, CSV, YAML or pictures: procedures, escalation matrices, runbooks, detection rules. Macro-enabled or password-protected files are refused.</span></p>
-              <button className="btn btn-primary" onClick={() => input.current?.click()}><Icon name="plus" />Upload</button>
+              <p><strong>Add the first document</strong><br /><span className="muted">PDF, Word, Excel, PowerPoint, Markdown, JSON, CSV, YAML or pictures: procedures, escalation matrices, runbooks, detection rules. Macro-enabled or password-protected files are refused.</span></p>
+              <div className="row" style={{ gap: 8, justifyContent: "center" }}>
+                <button className="btn btn-primary" onClick={() => input.current?.click()}><Icon name="upload" />Upload files</button>
+                <button className="btn" onClick={() => setAdding(true)}><Icon name="link" />Add from link</button>
+              </div>
             </div>
           )}
         </section>
+      )}
+      {adding && (
+        <AddLinkDialog base={base} onClose={() => setAdding(false)} onAdded={async (versionId) => {
+          setAdding(false);
+          await load();
+          const list = await api<DocSummary[]>(base).catch(() => null);
+          const d = list?.find((x) => x.latest.id === versionId);
+          if (d) select(d.id);
+        }} />
       )}
     </div>
   );

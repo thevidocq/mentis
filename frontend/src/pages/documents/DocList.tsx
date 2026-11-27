@@ -11,6 +11,7 @@ export function attention(d: DocSummary): { label: string; tone: "fail" | "warn"
   if (v.status === "failed") return { label: "Failed", tone: "fail" };
   if (isBusy(v)) return { label: "Processing", tone: "run" };
   if (v.approval === "pending") return { label: "To approve", tone: "warn" };
+  if (d.link?.status === "error") return { label: "Link not read", tone: "fail" };
   return null;
 }
 
@@ -64,7 +65,7 @@ export function DocList({ docs, selected, onSelect, onOverview }: { docs: DocSum
               const a = attention(d);
               return (
                 <button key={d.id} className={`doc-item${d.id === selected ? " on" : ""}`} aria-current={d.id === selected} onClick={() => onSelect(d.id)}>
-                  <Icon name="file" />
+                  <Icon name={d.link ? "link" : "file"} />
                   <span className="doc-item-text">
                     <span className="doc-item-name">{d.name}</span>
                     <span className="doc-item-meta">{meta(d)}</span>

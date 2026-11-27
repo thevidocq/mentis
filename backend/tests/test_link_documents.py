@@ -1,0 +1,174 @@
+"""Documentation added from a link: first read, checks for changes, errors, safety."""
+
+from datetime import timedelta
+
+import httpx
+import pytest
+
+from app.connectors import http as connector_http
+from tests import samples
+from tests.conftest import run_jobs
+
+PAGE = b"""<html><head><title>Apache runbook</title></head><body><nav>Menu</nav>
+<main><h1>Apache CVE-2021-41773</h1><p>Call <b>Mario Rossi</b>, 085 123 4567.</p></main></body></html>"""
+
+
+class Site:
+    """A fake public web site: path -> (status, content type, body, headers)."""
+
+    def __init__(self):
+        self.pages: dict[str, tuple] = {}
+        self.seen: list[httpx.Request] = []
+
+    def handle(self, request: httpx.Request) -> httpx.Response:
+        self.seen.append(request)
+        status, ctype, body, headers = self.pages.get(request.url.path, (404, "text/plain", b"", {}))
+        if request.headers.get("if-none-match") and request.headers["if-none-match"] == headers.get("etag"):
+            return httpx.Response(304)
+        return httpx.Response(status, headers={"content-type": ctype, **headers}, content=body)
+
+
+@pytest.fixture
+def site():
+    s = Site()
+    connector_http.set_resolver(lambda host: ["203.0.113.10"])  # a public address
+    connector_http.set_transport(httpx.MockTransport(s.handle))
+    yield s
+    connector_http.set_transport(None)
+    connector_http.set_resolver(None)
+
+
+def _tenant(c, name="Alfa"):
+    return c.post("/api/tenants", json={"name": name}).json()
+
+
+def _add(c, tid, url, **kw):
+    return c.post(f"/api/tenants/{tid}/documents/link", json={"url": url, **kw})
+
+
+def test_page_is_read_converted_and_versioned(super_admin, site):
+    t = _tenant(super_admin)
+    site.pages["/runbooks/apache"] = (200, "text/html; charset=utf-8", PAGE, {"etag": '"v1"'})
+    r = _add(super_admin, t["id"], "https://docs.example.com/runbooks/apache")
+    assert r.status_code == 201, r.text
+    assert r.json()["file_type"] == "md" and r.json()["note"] == "Added from link"
+    run_jobs(super_admin)
+    docs = super_admin.get(f"/api/tenants/{t['id']}/documents").json()
+    assert [d["name"] for d in docs] == ["Apache runbook.md"]
+    link = docs[0]["link"]
+    assert link["url"] == "https://docs.example.com/runbooks/apache" and link["check"] == "1d" and link["status"] == "new_version"
+    pages = super_admin.get(f"/api/tenants/{t['id']}/documents/versions/{r.json()['id']}/pages").json()
+    text = "\n".join(p["text"] for p in pages)
+    assert "Mario Rossi" in text and "Menu" not in text
+
+    base = f"/api/tenants/{t['id']}/documents/{docs[0]['id']}"
+    # Same content (the server says 304): no new version.
+    d = super_admin.post(f"{base}/link/check").json()
+    assert d["link"]["status"] == "unchanged" and len(d["versions"]) == 1
+    assert site.seen[-1].headers["if-none-match"] == '"v1"'
+    # Changed page: a new version.
+    site.pages["/runbooks/apache"] = (200, "text/html", PAGE.replace(b"085 123 4567", b"085 999 0000"), {"etag": '"v2"'})
+    d = super_admin.post(f"{base}/link/check").json()
+    assert d["link"]["status"] == "new_version" and [v["version"] for v in d["versions"]] == [2, 1]
+    assert d["versions"][0]["note"] == "Page changed"
+    # The page disappears: the version in use stays, the reason is shown.
+    site.pages.pop("/runbooks/apache")
+    d = super_admin.post(f"{base}/link/check").json()
+    assert d["link"]["status"] == "error" and "404" in d["link"]["error"] and len(d["versions"]) == 2
+    # Schedule.
+    assert super_admin.patch(f"{base}/link", json={"check": "7d"}).json()["link"]["check"] == "7d"
+    assert super_admin.patch(f"{base}/link", json={"check": "hourly"}).status_code == 422
+    # A linked document gets its versions from the link only.
+    files = {"file": ("Apache runbook.md", b"# other\n\ntext", "application/octet-stream")}
+    assert super_admin.post(f"/api/tenants/{t['id']}/documents", files=files,
+                            data={"document_id": docs[0]["id"]}).status_code == 422
+
+
+def test_github_file_is_read_from_raw(super_admin, site):
+    t = _tenant(super_admin)
+    site.pages["/acme/runbooks/main/web/apache.md"] = (200, "text/plain; charset=utf-8", b"# Apache\n\nIsolate the host.\n", {})
+    r = _add(super_admin, t["id"], "https://github.com/acme/runbooks/blob/main/web/apache.md", check="manual")
+    assert r.status_code == 201, r.text
+    assert site.seen[-1].url.host == "raw.githubusercontent.com"
+    assert r.json()["original_filename"] == "apache.md"
+
+
+def test_pdf_link(super_admin, site):
+    t = _tenant(super_admin)
+    site.pages["/files/escalation.pdf"] = (200, "application/pdf", samples.native_pdf(), {})
+    r = _add(super_admin, t["id"], "https://docs.example.com/files/escalation.pdf", name="Escalation")
+    assert r.status_code == 201 and r.json()["file_type"] == "pdf" and r.json()["original_filename"] == "Escalation.pdf"
+
+
+@pytest.mark.parametrize("url,reason", [
+    ("http://docs.example.com/a", "https"),
+    ("https://user:pw@docs.example.com/a", "user names"),
+    ("ftp://docs.example.com/a", "https"),
+])
+def test_bad_addresses_refused(super_admin, site, url, reason):
+    t = _tenant(super_admin)
+    r = _add(super_admin, t["id"], url)
+    assert r.status_code == 422 and reason in r.json()["detail"]
+
+
+def test_private_and_internal_addresses_refused(super_admin, site):
+    t = _tenant(super_admin)
+    for ip in ("10.0.0.5", "169.254.169.254", "127.0.0.1"):
+        connector_http.set_resolver(lambda host, ip=ip: [ip])
+        r = _add(super_admin, t["id"], "https://intranet.example.com/page")
+        assert r.status_code == 422 and "address points to" in r.json()["detail"], ip
+    assert not site.seen  # nothing was requested
+
+
+def test_unreadable_pages(super_admin, site):
+    t = _tenant(super_admin)
+    site.pages["/app"] = (200, "text/html", b"<html><body><div id=root></div><script>x()</script></body></html>", {})
+    assert "JavaScript" in _add(super_admin, t["id"], "https://docs.example.com/app").json()["detail"]
+    site.pages["/login"] = (403, "text/html", b"no", {})
+    assert "sign-in" in _add(super_admin, t["id"], "https://docs.example.com/login").json()["detail"]
+    site.pages["/moved"] = (301, "text/html", b"", {"location": "https://elsewhere.example.com/x"})
+    assert "moved" in _add(super_admin, t["id"], "https://docs.example.com/moved").json()["detail"]
+    site.pages["/bin"] = (200, "application/zip", b"PK\x03\x04", {})
+    assert "cannot be read" in _add(super_admin, t["id"], "https://docs.example.com/bin").json()["detail"]
+
+
+def test_same_content_and_same_name_refused(super_admin, site):
+    t = _tenant(super_admin)
+    site.pages["/a"] = (200, "text/markdown", b"# Escalation\n\nCall Mario.\n", {})
+    site.pages["/b"] = (200, "text/markdown", b"# Escalation\n\nCall Mario.\n", {})
+    assert _add(super_admin, t["id"], "https://docs.example.com/a", name="Escalation.md").status_code == 201
+    r = _add(super_admin, t["id"], "https://docs.example.com/b", name="Other.md")
+    assert r.status_code == 422 and "identical to Escalation.md v1" in r.json()["detail"]
+    # An upload with the linked document's name cannot become a manual version of it.
+    files = {"file": ("Escalation.md", b"# Manual\n\nedit\n", "application/octet-stream")}
+    assert super_admin.post(f"/api/tenants/{t['id']}/documents", files=files).status_code == 422
+    site.pages["/c"] = (200, "text/markdown", b"# Something else\n", {})
+    r = _add(super_admin, t["id"], "https://docs.example.com/c", name="Escalation.md")
+    assert r.status_code == 422 and "already exists" in r.json()["detail"]
+
+
+def test_due_checks_run_in_maintenance(super_admin, site):
+    from app.core import db as db_module
+    from app.models import Document
+    from app.models.base import utcnow
+    from app.services import link_sources
+
+    t = _tenant(super_admin)
+    site.pages["/p"] = (200, "text/markdown", b"# P\n\nOne.\n", {})
+    doc_id = None
+    for check in ("6h", "manual"):
+        r = _add(super_admin, t["id"], "https://docs.example.com/p" if check == "6h" else "https://docs.example.com/p?m=1",
+                 name=f"{check}.md", check=check)
+        if check == "manual":
+            assert r.status_code == 422  # same content as the first one
+        else:
+            doc_id = super_admin.get(f"/api/tenants/{t['id']}/documents").json()[0]["id"]
+    db = next(db_module.get_db())
+    assert link_sources.due(db) == []  # just checked
+    doc = db.get(Document, __import__("uuid").UUID(doc_id))
+    doc.source_checked_at = utcnow() - timedelta(hours=7)
+    db.commit()
+    assert [d.name for d in link_sources.due(db)] == ["6h.md"]
+    site.pages["/p"] = (200, "text/markdown", b"# P\n\nTwo.\n", {})
+    assert link_sources.sync(db, link_sources.due(db)[0]) == "new_version"
+    assert link_sources.due(db) == []
