@@ -39,7 +39,7 @@ export function LinkPanel({ base, docId, link, onChanged }: { base: string; docI
         <div className="doc-link-text">
           <span className="doc-link-label">Read from a link</span>
           <a className="doc-link-url" href={link.url} target="_blank" rel="noopener noreferrer nofollow" title={link.url}>
-            {link.url.replace(/^https?:\/\//, "")}<Icon name="external" size={12} />
+            <span>{link.url.replace(/^https?:\/\//, "")}</span><Icon name="external" size={12} />
           </a>
         </div>
       </div>

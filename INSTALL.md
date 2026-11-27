@@ -122,7 +122,7 @@ Browsers accept the secure session cookie on `http://127.0.0.1` and `http://loca
 
 ## Document processing
 
-Uploaded documents are processed by the `worker` container, which also re-reads documents added from a link on their schedule (it needs outbound HTTPS to the sites they come from; a site that cannot be reached shows *Link not read* on the document). If uploads stay **Queued**, check it:
+Uploaded documents are processed by the `worker` container, which also re-reads documents added from a link on their schedule (the `worker`, and the `api` for **Add from link** and **Check now**, need outbound HTTPS to the sites they come from; a site that cannot be reached shows *Link not read* on the document). If uploads stay **Queued**, check it:
 
 ```bash
 docker compose ps worker

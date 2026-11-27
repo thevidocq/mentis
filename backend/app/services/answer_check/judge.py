@@ -79,8 +79,12 @@ def judge(cfg: dict, units: list[Unit], passages: dict[int, str], timeout: float
         for i, u in todo:
             from app.services.prompts import data_text
 
+            left = t0 + TOTAL_SECONDS - time.monotonic()
+            if left < 5:
+                raise llm.LLMError(f"{cfg.get('name')}: the check took longer than {TOTAL_SECONDS} s")
             doc = "\n\n".join(data_text(passages[n]) for n in (u.cites or u.scope) if n in passages)
-            reply = llm.call_provider(cfg, "", [llm.Turn("user", f"Document: {doc}\nClaim: {u.plain}")], timeout=timeout)
+            reply = llm.call_provider(cfg, "", [llm.Turn("user", f"Document: {doc}\nClaim: {u.plain}")],
+                                      timeout=min(timeout, left))
             tin, tout = tin + (reply.input_tokens or 0), tout + (reply.output_tokens or 0)
             if not reply.text.strip().lower().startswith("yes"):
                 out.append({"unit": i, "reason": "Not supported by the cited passage."})

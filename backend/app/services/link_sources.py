@@ -10,8 +10,8 @@ What is read: web pages (converted to Markdown, content only), Markdown and text
 PDF, JSON, YAML, CSV. A GitHub file link (github.com/<owner>/<repo>/blob/<ref>/<path>) is read from
 its raw version. Pages that need JavaScript to show their text cannot be read.
 
-Requests go through the same guarded client as integrations: HTTPS only, public addresses only
-unless the super-admin allows private networks, the address resolved once and pinned, no redirects,
+Requests go through the same guarded client as integrations: HTTPS and public addresses only
+(whatever the integrations' private-network setting), the address resolved once and pinned, no redirects,
 a size cap after decompression and a total deadline. Nothing is sent but a GET with conditional headers.
 """
 

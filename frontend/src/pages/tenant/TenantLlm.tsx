@@ -14,7 +14,7 @@ interface Choice {
 }
 
 const MODES: [CheckMode, string, string][] = [
-  ["warn", "Show a warning", "The analyst sees the answer with what may not match the sources underlined and marked ⚠."],
+  ["warn", "Show a warning", "The analyst sees the answer with what may not match the sources underlined and a small warning sign after it."],
   ["hide", "Hide the answer", "An answer that does not match the sources is written again once, then replaced by \"Not found\"."],
   ["off", "Don't check with a model", "Only level 1 runs: contacts, times and codes are still compared with the sources."],
 ];

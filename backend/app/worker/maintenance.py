@@ -52,6 +52,7 @@ def run_recovery_once() -> dict | None:
 
 
 LINKS_LOCK = "mentis:maintenance:links"
+ROUND_SECONDS = 400  # no new check starts after this; one check takes at most 60 s, the lock lives 540 s
 
 
 def run_link_checks_once() -> dict | None:
@@ -61,9 +62,12 @@ def run_link_checks_once() -> dict | None:
     if not redis_connection().set(LINKS_LOCK, "1", nx=True, ex=540):
         return None
     db = next(get_db())
+    until = time.monotonic() + ROUND_SECONDS
     try:
         counts = {"new_version": 0, "unchanged": 0, "error": 0}
         for doc in link_sources.due(db):
+            if time.monotonic() > until:  # the rest waits for the next round, inside the lock's life
+                break
             try:
                 counts[link_sources.sync(db, doc)] += 1
             except Exception:  # noqa: BLE001 - one broken link must not stop the others

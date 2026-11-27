@@ -59,6 +59,12 @@ def level1(content: str, citations: list[dict], passages: dict[int, str]) -> lis
             continue
         own = {n: passages[n] for n in u.cites if n in passages}
         issues += values.check(u.raw, own, list(own.values()))
+    # Table rows are not statements, but their values (a phone, an address) must still come from the
+    # passages: the row's own citations, else any passage the answer cites.
+    cited_all = {c for u in units_mod.split(content) for c in u.cites} | {c for _, cs in units_mod.table_rows(content) for c in cs}
+    for row, cites in units_mod.table_rows(content):
+        scope = {n: passages[n] for n in (cites or cited_all) if n in passages}
+        issues += values.check(units_mod.plain(row), scope, list(scope.values()))
     out, seen = [], set()
     for i in issues:
         key = (i["kind"], i["text"])

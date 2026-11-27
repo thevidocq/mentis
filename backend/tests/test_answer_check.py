@@ -330,3 +330,16 @@ def test_a_crash_around_the_check_keeps_the_answer(super_admin, fake_llm, monkey
     monkeypatch.setattr(chat_routes.check_runner, "before_save", boom)
     ex, msg = _ask(an, alfa["id"])
     assert ex["answer"]["status"] == "ok" and msg["check"]["level2"] == "unavailable"
+
+
+def test_sections_do_not_lend_citations_code_is_not_text_and_tables_are_checked():
+    from app.services.answer_check import level1, units
+
+    passages = {1: "Isolate hosts. Call 06 1111 2222."}
+    a = "## Containment [1]\n- Isolate the host from the network\n## Communication\n- Inform the customer's CISO by phone right away"
+    assert level1(a, [{"n": 1}], passages) == [{"level": [1], "kind": "uncited", "text": "Inform the customer's CISO by phone right away"}]
+    a = "## Containment [1]\n### Network\n- Isolate the host from the network now"
+    assert [u.cites for u in units.split(a)] == [[1], [1]]  # a sub-heading still hangs from its section
+    assert level1("Steps [1]:\n```\n# list sessions\nquser /server:10.0.0.1\n```", [{"n": 1}], passages) == []
+    issues = level1("| SOC | 06 9999 0000 |\n|---|---|\nThe answer above [1].", [{"n": 1}], passages)
+    assert [(i["kind"], i["text"]) for i in issues] == [("value", "06 9999 0000")]

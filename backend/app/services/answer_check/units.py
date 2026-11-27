@@ -46,10 +46,22 @@ class _Line:
     cites: list[int]
 
 
+_FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
+
+
 def _lines(answer: str) -> list[_Line]:
     out = []
+    fence = None  # the fence of the code block we are in: its lines are code, not statements
     for line in answer.splitlines():
         if not line.strip():
+            continue
+        m = _FENCE.match(line)
+        if fence is not None or m:
+            if fence is None:
+                fence = m.group(1)
+            elif m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence) and not line.strip()[len(m.group(1)):].strip():
+                fence = None
+            out.append(_Line(line.strip(), 0, "skip", []))
             continue
         indent = len(line) - len(line.lstrip())
         text = _LIST.sub("", line).strip()
@@ -71,6 +83,12 @@ def _parent(lines: list[_Line], i: int) -> int | None:
     cur = lines[i]
     for j in range(i - 1, -1, -1):
         r = lines[j]
+        if cur.kind == "heading":
+            # A heading hangs only from a higher-level "#" heading, never from the previous section.
+            if r.kind == "heading" and cur.text.startswith("#") and r.text.startswith("#") \
+                    and _level(r.text) < _level(cur.text):
+                return j
+            continue
         if r.kind == "heading":
             return j
         if r.kind == "skip":
@@ -83,6 +101,16 @@ def _parent(lines: list[_Line], i: int) -> int | None:
             return j
         # a sibling: keep looking up for the common parent
     return None
+
+
+def _level(text: str) -> int:
+    return len(text) - len(text.lstrip("#"))
+
+
+def table_rows(answer: str) -> list[tuple[str, list[int]]]:
+    """Table rows outside code blocks (not the |---| separator), with their citations."""
+    return [(line.text, line.cites) for line in _lines(answer)
+            if line.kind == "skip" and line.text.startswith("|") and not re.fullmatch(r"[|:\s-]+", line.text)]
 
 
 def split(answer: str) -> list[Unit]:

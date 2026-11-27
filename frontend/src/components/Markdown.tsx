@@ -37,13 +37,16 @@ function marked(text: string, key: string, state: { open: boolean; flag?: Flag }
 
 const PRIVATE = /[\uE000-\uE003]/g; // our marker characters: never taken from the text itself
 
-/** Spans where a mark must not go: fenced code blocks (shown raw) and [text](url) links (the URL
- * must stay intact, and a flag button must not sit inside a link). */
+/** Spans where a mark must not go: fenced code blocks (shown raw), [text](url) links (the URL
+ * must stay intact, and a flag button must not sit inside a link), citation markers ("[12]" must
+ * stay a citation) and flag tokens already placed. */
 function protectedRanges(s: string): [number, number][] {
   const out: [number, number][] = [];
   const fence = /^```[^\n]*\n[\s\S]*?(?:^```[^\n]*$|(?![\s\S]))/gm;
   for (const m of s.matchAll(fence)) out.push([m.index ?? 0, (m.index ?? 0) + m[0].length]);
-  for (const m of s.matchAll(/\[[^\]\n]{1,300}\]\([^\s)]{1,1000}\)/g)) out.push([m.index ?? 0, (m.index ?? 0) + m[0].length]);
+  for (const re of [/\[[^\]\n]{1,300}\]\([^\s)]{1,1000}\)/g, /\[\d{1,3}\]/g, /\uE002[^\uE003]*\uE003/g]) {
+    for (const m of s.matchAll(re)) out.push([m.index ?? 0, (m.index ?? 0) + m[0].length]);
+  }
   return out;
 }
 
@@ -60,7 +63,7 @@ function findFree(s: string, m: string): number {
  * flag token after the citations that follow it ("text [2]" -> "OPEN text CLOSE [2] FLAG"). */
 function withMarks(source: string, marks: string[]): string {
   let s = source;
-  const order = marks.map((text, k) => ({ text, k })).filter((m) => m.text && m.text.trim().length > 1)
+  const order = marks.map((text, k) => ({ text: text.replace(PRIVATE, ""), k })).filter((m) => m.text && m.text.trim().length > 1)
     .sort((a, b) => b.text.length - a.text.length);
   const seen = new Set<string>();
   for (const { text: m, k } of order) {
@@ -70,7 +73,7 @@ function withMarks(source: string, marks: string[]): string {
     if (at < 0 || s.slice(0, at).split(OPEN).length !== s.slice(0, at).split(CLOSE).length) continue; // not found, or inside another
     if (s.slice(at, at + m.length).includes(OPEN) || s.slice(at, at + m.length).includes(CLOSE)) continue;
     const end = at + m.length;
-    const tail = /^(?:\*\*)?((?:\s*\[\d{1,3}\])*)/.exec(s.slice(end))!;
+    const tail = /^(?:\*\*|\*|`)?((?:[ \t]*\[\d{1,3}\])*)/.exec(s.slice(end))!; // after a closing **, * or `; same line only
     const cites = [...tail[1].matchAll(/\d{1,3}/g)].map((x) => x[0]).join(",");
     const flagAt = end + tail[0].length;
     s = s.slice(0, at) + OPEN + m + CLOSE + s.slice(end, flagAt) + `\uE002${k}:${cites}\uE003` + s.slice(flagAt);
