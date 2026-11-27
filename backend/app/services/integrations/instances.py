@@ -185,16 +185,20 @@ def _context(inst: Integration, c: Connector, secrets: dict, timeout: float, pri
 
 def _clean(records: list[Record]) -> list[Record]:
     out = []
-    for r in list(records or [])[:MAX_RECORDS]:
+    records = list(records or [])
+    for r in records[:MAX_RECORDS]:
         if not isinstance(r, Record):
             continue
-        fields = {str(k)[:60]: str(v)[:500] for k, v in list((r.fields or {}).items())[:MAX_FIELDS] if v not in (None, "")}
+        fields = {str(k)[:60]: str(v)[:500] + ("…" if len(str(v)) > 500 else "") for k, v in list((r.fields or {}).items())[:MAX_FIELDS] if v not in (None, "")}
         text = (r.text or "").replace("\x00", "")
         links = {str(k)[:80]: v for k, v in list((r.links or {}).items())[:5] if _web(v)}
         out.append(Record(kind=r.kind, id=str(r.id)[:200], title=str(r.title or "")[:300], fields=fields,
                           text=text[:MAX_TEXT] + ("…" if len(text) > MAX_TEXT else "") if text else None,
                           url=r.url if _web(r.url) else None, links=links,
                           updated=str(r.updated)[:40] if r.updated else None))
+    if len(records) > MAX_RECORDS and out:  # the model must not count a capped list as complete
+        last = out[-1]
+        last.text = (last.text or "") + f"\n(Only the first {MAX_RECORDS} results were read; there are more.)"
     return out
 
 

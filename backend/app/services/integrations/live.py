@@ -86,7 +86,7 @@ def _with_tools(db, chat, tenant, actor, question, context, items, cfg) -> Live:
             if key not in seen:
                 seen.add(key)
                 out.passages.append(p)
-    out.passages = out.passages[:MAX_LIVE_PASSAGES]
+    _cap(out)
     return out
 
 
@@ -123,6 +123,22 @@ def _standard(db, chat, tenant, actor, question, context, items, primary, fallba
             what = ", ".join(call.args.values())
             out.notes.append(f"{call.connector.manifest.label} ({call.integration.name}): nothing found for {what}"[:200])
         out.passages += to_passages(tenant, call.integration, call.connector, records)
-    out.passages = out.passages[:MAX_LIVE_PASSAGES]
+    _cap(out)
     out.notes = list(dict.fromkeys(out.notes))
     return out
+
+
+def _cap(out: Live) -> None:
+    """One passage per record (a record found twice counts once), at most MAX_LIVE_PASSAGES; when
+    more were found, the last passage and a public note say so, so no total is read as complete."""
+    seen, unique = set(), []
+    for p in out.passages:
+        key = (p.integration_id, p.record_kind, p.record_id)
+        if key not in seen:
+            seen.add(key)
+            unique.append(p)
+    if len(unique) > MAX_LIVE_PASSAGES:
+        unique = unique[:MAX_LIVE_PASSAGES]
+        unique[-1].text += f"\n(Only the first {MAX_LIVE_PASSAGES} records were read; there are more.)"
+        out.notes.append(f"Only the first {MAX_LIVE_PASSAGES} records were read: the list may be incomplete.")
+    out.passages = unique

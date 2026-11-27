@@ -46,6 +46,7 @@ class Verdict:
     input_tokens: int = 0
     output_tokens: int = 0
     latency_ms: int = 0
+    unchecked: int = 0             # statements beyond MAX_STATEMENTS, never sent to the checker
 
 
 def is_sentence_checker(cfg: dict) -> bool:
@@ -66,7 +67,8 @@ def judge(cfg: dict, units: list[Unit], passages: dict[int, str], timeout: float
     """Raises llm.LLMError when the checker cannot be reached or answers nonsense."""
     # Every cited statement, and every uncited heading over cited items (checked against their
     # passages). Headings and lead lines are marked so the checker judges only the facts they state.
-    todo = [(i, u) for i, u in enumerate(units) if u.cites or u.scope][:MAX_STATEMENTS]
+    every = [(i, u) for i, u in enumerate(units) if u.cites or u.scope]
+    todo, unchecked = every[:MAX_STATEMENTS], max(len(every) - MAX_STATEMENTS, 0)
     t0 = time.monotonic()
     if not todo:
         return Verdict([])
@@ -88,7 +90,7 @@ def judge(cfg: dict, units: list[Unit], passages: dict[int, str], timeout: float
             tin, tout = tin + (reply.input_tokens or 0), tout + (reply.output_tokens or 0)
             if not reply.text.strip().lower().startswith("yes"):
                 out.append({"unit": i, "reason": "Not supported by the cited passage."})
-        return Verdict(out, tin, tout, int((time.monotonic() - t0) * 1000))
+        return Verdict(out, tin, tout, int((time.monotonic() - t0) * 1000), unchecked)
 
     # Long answers in groups: each call stays small, fast and well inside the token limit.
     out, tin, tout = [], 0, 0
@@ -100,7 +102,7 @@ def judge(cfg: dict, units: list[Unit], passages: dict[int, str], timeout: float
     ms = int((time.monotonic() - t0) * 1000)
     _log.info("level 2 check by %s (%s): %d statements in %d group(s), %d unsupported, tokens in/out %d/%d, limit %s, %d ms",
               cfg.get("name"), cfg.get("model"), len(todo), len(groups), len(out), tin, tout, limit, ms)
-    return Verdict(out, tin, tout, ms)
+    return Verdict(out, tin, tout, ms, unchecked)
 
 
 def _judge_group(cfg: dict, group: list, passages: dict[int, str], timeout: float, label: str,
@@ -135,10 +137,12 @@ def _judge_group(cfg: dict, group: list, passages: dict[int, str], timeout: floa
             raise llm.LLMError(f"{cfg.get('name')} returned an unreadable check ({why})")
     out = []
     for item in data["unsupported"]:
-        try:
-            k = int(item.get("s")) if isinstance(item, dict) else int(item)
-        except (TypeError, ValueError):
+        # "S2", "2", 2: the statements are labelled "S<k>" and models often answer with the label.
+        m = re.search(r"\d+", str(item.get("s") if isinstance(item, dict) else item))
+        if m is None:
+            _log.warning("level 2 check, group %s: verdict without a statement number: %r", label, str(item)[:100])
             continue
+        k = int(m.group())
         if 1 <= k <= len(group):
             reason = item.get("reason") if isinstance(item, dict) and isinstance(item.get("reason"), str) else ""
             out.append({"unit": group[k - 1][0], "reason": reason[:200]})

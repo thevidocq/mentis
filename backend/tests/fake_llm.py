@@ -33,7 +33,7 @@ class FakeLLM:
         if self.reply_override is not None:
             return self.reply_override
         user = self.last_user_text(body)
-        m = re.search(r'<passage n="1" customer="([^"]+)"[^>]*>\n(.*?)\n</passage>', user, re.S)
+        m = re.search(r'<passage n="1"[^>]*? customer="([^"]+)"[^>]*>\n(.*?)\n</passage>', user, re.S)
         if m is None:  # e.g. the provider "Test" button
             return "ready"
         system = body.get("system") or body.get("instructions") or body["messages"][0]["content"]

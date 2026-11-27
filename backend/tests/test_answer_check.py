@@ -343,3 +343,36 @@ def test_sections_do_not_lend_citations_code_is_not_text_and_tables_are_checked(
     assert level1("Steps [1]:\n```\n# list sessions\nquser /server:10.0.0.1\n```", [{"n": 1}], passages) == []
     issues = level1("| SOC | 06 9999 0000 |\n|---|---|\nThe answer above [1].", [{"n": 1}], passages)
     assert [(i["kind"], i["text"]) for i in issues] == [("value", "06 9999 0000")]
+
+
+VALUES_SRC = ("SOC: 0851112233, 08:00-20:00. Night 9:00 PM. INC0012345, CVE-2024-1234, 10.0.0.5:8080, retention "
+              "6 months, 25%, T1059.001. Call +39 333 1234567. Date 2024-03-01.")
+
+
+@pytest.mark.parametrize("answer,flagged", [
+    ("Call 0851112299 08:00-20:00 [1].", ["0851112299"]),            # a phone next to a time is still read
+    ("Call 02 1234 5670 - 02 1234 5679 [1].", ["02 1234 5670", "02 1234 5679"]),
+    ("Mobile 331234567 [1].", ["331234567"]),                         # a digit missing is another number
+    ("Mobile 333 1234567 [1].", []),                                  # the same number without +39
+    ("At 9:00 AM [1].", ["9:00 AM"]),
+    ("At 21:00 [1].", []),                                            # 9:00 PM
+    ("cve-2024-1235 [1].", ["cve-2024-1235"]),
+    ("INC0012346 [1].", ["INC0012346"]),
+    ("10.0.0.5:8081 [1].", ["10.0.0.5:8081"]),
+    ("Kept 3 months [1].", ["3 months"]),
+    ("50 percent [1].", ["50 percent"]),
+    ("T1059.002 [1].", ["T1059.002"]),
+    ("On 1/3/2024 [1].", []),
+    ("Call 0851112233 (24/7) [1].", []),
+    ("SOC 085 111 2233 [1].", []),                           # no-break spaces
+    ("CVE‑2024‑1234 [1].", []),                              # non-breaking hyphens
+])
+def test_value_forms(answer, flagged):
+    from app.services.answer_check import level1
+    assert [i["text"] for i in level1(answer, [{"n": 1}], {1: VALUES_SRC})] == flagged
+
+
+def test_verdicts_labelled_like_the_statements_and_cut_not_found():
+    from app.services.answer import _parse_json
+    data = _parse_json('{"answer": "Not in the documents.", "not_found": true, "followups": ["Who')
+    assert data == {"answer": "Not in the documents.", "_cut": False, "not_found": True}

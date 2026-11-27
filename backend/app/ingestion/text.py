@@ -29,8 +29,9 @@ def markdown_table(rows: list[list]) -> str:
     return "\n".join(lines)
 
 
+_INVISIBLE = re.compile(r"[\u00ad\u200b-\u200d\u2060\ufeff]")  # soft hyphen, zero-width characters
 def normalize_text(text: str) -> str:
-    text = text.replace("\r", "")
+    text = _INVISIBLE.sub("", text.replace("\r", ""))
     text = "\n".join(line.rstrip(" \t") for line in text.split("\n"))  # linear: no regex backtracking
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()

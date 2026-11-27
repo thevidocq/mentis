@@ -13,7 +13,7 @@ export function SharedChatPage() {
   const { token = "" } = useParams();
   const [chat, setChat] = useState<SharedChat | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [sources, setSources] = useState<{ messageId: string; focus: number | null } | null>(null);
+  const [sources, setSources] = useState<{ messageId: string; focus: number | null; at: number } | null>(null);
 
   useEffect(() => {
     chatApi.shared(token).then(setChat).catch((e) => setError(errorText(e)));
@@ -43,7 +43,7 @@ export function SharedChatPage() {
             {chat?.messages.map((m) =>
               m.role === "user" ? <UserMessage key={m.id} m={m} /> : (
                 <AssistantMessage key={m.id} m={m} busy sourcesOpen={sources?.messageId === m.id}
-                  onSources={(n) => setSources({ messageId: m.id, focus: n })} />
+                  onSources={(n) => setSources({ messageId: m.id, focus: n, at: Date.now() })} />
               ))}
             {chat && chat.hidden > 0 && (
               <p className="muted small">
@@ -55,7 +55,7 @@ export function SharedChatPage() {
         </div>
       </main>
       {sourcesMessage && (
-        <SourcesPanel key={sourcesMessage.id} citations={sourcesMessage.citations} focus={sources?.focus ?? null} onClose={() => setSources(null)} />
+        <SourcesPanel key={sourcesMessage.id} citations={sourcesMessage.citations} focus={sources?.focus ?? null} at={sources?.at ?? 0} onClose={() => setSources(null)} />
       )}
     </div>
   );

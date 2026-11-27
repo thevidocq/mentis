@@ -72,24 +72,43 @@ def _vector(hit) -> list[float] | None:
     return list(v) if isinstance(v, list | tuple) and v else None
 
 
-def search_tenants(db: Session, tenant_ids: list[uuid.UUID], question: str, limit: int = 8, min_score: float = 0.0,
-                   variety: str = "off") -> list[Passage]:
+def _in_use(db: Session, tenant_id: uuid.UUID) -> list[uuid.UUID]:
+    """The tenant's versions in use, from the database (the source of truth)."""
+    return list(db.scalars(select(DocumentVersion.id).where(
+        DocumentVersion.tenant_id == tenant_id, DocumentVersion.is_active.is_(True),
+        DocumentVersion.status == VersionStatus.READY)))
+
+
+def search_tenants(db: Session, tenant_ids: list[uuid.UUID], question: str | list[str], limit: int = 8,
+                   min_score: float = 0.0, variety: str = "off") -> list[Passage]:
     """Active documents of the given tenants (the caller decides which tenants, e.g. customer + General).
 
+    `question`: one query, or several (a follow-up alone and with the previous question): each
+    passage keeps its best score, so a follow-up finds its passages and a new question is not
+    pulled towards the previous one.
     `variety` ("off" | "normal" | "high"): with "normal" or "high", more candidates are read and the
     `limit` passages are chosen to be relevant and different from each other (services/diversity),
     so a question asking two things finds passages for both.
     """
     cfg = embeddings.get_config(db)
-    indexing.check_model(cfg)  # a question embedded with another model would match nothing sensible
-    [vector] = embeddings.embed(cfg, [question])
+    indexing.check_ready(db, cfg)  # another model's index, or one being rebuilt, would answer wrong
+    queries = [question] if isinstance(question, str) else list(dict.fromkeys(question))
+    query_vectors = embeddings.embed(cfg, queries)
     pool = diversity.pool_size(limit, variety)
-    hits, vectors = [], {}
+    best, vectors = {}, {}
     for tid in tenant_ids:
-        for h in vector_index.search(tid, vector, limit=pool, active_only=True, with_vectors=pool > limit):
-            hits.append(h)
-            if h.payload and h.payload.get("chunk_id"):
-                vectors[str(uuid.UUID(h.payload["chunk_id"]))] = _vector(h)
+        in_use = _in_use(db, tid)
+        if not in_use:
+            continue
+        for vector in query_vectors:
+            for h in vector_index.search(tid, vector, limit=pool, with_vectors=pool > limit, version_ids=in_use):
+                if not (h.payload and h.payload.get("chunk_id")):
+                    continue
+                key = str(uuid.UUID(h.payload["chunk_id"]))
+                if key not in best or h.score > best[key].score:
+                    best[key] = h
+                    vectors[key] = _vector(h)
+    hits = list(best.values())
     passages = [p for p in _passages(db, hits, active_only=True) if p.tenant_id in set(tenant_ids) and p.score >= min_score]
     if pool <= limit:
         return passages[:limit]

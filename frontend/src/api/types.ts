@@ -172,10 +172,12 @@ export interface CheckIssue {
   text: string;
   expected?: string;
   reason?: string;
+  statement?: string;   // a value issue: the statement it was found in
 }
 
 export interface AnswerCheck {
   level2: "pending" | "ok" | "unavailable" | "off";
+  unchecked?: number;      // statements beyond the checker's limit (never reported as matching)
   issues: CheckIssue[];
   checker: { name: string; model: string } | null;
   hidden?: boolean;

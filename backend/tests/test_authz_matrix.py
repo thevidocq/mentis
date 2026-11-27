@@ -518,6 +518,7 @@ def _routes(w: World) -> dict[tuple[str, str], list[Probe]]:
     add("PUT", "/platform/embedding", super_only("PUT", A + "/platform/embedding", kw={"json": {}}))
     add("POST", "/platform/embedding/test", super_only("POST", A + "/platform/embedding/test"))
     add("POST", "/platform/embedding/reindex", super_only("POST", A + "/platform/embedding/reindex"))
+    add("POST", "/platform/embedding/reprocess", super_only("POST", A + "/platform/embedding/reprocess"))
     add("GET", "/platform/syslog", super_only("GET", A + "/platform/syslog"))
     add("PUT", "/platform/syslog", super_only("PUT", A + "/platform/syslog", kw={"json": {"enabled": False}}))
     add("POST", "/platform/syslog/test", super_only("POST", A + "/platform/syslog/test"))

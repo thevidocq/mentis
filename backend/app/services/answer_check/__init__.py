@@ -33,6 +33,12 @@ def _substantive(u: units_mod.Unit) -> bool:
     return bool(values.extract(u.raw)) or (not u.intro and len(u.plain.split()) >= 6)
 
 
+def _in(statement: str, issues: list[dict]) -> list[dict]:
+    """Value issues carry their statement, so the chat marks the value in that statement (the same
+    value may appear elsewhere in the answer, correct)."""
+    return [{**i, "statement": statement} for i in issues]
+
+
 def level1(content: str, citations: list[dict], passages: dict[int, str]) -> list[dict]:
     """Values and citations, no model.
 
@@ -53,12 +59,12 @@ def level1(content: str, citations: list[dict], passages: dict[int, str]) -> lis
             if u.scope and values.extract(u.raw):
                 # An uncited heading over cited items: its values must be in the passages its items cite.
                 scope = {n: passages[n] for n in u.scope if n in passages}
-                issues += values.check(u.raw, scope, list(scope.values()))
+                issues += _in(u.text or u.raw, values.check(u.raw, scope, list(scope.values())))
             elif _substantive(u):
                 issues.append({"level": [1], "kind": "uncited", "text": u.raw})
             continue
         own = {n: passages[n] for n in u.cites if n in passages}
-        issues += values.check(u.raw, own, list(own.values()))
+        issues += _in(u.text or u.raw, values.check(u.raw, own, list(own.values())))
     # Table rows are not statements, but their values (a phone, an address) must still come from the
     # passages: the row's own citations, else any passage the answer cites.
     cited_all = {c for u in units_mod.split(content) for c in u.cites} | {c for _, cs in units_mod.table_rows(content) for c in cs}
@@ -67,7 +73,7 @@ def level1(content: str, citations: list[dict], passages: dict[int, str]) -> lis
         issues += values.check(units_mod.plain(row), scope, list(scope.values()))
     out, seen = [], set()
     for i in issues:
-        key = (i["kind"], i["text"])
+        key = (i["kind"], i["text"], i.get("statement"))
         if key not in seen:
             seen.add(key)
             out.append(i)

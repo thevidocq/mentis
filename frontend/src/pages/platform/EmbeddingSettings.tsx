@@ -3,7 +3,7 @@ import { api, errorText } from "../../api/client";
 import { Icon } from "../../components/Icon";
 import { PageHead } from "../../layouts/AdminShell";
 
-interface Reindex { status: "queued" | "running" | "done" | "failed"; done?: number; total?: number; error?: string | null; finished_at?: string }
+interface Reindex { status: "queued" | "running" | "done" | "failed"; done?: number; total?: number; error?: string | null; finished_at?: string; blocking?: boolean }
 interface EmbeddingState {
   url: string;
   model: string;
@@ -12,6 +12,7 @@ interface EmbeddingState {
   indexed_dim: number | null;
   reindex_needed: boolean;
   reindex: Reindex | null;
+  reprocess: Reindex | null;
   index: { collections: number; points: number } | null;
 }
 
@@ -38,7 +39,8 @@ export function EmbeddingSettings() {
     void load().then((s) => { if (s) { setUrl(s.url); setModel(s.model); } });
   }, [load]);
 
-  const running = state?.reindex?.status === "queued" || state?.reindex?.status === "running";
+  const busyJob = (j?: Reindex | null) => j?.status === "queued" || j?.status === "running";
+  const running = busyJob(state?.reindex) || busyJob(state?.reprocess);
   useEffect(() => {
     if (!running) return;
     const id = setInterval(() => void load(), 3000);
@@ -76,10 +78,10 @@ export function EmbeddingSettings() {
     }
   }
 
-  async function reindex() {
+  async function start(job: "reindex" | "reprocess") {
     setMsg(null);
     try {
-      await api("/platform/embedding/reindex", { method: "POST" });
+      await api(`/platform/embedding/${job}`, { method: "POST" });
       await load();
     } catch (err) {
       setMsg({ ok: false, text: errorText(err) });
@@ -132,7 +134,9 @@ export function EmbeddingSettings() {
 
         <section className="card">
           <div className="card-head"><h2 style={{ flex: 1 }}>Vector index</h2>
-            <button className="btn btn-sm" onClick={reindex} disabled={running}><Icon name="refresh" />Reindex everything</button>
+            <button className="btn btn-sm" onClick={() => void start("reprocess")} disabled={running || state.reindex_needed || !!state.reindex?.blocking}
+              title="Read every document again from its original file with the current readers"><Icon name="refresh" />Reprocess all documents</button>
+            <button className="btn btn-sm" onClick={() => void start("reindex")} disabled={running}><Icon name="refresh" />Reindex everything</button>
           </div>
           <div className="card-body stack" style={{ gap: 8 }}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 14 }}>
@@ -148,7 +152,18 @@ export function EmbeddingSettings() {
                 {r.error && <div className="error">{r.error}</div>}
               </div>
             )}
-            <span className="muted small">Reindexing rebuilds every collection from the stored text; documents are not read again. Answers may miss documents until it finishes.</span>
+            {state.reprocess && (
+              <div className="small">
+                Last reprocessing: <strong>{state.reprocess.status}</strong>
+                {state.reprocess.total != null && ` · ${state.reprocess.done ?? 0} of ${state.reprocess.total} versions`}
+                {state.reprocess.finished_at && ` · finished ${new Date(state.reprocess.finished_at).toLocaleString()}`}
+                {state.reprocess.error && <div className="error">{state.reprocess.error}</div>}
+              </div>
+            )}
+            <span className="muted small">
+              <strong>Reindex everything</strong> rebuilds every collection from the stored text (after an embedding model change); answers pause until it finishes, so none comes from a half-built index.{" "}
+              <strong>Reprocess all documents</strong> reads every document again from its original file with the current readers (after an upgrade that improves them); documents stay in answers meanwhile and approvals do not change.
+            </span>
           </div>
         </section>
       </div>

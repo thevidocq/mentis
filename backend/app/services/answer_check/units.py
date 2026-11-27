@@ -26,6 +26,7 @@ class Unit:
     intro: bool = False      # ends with ":" ("For Acme:", "The procedure is:") or heads nested items
     inherited: bool = False  # cites are its parent's (a list item under a cited item or heading)
     scope: list[int] = field(default_factory=list)  # an uncited intro: the passages its items cite
+    text: str = ""           # the statement as written in the answer, citations inside it kept
 
     @property
     def plain(self) -> str:
@@ -143,5 +144,9 @@ def split(answer: str) -> list[Unit]:
                 cites, inherited = list(effective[i]), True  # the whole line hangs from a cited parent
             if len(plain(raw)) >= 3:
                 scope = sorted(below.get(i, ())) if intro and not cites else []
-                units.append(Unit(raw=raw, cites=cites, intro=intro, inherited=inherited, scope=scope))
+                # As written (a citation in the middle kept), up to its closing citations: found
+                # verbatim in the answer, so the chat can mark a value inside this statement.
+                text = re.sub(r"(?:\s*\[\d{1,3}\](?!\())+[\s.;:!?]*$", "", part.strip())
+                text = re.sub(r"[\s.;:!?]+$", "", text)
+                units.append(Unit(raw=raw, cites=cites, intro=intro, inherited=inherited, scope=scope, text=text))
     return units

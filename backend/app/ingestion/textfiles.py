@@ -94,7 +94,8 @@ def _render(value, depth: int = 0) -> list[str]:
     if isinstance(value, list):
         if depth <= 1 and _flat_objects(value):
             keys = list(dict.fromkeys(k for i in value[:MAX_ITEMS] for k in i))
-            return [markdown_table([keys] + [[i.get(k) for k in keys] for i in value[:MAX_ITEMS]])]
+            more = [f"{pad}… {len(value) - MAX_ITEMS} more rows not read"] if len(value) > MAX_ITEMS else []
+            return [markdown_table([keys] + [[i.get(k) for k in keys] for i in value[:MAX_ITEMS]]), *more]
         out = []
         for item in value[:MAX_ITEMS]:
             if isinstance(item, (dict, list)):
@@ -123,7 +124,11 @@ def _exported_page(p: dict, index: int) -> ExtractedPage:
     """A page of a Mentis export with its quality signals (OCR, confidence, tables, flags) kept."""
     kind = p.get("kind") if p.get("kind") in KINDS else "section"
     conf = p.get("ocr_confidence")
-    conf = float(conf) if isinstance(conf, (int, float)) and not isinstance(conf, bool) and 0 <= conf <= 1 else None
+    try:  # numbers are read as written (strings) by parse_json
+        conf = float(conf) if isinstance(conf, (int, float, str)) and not isinstance(conf, bool) else None
+    except ValueError:
+        conf = None
+    conf = conf if conf is not None and 0 <= conf <= 1 else None
     tables = p.get("tables")
     page = ExtractedPage(index=index, kind=kind, label=str(p.get("label") or f"{kind.title()} {index}")[:110],
                          text=normalize_text(str(p.get("text") or "")),
@@ -136,7 +141,7 @@ def _exported_page(p: dict, index: int) -> ExtractedPage:
 
 
 def parse_json(data: bytes, limits: ParseLimits) -> ParseResult:
-    doc = json.loads(decode(data))
+    doc = json.loads(decode(data), parse_float=str)  # numbers as written: "1.10" stays 1.10, not 1.1
     if isinstance(doc, dict) and doc.get("format") == MENTIS_JSON and isinstance(doc.get("pages"), list):
         pages = []
         for p in doc["pages"][: limits.max_pages]:

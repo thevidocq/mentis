@@ -52,11 +52,11 @@ def client():
 
 def run_jobs(c):
     """Process every queued ingestion job, like the worker would."""
-    from app.worker.tasks import ingest_version, reindex_all
+    from app.worker.tasks import ingest_version, reindex_all, reprocess_all
 
     while c.queued:
         name, vid = c.queued.pop(0)
-        ingest_version(vid) if name == "ingest" else reindex_all()
+        ingest_version(vid) if name == "ingest" else (reprocess_all() if name == "reprocess" else reindex_all())
 
 
 def approve_general(c):

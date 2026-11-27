@@ -1,3 +1,4 @@
+import type { Mark } from "../../components/Markdown";
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { AnswerCheck, CheckIssue } from "../../api/types";
@@ -25,7 +26,7 @@ function detail(i: CheckIssue): string {
 export const markedIssues = (c?: AnswerCheck | null) => (c && !c.hidden ? c.issues.filter((i) => i.kind !== "no_citations" && i.text) : []);
 
 /** Texts to underline in the answer, in the order of markedIssues. */
-export const checkMarks = (c?: AnswerCheck | null) => markedIssues(c).map((i) => i.text);
+export const checkMarks = (c?: AnswerCheck | null): Mark[] => markedIssues(c).map((i) => ({ text: i.text, within: i.statement }));
 
 /** The small ⚠ after a flagged statement (after its citations): hover or tap shows what the check found. */
 export function CheckFlag({ issue, cites, onPassage }: { issue: CheckIssue; cites: number[]; onPassage?: (n: number) => void }) {
@@ -97,8 +98,12 @@ export function CheckNotes({ check, placed }: { check?: AnswerCheck | null; plac
       {loose.map((i, k) => (
         <Line key={k} level={levelText(i.level)}>{title(i)}: “{i.text.length > 90 ? `${i.text.slice(0, 88)}…` : i.text}”. {detail(i)}</Line>
       ))}
-      {check.issues.length === 0 && check.level2 === "ok" && (
+      {check.issues.length === 0 && check.level2 === "ok" && !check.unchecked && (
         <div className="check-line ok"><Icon name="check" size={13} /><span>Matches the sources</span></div>
+      )}
+      {check.level2 === "ok" && !!check.unchecked && (
+        <div className="check-line muted"><Icon name="alert" size={13} /><span className="check-level">Level 2</span>
+          <span>{check.unchecked === 1 ? "1 statement was not checked" : `${check.unchecked} statements were not checked`} (answer too long): verify them in the sources.</span></div>
       )}
       {check.level2 === "pending" && (
         <div className="check-line muted"><span className="check-spin" aria-hidden="true" /><span>Checking against the sources…</span></div>

@@ -30,7 +30,7 @@ export function ChatPage() {
   const [integrations, setIntegrations] = useState<{ tenant: string; items: IntegrationOption[] } | null>(null);
   const [chat, setChat] = useState<ChatFull | null>(null);
   // Sources panel on the right: the answer whose sources are shown, and the section in focus.
-  const [sources, setSources] = useState<{ messageId: string; focus: number | null } | null>(null);
+  const [sources, setSources] = useState<{ messageId: string; focus: number | null; at: number } | null>(null);  // at: each click, so [n] opens again
   const [pending, setPending] = useState<{ text: string; chat: string | undefined } | null>(null); // question waiting for its answer
   const [error, setError] = useState<string | null>(null);
   const end = useRef<HTMLDivElement>(null);
@@ -241,7 +241,7 @@ export function ChatPage() {
                 <AssistantMessage key={m.id} m={m} busy={!!pending || !!unavailable} onFollowup={send}
                   onFeedback={(v) => feedback(m, v)}
                   sourcesOpen={sources?.messageId === m.id}
-                  onSources={(n) => setSources({ messageId: m.id, focus: n })}
+                  onSources={(n) => setSources({ messageId: m.id, focus: n, at: Date.now() })}
                   onRetry={i === messages.length - 1 && messages[i - 1] ? () => send(messages[i - 1].content) : undefined} />
               ))}
             {pendingHere && <><UserMessage m={{ content: pendingHere }} /><Thinking scope={scopeLabel} /></>}
@@ -263,7 +263,7 @@ export function ChatPage() {
           onChange={(shared) => setChat((c) => (c && c.id === chat.id ? { ...c, shared } : c))} />
       )}
       {sourcesMessage && (
-        <SourcesPanel key={sourcesMessage.id} citations={sourcesMessage.citations} focus={sources?.focus ?? null} onClose={() => setSources(null)} />
+        <SourcesPanel key={sourcesMessage.id} citations={sourcesMessage.citations} focus={sources?.focus ?? null} at={sources?.at ?? 0} onClose={() => setSources(null)} />
       )}
     </div>
   );
