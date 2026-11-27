@@ -6,6 +6,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-27
+
 ### Added
 - **Logs that say why.** Every LLM reply carries the provider's stop reason (`end_turn`, `max_tokens`, `refusal`, `length`…). An empty answer is logged with the reason, the tokens used and the limit; an unreadable check says whether it was cut ("raise Max check tokens"); each level-2 check logs statements, groups, tokens and time; an answer cut by Max answer tokens is logged. Help (tenant admin LLM, super-admin AI providers), DESIGN; tests (`test_check_limits.py`).
 - **Documentation from a link.** **Add from link** in Documents reads a public page or file (web page converted to Markdown, Markdown/text, PDF, JSON, YAML, CSV; GitHub file links read from raw) and checks it for changes every 6 hours, day (default) or week, or only with **Check now**. A change becomes a new version through the usual pipeline and approval; no change only updates the last check; a page that cannot be read keeps the version in use and shows the reason (panel in red, *Link not read* in the list and in Needs attention). Requests use the integrations' guarded HTTP client (public HTTPS addresses only, whatever the integrations' private-network setting, pinned address, no redirects, size and time limits) with ETag/Last-Modified. New: `services/link_sources.py`, `ingestion/htmltext.py` (lxml, already a dependency), migration 0014 (document source columns), endpoints `POST /documents/link`, `PATCH /documents/{id}/link`, `POST /documents/{id}/link/check`, worker maintenance round every 10 minutes. Audit events `document.link_*`.
