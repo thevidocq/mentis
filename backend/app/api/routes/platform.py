@@ -186,6 +186,10 @@ def get_embedding(db: Session = Depends(get_db), _: User = Depends(super_admin))
     out = embeddings.public_config(embeddings.get_config(db))
     row = db.get(PlatformSetting, REINDEX_STATE)
     out["reindex"] = row.value if row else None
+    from app.worker.tasks import REPROCESS_STATE
+
+    again = db.get(PlatformSetting, REPROCESS_STATE)
+    out["reprocess"] = again.value if again else None
     try:
         out["index"] = vector_index.stats()
     except Exception:  # noqa: BLE001 - shown as unavailable
@@ -221,11 +225,14 @@ def test_embedding(db: Session = Depends(get_db), _: User = Depends(super_admin)
 def reindex(request: Request, db: Session = Depends(get_db), admin: User = Depends(super_admin)) -> dict:
     from app.models import PlatformSetting
     from app.services import jobs
-    from app.worker.tasks import REINDEX_STATE
+    from app.worker.tasks import REINDEX_STATE, REPROCESS_STATE
 
     row = db.get(PlatformSetting, REINDEX_STATE)
     if row and row.value.get("status") in ("queued", "running"):
         raise HTTPException(409, "A reindex is already running.")
+    again = db.get(PlatformSetting, REPROCESS_STATE)
+    if again and again.value.get("status") in ("queued", "running"):
+        raise HTTPException(409, "Documents are being reprocessed: reindex when it finishes.")
     if row is None:
         db.add(PlatformSetting(key=REINDEX_STATE, value={"status": "queued"}))
     else:
@@ -239,4 +246,36 @@ def reindex(request: Request, db: Session = Depends(get_db), admin: User = Depen
         db.commit()
         raise HTTPException(503, "The job queue (Redis) is not reachable. Try again later.") from None
     log_event(db, "index.reindex_requested", actor=admin, ip=client_ip(request))
+    return {"status": "queued"}
+
+
+@router.post("/embedding/reprocess", status_code=202)
+def reprocess(request: Request, db: Session = Depends(get_db), admin: User = Depends(super_admin)) -> dict:
+    """Read every document again from its original file with the current readers (after an upgrade
+    that improves them). Documents stay in answers meanwhile; approval does not change."""
+    from app.models import PlatformSetting
+    from app.services import embeddings, indexing, jobs
+    from app.worker.tasks import REINDEX_STATE, REPROCESS_STATE
+
+    busy = [db.get(PlatformSetting, k) for k in (REINDEX_STATE, REPROCESS_STATE)]
+    if any(r and r.value.get("status") in ("queued", "running") for r in busy):
+        raise HTTPException(409, "A reindex or a reprocessing is already running.")
+    try:
+        indexing.check_ready(db, embeddings.get_config(db))
+    except embeddings.EmbeddingError as e:
+        raise HTTPException(409, str(e)) from None
+    row = busy[1]
+    if row is None:
+        db.add(PlatformSetting(key=REPROCESS_STATE, value={"status": "queued"}))
+    else:
+        row.value = {"status": "queued"}
+    db.commit()
+    try:
+        jobs.enqueue_reprocess()
+    except Exception:  # noqa: BLE001 - Redis down: do not leave the state "queued" forever
+        row = db.get(PlatformSetting, REPROCESS_STATE)
+        row.value = {"status": "failed", "error": "The job queue (Redis) is not reachable. Try again later."}
+        db.commit()
+        raise HTTPException(503, "The job queue (Redis) is not reachable. Try again later.") from None
+    log_event(db, "documents.reprocess_requested", actor=admin, ip=client_ip(request))
     return {"status": "queued"}

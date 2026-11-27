@@ -98,6 +98,19 @@ def delete_version(tenant_id, version_id) -> None:
         raise VectorIndexError(f"The vector index (Qdrant) could not be updated: {e.__class__.__name__}") from e
 
 
+def delete_points(tenant_id, chunk_ids: list) -> None:
+    """Points by chunk id (a version read again: its previous chunks)."""
+    if not chunk_ids:
+        return
+    try:
+        if _exists(tenant_id):
+            ids = [str(c) for c in chunk_ids]
+            for i in range(0, len(ids), 1000):
+                client().delete(collection_name(tenant_id), points_selector=models.PointIdsList(points=ids[i:i + 1000]), wait=True)
+    except Exception as e:  # noqa: BLE001 - the raw reply may carry the service address
+        raise VectorIndexError(f"The vector index (Qdrant) could not be updated: {e.__class__.__name__}") from e
+
+
 def delete_document(tenant_id, document_id) -> None:
     if _exists(tenant_id):
         client().delete(collection_name(tenant_id), points_selector=models.Filter(must=[_match("document_id", document_id)]), wait=True)
@@ -159,11 +172,18 @@ def sync_active(tenant_id, document_id, active_version_id) -> None:
 
 
 def search(tenant_id, vector: list[float], limit: int, version_id=None, active_only: bool = True,
-           with_vectors: bool = False) -> list[models.ScoredPoint]:
-    """Raises VectorIndexError when Qdrant is unreachable or refuses the query (e.g. wrong vector size)."""
+           with_vectors: bool = False, version_ids: list | None = None) -> list[models.ScoredPoint]:
+    """Raises VectorIndexError when Qdrant is unreachable or refuses the query (e.g. wrong vector size).
+
+    `version_ids`: the versions in use, as the database says: the search is limited to them, so a
+    stale `active` flag in the index can neither hide a version in use nor show another one."""
     must = [_match("tenant_id", tenant_id)]
     if version_id is not None:
         must.append(_match("version_id", version_id))
+    elif version_ids is not None:
+        if not version_ids:
+            return []
+        must.append(models.FieldCondition(key="version_id", match=models.MatchAny(any=[str(v) for v in version_ids])))
     elif active_only:
         must.append(_match("active", True))
     try:

@@ -4,7 +4,7 @@ Open **Settings**. Changes apply at once.
 
 ## Include the General Knowledge Base
 
-On by default. Answers also use the General Knowledge Base (general knowledge shared by all customers, maintained by the SOC). When it and your procedures disagree (escalation, SLA), your procedure wins. Turn it off if answers for your customer must use only your documentation; analysts can also turn it off for a single chat.
+On by default. Answers also use the General Knowledge Base (general knowledge shared by all customers, maintained by the SOC). When it and your procedures disagree (escalation, SLA), your procedure wins. Turn it off if answers for your customer must use only your documentation; analysts can also turn it off for a single chat. When it is off, **All my customers** chats that include your customer do not use the General Knowledge Base either.
 
 ## Approve new document versions before publishing
 

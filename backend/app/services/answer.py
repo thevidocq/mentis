@@ -65,7 +65,11 @@ def scope_tenants(db: Session, chat: Chat) -> tuple[list[Tenant], str, Tenant | 
     general = next((t for t in visible if t.is_global), None)
     if chat.scope_tenant_id is None:
         customers = [t for t in visible if not t.is_global]
-        return customers + ([general] if general and customers and chat.use_general else []), all_label(owner), None
+        # The General Knowledge Base only if every customer in the chat uses it: a customer that turned
+        # it off (its procedures differ) must not get general answers through "All customers".
+        use_general = general and customers and chat.use_general and \
+            all((t.settings or {}).get("include_general", True) for t in customers)
+        return customers + ([general] if use_general else []), all_label(owner), None
     tenant = next((t for t in visible if t.id == chat.scope_tenant_id), None)
     if tenant is None:
         return [], "Unknown customer", None
@@ -93,10 +97,12 @@ def _history(db: Session, chat: Chat) -> list[ChatMessage]:
     return turns[-HISTORY_TURNS:]
 
 
-def _retrieval_query(question: str, history: list[ChatMessage]) -> str:
-    # Short follow-ups ("and for medium severity?") need the previous question to find passages.
+def _retrieval_query(question: str, history: list[ChatMessage]) -> list[str]:
+    """The question alone, and for a short question also with the previous one: a follow-up ("and
+    for medium severity?") needs it, a new short question must not be pulled towards it. The search
+    keeps each passage's best score over both."""
     previous = next((m.content for m in reversed(history) if m.role == "user"), None)
-    return f"{previous}\n{question}" if previous and len(question.split()) <= 8 else question
+    return [question, f"{previous}\n{question}"] if previous and len(question.split()) <= 8 else [question]
 
 
 def _partial_answer(text: str) -> tuple[str, bool] | None:

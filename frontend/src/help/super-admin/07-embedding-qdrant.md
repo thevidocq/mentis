@@ -21,7 +21,11 @@ Select **Test connection** after saving: it reports the model and the vector siz
 
 ## Changing model: reindex
 
-Vectors from different models cannot be mixed. After changing the model, the page shows **Reindex needed** and new uploads fail until you select **Reindex everything**. Reindexing rebuilds every customer's collection from the text already extracted (documents are not read again) and shows its progress. Answers may miss documents until it finishes.
+Vectors from different models cannot be mixed. After changing the model, the page shows **Reindex needed** and new uploads fail until you select **Reindex everything**. Reindexing rebuilds every customer's collection from the text already extracted (documents are not read again) and shows its progress. While it runs, chat answers pause with a message saying so: an answer never comes from a half-built index. A document that cannot be indexed is tried once more; if any still fail, the reindex shows **failed** with their names and answers stay paused until a new **Reindex everything** succeeds.
+
+## Reprocess all documents
+
+After an upgrade that improves how documents are read (the release note says so), select **Reprocess all documents**: every document in use or waiting is read again from its original file, and its pages, sections and vectors are replaced in place. Documents stay in answers meanwhile, and approvals and versions do not change. A document whose file can no longer be read keeps its previous reading and is listed under the progress. It is not offered while a reindex is needed or running.
 
 ## Index status
 

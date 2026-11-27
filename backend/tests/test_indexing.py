@@ -242,3 +242,46 @@ def test_http_client_errors(monkeypatch):
     monkeypatch.setattr(embeddings.httpx, "Client", lambda timeout: real_client(transport=httpx.MockTransport(lambda req: httpx.Response(500, text="boom"))))
     with pytest.raises(embeddings.EmbeddingError, match="answered 500"):
         embeddings.embed({"url": "http://x/v1", "model": "m", "api_key": None}, ["x"])
+
+
+def test_reprocess_reads_documents_again_and_keeps_them_in_use(super_admin):
+    from sqlalchemy import select
+
+    from app.models import Chunk
+
+    t = _tenant(super_admin, "Alfa")
+    _upload(super_admin, t["id"], "A.docx", _docx("Alfa procedure about phishing"))
+    run_jobs(super_admin)
+    before = {c.id for c in _db().scalars(select(Chunk))}
+    assert super_admin.post("/api/platform/embedding/reprocess").status_code == 202
+    assert super_admin.post("/api/platform/embedding/reindex").status_code == 409  # one job at a time
+    run_jobs(super_admin)
+    state = super_admin.get("/api/platform/embedding").json()["reprocess"]
+    assert state["status"] == "done" and state["total"] == 1 and state["error"] is None
+    after = {c.id for c in _db().scalars(select(Chunk))}
+    assert after and not (after & before)
+    assert {p.payload["chunk_id"] for p in _points(t["id"])} == {str(c) for c in after}
+    assert _ask([t["id"]], "phishing procedure")
+    doc = super_admin.get(f"/api/tenants/{t['id']}/documents").json()[0]
+    assert doc["status"] == "ready"
+
+
+def test_answers_pause_while_the_index_is_rebuilt(super_admin):
+    from app.models import PlatformSetting
+    from app.services import embeddings
+
+    t = _tenant(super_admin, "Alfa")
+    _upload(super_admin, t["id"], "A.docx", _docx("Alfa procedure about phishing"))
+    run_jobs(super_admin)
+    db = _db()
+    db.add(PlatformSetting(key="reindex", value={"status": "running", "done": 3, "total": 9, "blocking": True}))
+    db.commit()
+    with pytest.raises(embeddings.EmbeddingError, match="being rebuilt"):
+        _ask([t["id"]], "phishing procedure")
+    db.get(PlatformSetting, "reindex").value = {"status": "failed", "error": "x", "blocking": True}
+    db.commit()
+    with pytest.raises(embeddings.EmbeddingError, match="Reindex again"):
+        _ask([t["id"]], "phishing procedure")
+    db.get(PlatformSetting, "reindex").value = {"status": "failed", "error": "Redis down"}  # nothing was cleared
+    db.commit()
+    assert _ask([t["id"]], "phishing procedure")

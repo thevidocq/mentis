@@ -6,7 +6,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added
+- **Reprocess all documents** (super-admin, **Embedding and Qdrant**): reads every document again with the current readers, in place; documents stay in answers and approvals do not change. Run it once after upgrading to this version.
+
 ### Fixed
+- **Accuracy review: index and search.**
+  - Searches are limited to the versions in use as the database lists them: a stale flag in the index (a commit that failed after it was switched) could hide the document in use or show another version.
+  - Reindex: answers pause with a message while it runs, instead of coming from a half-built index; the new model is recorded only at the end; a document that fails is retried, and failures are named and keep answers paused until a new reindex succeeds; documents that become ready meanwhile are included.
+  - A processed version whose audit line cannot be written is no longer marked failed after it went in use.
+  - A short question is searched alone and with the previous one (it was always merged with it, pulling unrelated questions towards the previous topic).
+  - "All customers" chats use the General Knowledge Base only if every customer in them uses it.
 - **Accuracy review: reading documents.** Existing documents keep their old reading until they are processed again (**Reprocess all documents**, below).
   - PDF: a scanned page with a printed footer is read with OCR (only the footer was read); pictures on text pages are OCR'd; tables appear once, in their place (they came twice, the text copy with mixed rows); words broken at line ends are joined.
   - Word: text boxes, tracked insertions, content controls, fields, nested tables, merged cells, list numbers and page headers/footers are read (they were lost).

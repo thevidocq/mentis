@@ -20,6 +20,24 @@ def check_model(cfg: dict) -> None:
         )
 
 
+def check_ready(db: Session, cfg: dict) -> None:
+    """Answers only from a complete index: not while it is rebuilt, nor after a rebuild that failed
+    once the index was cleared (some documents would be missing without notice)."""
+    from app.models import PlatformSetting
+
+    check_model(cfg)
+    row = db.get(PlatformSetting, "reindex")
+    state = (row.value or {}) if row else {}
+    if state.get("status") in ("queued", "running") and state.get("blocking", state.get("status") == "running"):
+        done, total = state.get("done") or 0, state.get("total") or 0
+        raise embeddings.EmbeddingModelChanged(
+            f"The search index is being rebuilt ({done} of {total} documents): answers resume when it finishes.", public=True)
+    if state.get("status") == "failed" and state.get("blocking"):
+        raise embeddings.EmbeddingModelChanged(
+            "Rebuilding the search index failed, so some documents are missing from it: a super-admin must run "
+            "Reindex again in Embedding and Qdrant.", public=True)
+
+
 def index_version(db: Session, version: DocumentVersion, cfg: dict, active: bool) -> int:
     """(Re)write a version's points. Returns the number of chunks indexed."""
     chunks = db.scalars(select(Chunk).where(Chunk.version_id == version.id).order_by(Chunk.ordinal)).all()

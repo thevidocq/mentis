@@ -8,7 +8,7 @@
 
 > The customer is fixed with the first message. After that, typing `@` shows the list in grey: start a new chat to ask about another customer. This keeps answers about different customers from mixing.
 
-With a customer selected, Mentis searches that customer's documentation **plus the General Knowledge Base**: general knowledge shared by all customers (threat-handling procedures, playbooks, best practices). Everyone uses it, nothing to tick. With **All my customers** it searches every active customer assigned to you, plus the knowledge base. **General Knowledge Base** at the end of the `@` list asks the knowledge base alone.
+With a customer selected, Mentis searches that customer's documentation **plus the General Knowledge Base**: general knowledge shared by all customers (threat-handling procedures, playbooks, best practices). Everyone uses it, nothing to tick. With **All my customers** it searches every active customer assigned to you, plus the knowledge base when every one of them uses it. **General Knowledge Base** at the end of the `@` list asks the knowledge base alone.
 
 ## The Knowledge Base switch
 
