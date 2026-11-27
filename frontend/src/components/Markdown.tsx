@@ -35,8 +35,29 @@ function marked(text: string, key: string, state: { open: boolean; flag?: Flag }
   return out;
 }
 
-/** Insert highlight markers around the first occurrence of each mark (longest first), then a flag
- * token after the citations that follow it ("text [2]" -> "OPEN text CLOSE [2] FLAG"). */
+const PRIVATE = /[\uE000-\uE003]/g; // our marker characters: never taken from the text itself
+
+/** Spans where a mark must not go: fenced code blocks (shown raw) and [text](url) links (the URL
+ * must stay intact, and a flag button must not sit inside a link). */
+function protectedRanges(s: string): [number, number][] {
+  const out: [number, number][] = [];
+  const fence = /^```[^\n]*\n[\s\S]*?(?:^```[^\n]*$|(?![\s\S]))/gm;
+  for (const m of s.matchAll(fence)) out.push([m.index ?? 0, (m.index ?? 0) + m[0].length]);
+  for (const m of s.matchAll(/\[[^\]\n]{1,300}\]\([^\s)]{1,1000}\)/g)) out.push([m.index ?? 0, (m.index ?? 0) + m[0].length]);
+  return out;
+}
+
+/** The first occurrence of `m` outside protected spans, or -1. */
+function findFree(s: string, m: string): number {
+  const ranges = protectedRanges(s);
+  for (let at = s.indexOf(m); at >= 0; at = s.indexOf(m, at + 1)) {
+    if (!ranges.some(([a, b]) => at < b && at + m.length > a)) return at;
+  }
+  return -1;
+}
+
+/** Insert highlight markers around the first free occurrence of each mark (longest first), then a
+ * flag token after the citations that follow it ("text [2]" -> "OPEN text CLOSE [2] FLAG"). */
 function withMarks(source: string, marks: string[]): string {
   let s = source;
   const order = marks.map((text, k) => ({ text, k })).filter((m) => m.text && m.text.trim().length > 1)
@@ -45,7 +66,7 @@ function withMarks(source: string, marks: string[]): string {
   for (const { text: m, k } of order) {
     if (seen.has(m)) continue;
     seen.add(m);
-    const at = s.indexOf(m);
+    const at = findFree(s, m);
     if (at < 0 || s.slice(0, at).split(OPEN).length !== s.slice(0, at).split(CLOSE).length) continue; // not found, or inside another
     if (s.slice(at, at + m.length).includes(OPEN) || s.slice(at, at + m.length).includes(CLOSE)) continue;
     const end = at + m.length;
@@ -59,7 +80,7 @@ function withMarks(source: string, marks: string[]): string {
 
 /** Where each mark was placed (true) or not found in the text (false). */
 export function placedMarks(source: string, marks: string[]): boolean[] {
-  const s = withMarks(source, marks);
+  const s = withMarks(source.replace(PRIVATE, ""), marks);
   return marks.map((_, k) => s.includes(`\uE002${k}:`));
 }
 
@@ -110,7 +131,8 @@ function list(lines: string[], key: number, cite?: Cite, links?: Set<string>, fl
 
 // `breaks`: keep single line breaks inside paragraphs (extracted document text, OCR lines).
 export function Markdown({ source, breaks = false, cite, marks, links, flag }: { source: string; breaks?: boolean; cite?: Cite; marks?: string[]; links?: Set<string>; flag?: Flag }) {
-  const lines = (marks?.length ? withMarks(source, marks) : source).replace(/\r/g, "").split("\n");
+  const clean = source.replace(PRIVATE, ""); // e.g. icon-font characters from a PDF: plain text, not markers
+  const lines = (marks?.length ? withMarks(clean, marks) : clean).replace(/\r/g, "").split("\n");
   const blocks: ReactNode[] = [];
   let i = 0;
   while (i < lines.length) {

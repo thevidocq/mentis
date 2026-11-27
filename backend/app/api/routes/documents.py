@@ -298,6 +298,9 @@ async def add_link(tenant_id: uuid.UUID, body: LinkIn, request: Request, db: Ses
         log_event(db, "document.link_refused", level="warning", actor=user, tenant_id=tenant.id, target=body.url[:200],
                   ip=client_ip(request), detail={"reason": str(e)})
         raise HTTPException(422, str(e)) from None
+    except IntegrityError:  # the same name added at the same moment
+        db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "A document with this name was just added: choose another name.") from None
     except versions.VersionConflict as e:
         raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from None
     except versions.StorageDown as e:

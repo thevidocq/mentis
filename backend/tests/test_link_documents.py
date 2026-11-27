@@ -31,7 +31,7 @@ class Site:
 @pytest.fixture
 def site():
     s = Site()
-    connector_http.set_resolver(lambda host: ["203.0.113.10"])  # a public address
+    connector_http.set_resolver(lambda host: ["93.184.216.34"])  # a public address
     connector_http.set_transport(httpx.MockTransport(s.handle))
     yield s
     connector_http.set_transport(None)
@@ -118,6 +118,12 @@ def test_private_and_internal_addresses_refused(super_admin, site):
         r = _add(super_admin, t["id"], "https://intranet.example.com/page")
         assert r.status_code == 422 and "address points to" in r.json()["detail"], ip
     assert not site.seen  # nothing was requested
+    # Links are public only, even where integrations may reach private networks.
+    super_admin.put("/api/platform/integrations/settings", json={"allow_private": True})
+    connector_http.set_resolver(lambda host: ["10.0.0.5"])
+    r = _add(super_admin, t["id"], "https://intranet.example.com/page")
+    assert r.status_code == 422 and "address points to" in r.json()["detail"]
+    assert _add(super_admin, t["id"], "http://docs.example.com/page").status_code == 422
 
 
 def test_unreadable_pages(super_admin, site):
@@ -172,3 +178,48 @@ def test_due_checks_run_in_maintenance(super_admin, site):
     site.pages["/p"] = (200, "text/markdown", b"# P\n\nTwo.\n", {})
     assert link_sources.sync(db, link_sources.due(db)[0]) == "new_version"
     assert link_sources.due(db) == []
+
+
+def test_failed_content_is_not_read_again_until_it_changes(super_admin, site):
+    from app.core import db as db_module
+    from app.models import Document, DocumentVersion, VersionStatus
+    from app.services import link_sources
+
+    t = _tenant(super_admin)
+    site.pages["/f"] = (200, "text/markdown", b"# F\n\nOne.\n", {})
+    assert _add(super_admin, t["id"], "https://docs.example.com/f", name="F.md").status_code == 201
+    db = next(db_module.get_db())
+    doc = db.query(Document).filter(Document.name == "F.md").one()
+    version = db.query(DocumentVersion).filter(DocumentVersion.document_id == doc.id).one()
+    version.status = VersionStatus.FAILED
+    db.commit()
+    assert link_sources.sync(db, doc) == "unchanged"
+    assert db.query(DocumentVersion).filter(DocumentVersion.document_id == doc.id).count() == 1
+
+
+def test_page_conversion():
+    from app.ingestion.htmltext import to_markdown
+
+    md, _ = to_markdown(b"<div>Call <a href=x>Mario</a> and <b>Anna</b><p>Then escalate.</p></div>")
+    assert md == "Call Mario and **Anna**\n\nThen escalate."
+    md, _ = to_markdown(b"<ol start=3><li><p>first</p><p>second</p></li><li>x<ul><li>sub</li></ul></li></ol>")
+    assert md == "3. first second\n\n4. x\n\n    - sub"
+    md, _ = to_markdown(b"<body><form><h1>SharePoint page</h1><p>Body</p><input value=1></form></body>")
+    assert md == "# SharePoint page\n\nBody"
+    md, _ = to_markdown(b"<table><tr><td>a<table><tr><td>x</td></tr></table></td><td>b</td></tr></table>")
+    assert md.splitlines()[0] == "| a x | b |"
+    md, _ = to_markdown(b"<body><header>Site</header><main><article><header><h1>Title</h1></header><p>One</p>"
+                        b"</article><article><p>Two</p></article></main><footer>(c)</footer></body>")
+    assert md == "# Title\n\nOne\n\nTwo"
+    assert to_markdown("<p>caf\u00e9</p>".encode(), "text/html")[0] == "caf\u00e9"
+    assert to_markdown("<p>caf\u00e9</p>".encode("latin-1"), "text/html; charset=iso-8859-1")[0] == "caf\u00e9"
+
+
+def test_page_conversion_is_bounded():
+    from app.ingestion.htmltext import to_markdown
+
+    deep = b"<ul>" + b"<li>a<ul>" * 150 + b"<li>x</li>" * 20000 + b"</ul></li>" * 150 + b"</ul>"
+    md, _ = to_markdown(deep)
+    assert max(len(line) - len(line.lstrip()) for line in md.splitlines()) <= 24  # nesting capped
+    md, _ = to_markdown(b"<ul>" + b"<li>item</li>" * 100_000 + b"</ul>", max_chars=50_000)
+    assert len(md) < 51_000 and "size limit" in md

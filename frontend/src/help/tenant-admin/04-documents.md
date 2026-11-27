@@ -8,7 +8,7 @@ Upload your customer's procedures, escalation matrices, runbooks and playbooks. 
 
 - **On the left, the list.** Search by name, and filter **All**, **In use** or **To review**. Documents that need you (**Failed**, **To approve**, **Processing**) are grouped at the top under *Needs attention*; then *In use*, then *Not in use*.
 - **On the right, the Overview** when you open the page (or select **Overview** at the top of the list): documents in use, pages read (and how many with OCR), passages searchable, questions asked in chats on this customer in the last 30 days and how many found nothing; what needs attention, with a direct **Retry** or **Review**; content in use by file type, last indexed, oldest in use, pages to check; recent uploads and approvals. Select any line to open that document.
-- **On the right, the selected document**, once you select one. Its name and state, the actions, and four tabs: **Preview**, **Text read**, **Versions**, **Test a question**. A column with the details and the latest versions is on the right on wide screens.
+- **On the right, the selected document**, once you select one. Its name and state with a line of facts (type, size, pages, how it was read, date), the actions, the **Read from a link** panel for documents added from a link, and four tabs: **Preview**, **Text read**, **Versions**, **Test a question**.
 
 On a phone the list fills the screen; tap a document to open it, **‹** to go back.
 
@@ -42,13 +42,13 @@ A PDF that only restricts printing or copying is accepted and read normally. A P
 
 Mentis reads the page at once: web pages are converted to text (menus, headers, footers and scripts are left out), then the document is read and indexed like an upload, with the same approval if your customer requires it.
 
-The document shows **from link** next to its name and, above the tabs, the **Read from a link** panel: the address, **Check for changes** (change it there at any time), **Last check** with its result, **Next check**, and **Check now**.
+The document shows **from link** next to its name and, above the tabs, the **Read from a link** panel: the address, **Check for changes** (change it there at any time), **Last check** with its result, **Next check** (not shown while the last check failed), and **Check now**.
 
 - **The page changed**: a new version is created (note *Page changed*), approved like an upload when approval is on.
 - **No change**: only *Last check* is updated; no new version.
 - **The page cannot be read** (removed, moved, error, sign-in required): the version in use stays, the panel shows the reason in red and the document appears in **Needs attention** (*Link not read*) until a check succeeds.
 
-What cannot be read: pages that need a sign-in, and pages that show their text only through JavaScript (single-page apps). Only public addresses are read; private network addresses only if a super-admin allowed them (**Integrations → Private network addresses**). A linked document gets its versions from the page only: **Upload a new version** is not offered. Deleting the document stops the checks.
+What cannot be read: pages that need a sign-in, and pages that show their text only through JavaScript (single-page apps). Only public **https://** addresses are read, never private networks (documents are shared with all the customer's users). Pages larger than 20 MB, or the upload limit if lower, are refused; a very long page is read up to a size limit and says so at its end. A linked document gets its versions from the page only: **Upload a new version** is not offered. Deleting the document stops the checks.
 
 ## Actions
 
@@ -67,7 +67,7 @@ Warnings about how the file was read (for example *only the first 5,000 rows wer
 
 ## Versions
 
-Uploading a file with the **same name** as an existing document (or with **New version**) adds a new version. Only one version is **in use** at a time; older ones stay available.
+Uploading a file with the **same name** as an existing document (or with **Upload a new version** in ⋯) adds a new version. Only one version is **in use** at a time; older ones stay available.
 
 | State | Meaning |
 | --- | --- |

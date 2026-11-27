@@ -37,23 +37,24 @@ export function CheckFlag({ issue, cites, onPassage }: { issue: CheckIssue; cite
     const close = (e: Event) => {
       if (e instanceof KeyboardEvent ? e.key === "Escape" : !box.current?.contains(e.target as Node)) { pinned.current = false; setOpen(false); }
     };
-    document.addEventListener("mousedown", close);
+    document.addEventListener("pointerdown", close); // pointer: also taps on phones (iOS sends no mousedown there)
     document.addEventListener("keydown", close);
-    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", close); };
+    return () => { document.removeEventListener("pointerdown", close); document.removeEventListener("keydown", close); };
   }, [open]);
   return (
     <span className="check-flag" ref={box}
-      onMouseEnter={() => setOpen(true)} onMouseLeave={() => { if (!pinned.current) setOpen(false); }}>
+      onMouseEnter={() => setOpen(true)} onMouseLeave={() => { if (!pinned.current) setOpen(false); }}
+      onBlur={(e) => { if (!box.current?.contains(e.relatedTarget as Node)) { pinned.current = false; setOpen(false); } }}>
       <button type="button" className="check-flag-btn" aria-label={`${levelText(issue.level)}: ${title(issue)}`} aria-expanded={open}
         onClick={() => { pinned.current = !pinned.current || !open; setOpen(pinned.current); }}>
         <Icon name="alert" size={12} />
       </button>
       {open && (
-        <span className="check-pop" role="tooltip">
+        <span className="check-pop" role="dialog" aria-label={title(issue)}>
           <span className="check-pop-title">{levelText(issue.level)} · {title(issue)}</span>
           <span>{detail(issue)}</span>
           {cites.length > 0 && onPassage && (
-            <button type="button" className="check-open" onClick={() => { setOpen(false); onPassage(cites[0]); }}>Open passage {cites[0]} ›</button>
+            <button type="button" className="check-open" onClick={() => { pinned.current = false; setOpen(false); onPassage(cites[0]); }}>Open passage {cites[0]} ›</button>
           )}
         </span>
       )}

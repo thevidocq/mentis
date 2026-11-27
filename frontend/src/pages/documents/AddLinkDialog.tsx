@@ -13,8 +13,10 @@ export function AddLinkDialog({ base, onClose, onAdded }: { base: string; onClos
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const valid = /^https?:\/\/\S+$/i.test(url.trim());
   async function add(e?: FormEvent) {
     e?.preventDefault();
+    if (busy || !valid) return;
     setBusy(true);
     setError(null);
     try {
@@ -31,7 +33,7 @@ export function AddLinkDialog({ base, onClose, onAdded }: { base: string; onClos
     <Modal title="Add documentation from a link" onClose={onClose}
       footer={<>
         <button className="btn" onClick={onClose}>Cancel</button>
-        <button className="btn btn-primary" disabled={busy || !/^https?:\/\/\S+$/i.test(url.trim())} onClick={() => void add()}>
+        <button className="btn btn-primary" disabled={busy || !valid} onClick={() => void add()}>
           <Icon name="link" />{busy ? "Reading the page…" : "Add"}
         </button>
       </>}>
@@ -53,6 +55,7 @@ export function AddLinkDialog({ base, onClose, onAdded }: { base: string; onClos
         </div>
         <span className="muted small">When the page changes, Mentis creates a new version, approved like an upload if this customer requires approval. When it cannot be read, the version in use stays.</span>
         {error && <div className="error" role="alert">{error}</div>}
+        <button type="submit" hidden aria-hidden="true" tabIndex={-1} />{/* Enter in a field adds */}
       </form>
     </Modal>
   );

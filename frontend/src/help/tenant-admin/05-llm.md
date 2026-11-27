@@ -15,7 +15,7 @@ The list shows the models added by the super-admin (name and model). Analysts se
 
 When an answer does not match its sources:
 
-- **Show a warning** (recommended): the analyst sees the answer with what is not in the sources highlighted, and which level found it.
+- **Show a warning** (recommended): the analyst sees the answer with what may not match the sources underlined and a small ⚠ after it (pointing at it shows which level found what), plus one summary line under the answer.
 - **Hide the answer**: the answer is checked before it is shown; if it fails, it is written again once, then replaced by *Not found*. Answers take a second or two longer. Hidden answers are kept for audit, never shown.
 - **Don't check with a model**: only level 1 runs (contacts, times and codes compared with the sources, no model, no cost).
 

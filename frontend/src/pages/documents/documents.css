@@ -115,7 +115,11 @@
   .docs-browser:not(.has-selection) .doc-detail { display: none; }
   .docs-browser.has-selection .doc-list { display: none; }
   .doc-head .doc-back { display: inline-flex; }
-  .doc-head { padding: 10px 8px; gap: 6px; align-items: flex-start; }
+  .doc-head { padding: 10px 8px; gap: 6px 8px; align-items: flex-start; flex-wrap: wrap; }
+  .doc-head-text { flex: 1 1 calc(100% - 48px); }
+  .doc-head-title { flex-wrap: wrap; row-gap: 4px; }
+  .doc-title { white-space: normal; overflow-wrap: anywhere; }
+  .doc-actions { flex: 1 1 100%; justify-content: flex-end; flex-wrap: wrap; }
   .doc-facts { font-size: 12px; }
   .doc-link, .doc-banner { margin-left: 12px; margin-right: 12px; }
   .doc-head .btn { padding: 0 10px; }

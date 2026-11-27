@@ -7,6 +7,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 ## [Unreleased]
 
 ### Fixed
+- **Review round before 0.6.0.**
+  - Answer check: a heading or lead line without a citation is checked against the passages its items cite (level 1 values; level 2 marked as an introduction), closing the gap where such a line with a figure escaped both levels; level 2 runs in a 150 s budget and does not retry a reply cut by the token limit; stop reasons from providers are sanitised before logging.
+  - Uploads and versions: two identical uploads at the same moment are serialised (advisory lock on the content hash); a version still being processed is reported as such; **Retry** checks duplicates too; renaming a linked document keeps its link.
+  - Config import: settings missing from an older export keep their current value.
+  - Chat: the ⚠ marks are never placed inside code blocks or links, the popover closes on blur and works with touch; Documents: link panel states (checking, saving, last error) and the Add link dialog validate before sending.
+  - Links: public **https** addresses only, whatever the integrations' private-network setting; documents read from a link capped at 20 MB (or the upload limit); the page converter keeps text mixed with blocks, separates paragraphs inside list items, reads SharePoint-style pages wrapped in a form, keeps an article's own header, flattens nested tables into their cell, honours the page's charset (UTF-8 when none), caps list nesting and output size; trailing-space cleanup is linear (it was quadratic on long lines); content whose version failed is not stored again at every check; checks of one document are serialised (row lock); invalid names and host names give a clear error instead of HTTP 500, and two links added with the same name at once give 409. Help (documents, integrations), DESIGN; tests.
 - **"Check not available" on long answers.** The level-2 check allowed the checker only 800 tokens for all statements of an answer: on long answers it came back empty or cut. Now statements are checked in groups of 10, each call may use up to **Max check tokens** (customer **LLM** page, answer check section; default 2500, 500–16000; `settings.check_max_tokens`, also in config export/import), and an empty or unreadable reply is asked once more.
 
 ### Added

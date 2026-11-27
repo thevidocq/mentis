@@ -61,7 +61,7 @@ def _resolve(host: str, port: int) -> list[str]:
         return list(_resolver(host))
     try:
         return sorted({i[4][0] for i in socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)})
-    except OSError:
+    except (OSError, UnicodeError, ValueError):  # unresolvable or invalid names (IDNA errors too)
         return []
 
 

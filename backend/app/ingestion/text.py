@@ -31,7 +31,7 @@ def markdown_table(rows: list[list]) -> str:
 
 def normalize_text(text: str) -> str:
     text = text.replace("\r", "")
-    text = re.sub(r"[ \t]+\n", "\n", text)
+    text = "\n".join(line.rstrip(" \t") for line in text.split("\n"))  # linear: no regex backtracking
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
 

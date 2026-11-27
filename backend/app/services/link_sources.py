@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from urllib.parse import unquote, urlsplit, urlunsplit
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.connectors.contract import ConnectorError
@@ -31,7 +31,6 @@ from app.core.config import get_settings
 from app.models import Document, DocumentVersion, Tenant, VersionStatus
 from app.models.base import utcnow
 from app.services import jobs, versions
-from app.services.integrations import instances
 from app.services.logs import log_event
 from app.services.uploads import MIME, UploadError, check_upload, file_type_of, safe_filename
 
@@ -40,6 +39,7 @@ _log = logging.getLogger("mentis.links")
 CHECKS = {"6h": timedelta(hours=6), "1d": timedelta(days=1), "7d": timedelta(days=7), "manual": None}
 DEFAULT_CHECK = "1d"
 DEADLINE = 60.0           # seconds to read one link
+MAX_MB = 20               # largest document read from a link (or the upload limit, if lower)
 MAX_URL = 2000
 USER_AGENT = "Mentis documentation reader"
 _GITHUB_BLOB = re.compile(r"^/([^/]+)/([^/]+)/blob/(.+)$")
@@ -60,8 +60,9 @@ class Fetched:
     modified: str | None
 
 
-def check_url(url: str, allow_private: bool) -> str:
-    """The address cleaned up, or LinkError. Only http(s), no user names, no fragments."""
+def check_url(url: str) -> str:
+    """The address cleaned up, or LinkError. Only https, no user names, no fragments. Links read public
+    addresses only, whatever the integrations setting: a document is shared with the customer's users."""
     url = (url or "").strip()
     if not url or len(url) > MAX_URL:
         raise LinkError("Enter an address of at most 2000 characters.")
@@ -69,10 +70,8 @@ def check_url(url: str, allow_private: bool) -> str:
         u = urlsplit(url)
     except ValueError:
         raise LinkError("The address is not valid.") from None
-    if u.scheme.lower() not in ("https", "http") or not u.hostname:
+    if u.scheme.lower() != "https" or not u.hostname:
         raise LinkError("The address must start with https://.")
-    if u.scheme.lower() == "http" and not allow_private:
-        raise LinkError("Plain http is refused: use https (a super-admin can allow private network addresses).")
     if u.username is not None or u.password is not None or "\\" in url:
         raise LinkError("Addresses with user names or backslashes are refused.")
     return urlunsplit((u.scheme.lower(), u.netloc, u.path or "/", u.query, ""))
@@ -116,11 +115,11 @@ def _kind(content_type: str, url: str, body: bytes) -> str:
                     "Markdown, text, PDF, JSON, YAML or CSV files are supported.")
 
 
-def fetch(url: str, *, allow_private: bool, etag: str | None = None, modified: str | None = None) -> Fetched | None:
+def fetch(url: str, *, etag: str | None = None, modified: str | None = None) -> Fetched | None:
     """The document at `url`, or None when the server says it has not changed since etag/modified."""
     target = fetch_url(url)
     client = SafeHttp("The link", [target], [], timeout=30, max_requests=1, deadline=DEADLINE,
-                      max_bytes=get_settings().max_upload_mb * 1024 * 1024, allow_private=allow_private)
+                      max_bytes=min(get_settings().max_upload_mb, MAX_MB) * 1024 * 1024, allow_private=False)
     headers = {"User-Agent": USER_AGENT, "Accept": "text/html, text/markdown, text/plain, application/pdf, */*;q=0.5"}
     if etag:
         headers["If-None-Match"] = etag
@@ -150,7 +149,7 @@ def fetch(url: str, *, allow_private: bool, etag: str | None = None, modified: s
         from app.ingestion.htmltext import to_markdown
 
         try:
-            text, title = to_markdown(body)
+            text, title = to_markdown(body, r.headers.get("content-type"))
         except ValueError as e:
             raise LinkError(f"The page could not be read: {e}.") from None
         body, kind = text.encode("utf-8"), "md"
@@ -164,13 +163,16 @@ def default_name(url: str, fetched: Fetched) -> str:
     stem = last.rsplit(".", 1)[0] if "." in last else last
     if not stem or fetched.title and _extension(url) in ("", "html", "htm"):
         stem = fetched.title or urlsplit(url).hostname or "page"
-    stem = " ".join(re.sub(r"[\\/:*?\"<>|]+", " ", stem).split())[:150] or "page"
-    return f"{stem}.{fetched.file_type}"
+    stem = " ".join(re.sub(r"[\\/:*?\"<>|\x00-\x1f]+", " ", stem).split())[:150].strip(" .") or "page"
+    try:
+        return safe_filename(f"{stem}.{fetched.file_type}")
+    except UploadError:
+        return f"page.{fetched.file_type}"
 
 
 def _latest(db: Session, doc: Document) -> DocumentVersion | None:
-    return db.scalar(select(DocumentVersion).where(DocumentVersion.document_id == doc.id,
-                                                   DocumentVersion.status != VersionStatus.FAILED)
+    """The newest version, whatever its state: content that failed is not read again until it changes."""
+    return db.scalar(select(DocumentVersion).where(DocumentVersion.document_id == doc.id)
                      .order_by(DocumentVersion.version.desc()).limit(1))
 
 
@@ -197,11 +199,13 @@ def add(db: Session, tenant: Tenant, url: str, name: str | None, check: str, use
     """Read a link for the first time and create its document (LinkError with a reason otherwise)."""
     if check not in CHECKS:
         raise LinkError("Choose how often to check the page.")
-    allow = instances.allow_private(db)
-    url = check_url(url, allow)
-    fetched = fetch(url, allow_private=allow)
+    url = check_url(url)
+    fetched = fetch(url)
     assert fetched is not None  # no conditional headers on a first read
-    doc_name = safe_filename(name.strip()) if name and name.strip() else default_name(url, fetched)
+    try:
+        doc_name = safe_filename(name.strip()) if name and name.strip() else default_name(url, fetched)
+    except UploadError as e:
+        raise LinkError(str(e)) from None
     if "." not in doc_name or doc_name.rsplit(".", 1)[1].lower() != fetched.file_type:
         doc_name = f"{doc_name.rsplit('.', 1)[0] if '.' in doc_name else doc_name}.{fetched.file_type}"
     if db.scalar(select(Document.id).where(Document.tenant_id == tenant.id, Document.name_key == doc_name.lower())):
@@ -225,10 +229,12 @@ def sync(db: Session, doc: Document, user_id=None) -> str:
     tenant = db.get(Tenant, doc.tenant_id)
     if tenant is None or not doc.source_url:
         return "error"
+    # One check at a time per document (the worker and a "Check now" click): lock the row, then read.
+    db.execute(select(Document.id).where(Document.id == doc.id).with_for_update())
+    db.refresh(doc)
     latest = _latest(db, doc)
     try:
-        fetched = fetch(doc.source_url, allow_private=instances.allow_private(db),
-                        etag=doc.source_etag if latest else None, modified=doc.source_modified if latest else None)
+        fetched = fetch(doc.source_url, etag=doc.source_etag if latest else None, modified=doc.source_modified if latest else None)
         if fetched is None or (latest is not None and hashlib.sha256(fetched.data).hexdigest() == latest.sha256):
             result = "unchanged"
         else:
@@ -253,8 +259,10 @@ def due(db: Session, limit: int = 20) -> list[Document]:
     now = utcnow()
     rows = db.scalars(select(Document).join(Tenant, Tenant.id == Document.tenant_id)
                       .where(Document.source_url.is_not(None), Document.source_check.in_(["6h", "1d", "7d"]),
-                             Tenant.status != "disabled")
-                      .order_by(Document.source_checked_at.asc().nulls_first())).all()
+                             Tenant.status != "disabled",
+                             or_(Document.source_checked_at.is_(None),
+                                 Document.source_checked_at <= now - CHECKS["6h"]))
+                      .order_by(Document.source_checked_at.asc().nulls_first()).limit(500)).all()
     def last(d: Document):
         t = d.source_checked_at
         return t.replace(tzinfo=now.tzinfo) if t is not None and t.tzinfo is None else t  # SQLite drops the zone

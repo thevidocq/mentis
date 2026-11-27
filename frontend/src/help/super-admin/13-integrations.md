@@ -16,7 +16,7 @@ You do not see the customers' addresses or credentials: tenant admins configure 
 
 ## Private network addresses
 
-By default integrations reach only **public HTTPS addresses**. **Private network addresses** (top of the page) also allows private networks (10.x, 172.16–31.x, 192.168.x) and plain HTTP, for on-premise systems reached through a VPN from the server. Mentis' own services (database, index, storage, queue, the API itself), loopback and cloud metadata addresses (169.254.169.254) are refused either way. Turn it on only if a customer needs it: it lets tenant admins point integrations, and documents added from a link, at your private networks.
+By default integrations reach only **public HTTPS addresses**. **Private network addresses** (top of the page) also allows private networks (10.x, 172.16–31.x, 192.168.x) and plain HTTP, for on-premise systems reached through a VPN from the server. Mentis' own services (database, index, storage, queue, the API itself), loopback and cloud metadata addresses (169.254.169.254) are refused either way. Turn it on only if a customer needs it: it lets tenant admins point integrations at your private networks. Documents added from a link always read public HTTPS addresses only, whatever this setting.
 
 ## What Mentis enforces
 
