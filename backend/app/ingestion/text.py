@@ -34,3 +34,36 @@ def normalize_text(text: str) -> str:
     text = re.sub(r"[ \t]+\n", "\n", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
+
+
+# --- Fenced code blocks (CommonMark) ------------------------------------------------------------
+
+_FENCE_OPEN = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
+
+
+def fence_open(line: str) -> str | None:
+    """The fence (e.g. "```") a line opens, or None. A backtick fence has no backtick in its info."""
+    m = _FENCE_OPEN.match(line)
+    if not m or (m.group(1)[0] == "`" and "`" in m.group(2)):
+        return None
+    return m.group(1)
+
+
+def fence_closes(line: str, fence: str) -> bool:
+    """Whether a line closes `fence`: the same character, at least as long, nothing after it."""
+    m = re.match(r"^ {0,3}(`{3,}|~{3,})\s*$", line)
+    return bool(m) and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence)
+
+
+def fenced_lines(lines: list[str]) -> list[bool]:
+    """For each line, whether it is part of a fenced code block (fence lines included)."""
+    out, fence = [], None
+    for line in lines:
+        if fence is None:
+            fence = fence_open(line)
+            out.append(fence is not None)
+        else:
+            out.append(True)
+            if fence_closes(line, fence):
+                fence = None
+    return out

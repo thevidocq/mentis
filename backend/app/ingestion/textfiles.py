@@ -11,7 +11,7 @@
 import json
 import re
 
-from app.ingestion.text import markdown_table, normalize_text
+from app.ingestion.text import fenced_lines, markdown_table, normalize_text
 from app.ingestion.types import ExtractedPage, ParseLimits, ParseResult
 
 MENTIS_JSON = "mentis-document/1"
@@ -30,26 +30,25 @@ def decode(data: bytes) -> str:
 
 # --- Markdown -----------------------------------------------------------------------------
 
-_FENCE = re.compile(r"^\s*(```|~~~)")
+_HEADING = r"\s+(.+?)(?:\s+#+)?\s*$"   # closing hashes only after a space: "# C#" stays "C#"
 
 
 def parse_md(data: bytes, limits: ParseLimits) -> ParseResult:
     lines = decode(data).replace("\r\n", "\n").replace("\r", "\n").split("\n")
-    fenced, top = False, None
-    for line in lines:  # the split level: "#" if any, else "##"
-        if _FENCE.match(line):
-            fenced = not fenced
-        elif not fenced and re.match(r"^#\s+\S", line):
+    in_code = fenced_lines(lines)
+    top = None
+    for line, code in zip(lines, in_code):  # the split level: "#" if any, else "##"
+        if code:
+            continue
+        if re.match(r"^#\s+\S", line):
             top = "#"
             break
-        elif not fenced and re.match(r"^##\s+\S", line):
-            top = top or "##"
+        if re.match(r"^##\s+\S", line):
+            top = "##"
     sections: list[tuple[str, list[str]]] = []
-    label, body, fenced = "Beginning", [], False
-    for line in lines:
-        if _FENCE.match(line):
-            fenced = not fenced
-        m = None if fenced or top is None else re.match(rf"^{re.escape(top)}\s+(.+?)\s*#*\s*$", line)
+    label, body = "Beginning", []
+    for line, code in zip(lines, in_code):
+        m = None if code or top is None else re.match(rf"^{re.escape(top)}{_HEADING}", line)
         if m:
             if any(x.strip() for x in body):
                 sections.append((label, body))
@@ -117,6 +116,25 @@ def _label(item, n: int) -> str:
     return f"Item {n}"
 
 
+_FLAGS = {"low_confidence", "merged_cells", "truncated"}  # "empty" is recomputed
+
+
+def _exported_page(p: dict, index: int) -> ExtractedPage:
+    """A page of a Mentis export with its quality signals (OCR, confidence, tables, flags) kept."""
+    kind = p.get("kind") if p.get("kind") in KINDS else "section"
+    conf = p.get("ocr_confidence")
+    conf = float(conf) if isinstance(conf, (int, float)) and not isinstance(conf, bool) and 0 <= conf <= 1 else None
+    tables = p.get("tables")
+    page = ExtractedPage(index=index, kind=kind, label=str(p.get("label") or f"{kind.title()} {index}")[:110],
+                         text=normalize_text(str(p.get("text") or "")),
+                         method="ocr" if p.get("method") == "ocr" else "native", ocr_confidence=conf,
+                         tables=tables if isinstance(tables, int) and not isinstance(tables, bool) and 0 <= tables < 100_000 else 0,
+                         flags=[f for f in dict.fromkeys(p.get("flags") or []) if f in _FLAGS] if isinstance(p.get("flags"), list) else [])
+    page.finalize()
+    page.flags = list(dict.fromkeys(page.flags))
+    return page
+
+
 def parse_json(data: bytes, limits: ParseLimits) -> ParseResult:
     doc = json.loads(decode(data))
     if isinstance(doc, dict) and doc.get("format") == MENTIS_JSON and isinstance(doc.get("pages"), list):
@@ -124,12 +142,11 @@ def parse_json(data: bytes, limits: ParseLimits) -> ParseResult:
         for p in doc["pages"][: limits.max_pages]:
             if not isinstance(p, dict):
                 continue
-            kind = p.get("kind") if p.get("kind") in KINDS else "section"
-            label = str(p.get("label") or f"{kind.title()} {len(pages) + 1}")[:110]
-            pages.append(ExtractedPage(index=len(pages) + 1, kind=kind, label=label,
-                                       text=normalize_text(str(p.get("text") or ""))).finalize())
-        return ParseResult(pages or [ExtractedPage(index=1, kind="section", label="Beginning", text="").finalize()],
-                           ["Read from a Mentis export: pages as exported."])
+            pages.append(_exported_page(p, len(pages) + 1))
+        warnings = ["Read from a Mentis export: pages as exported."]
+        if len(doc["pages"]) > limits.max_pages:
+            warnings.append(f"Only the first {limits.max_pages} of {len(doc['pages'])} pages were read.")
+        return ParseResult(pages or [ExtractedPage(index=1, kind="section", label="Beginning", text="").finalize()], warnings)
     if isinstance(doc, dict):
         parts = list(doc.items())
         sections = [(str(k)[:110], v) for k, v in parts]

@@ -24,7 +24,9 @@ interface Passage { score: number; page_index: number; page_label: string; headi
 const FLAG_LABEL: Record<string, string> = {
   empty: "No text", low_confidence: "Low OCR confidence", merged_cells: "Merged cells", truncated: "Truncated",
 };
-const ACCEPT = ".pdf,.docx,.pptx,.xlsx,.md,.markdown,.json";
+// A new version must be the same file type: the picker offers that type and its aliases only.
+const ACCEPT_BY_TYPE: Record<string, string> = { md: ".md,.markdown", yaml: ".yaml,.yml", jpg: ".jpg,.jpeg" };
+const acceptFor = (fileType: string) => ACCEPT_BY_TYPE[fileType] ?? `.${fileType}`;
 
 interface Props {
   base: string;                // /tenants/{id}/documents
@@ -109,7 +111,7 @@ export function DocDetail({ base, doc, refreshKey, onChanged, onDeleted, onBack,
         </>}
         {latest.status === "failed" && <button className="btn" onClick={() => act(latest, "retry")}><Icon name="refresh" />Retry v{latest.version}</button>}
         <button className="btn doc-newversion" onClick={() => file.current?.click()}><Icon name="upload" />New version</button>
-        <input ref={file} type="file" accept={ACCEPT} hidden onChange={(e) => {
+        <input ref={file} type="file" accept={acceptFor(latest.file_type)} hidden onChange={(e) => {
           const f = e.target.files?.[0];
           e.target.value = "";
           if (f) onNewVersion(f, doc.id);

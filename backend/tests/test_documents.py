@@ -54,6 +54,18 @@ def _tenant_admin(super_admin, tenant_id, email="ta@example.com"):
     ("a.md", "caf\u00e9".encode("latin-1"), "not UTF-8"),
     ("a.json", b"{not json", "not valid JSON"),
     ("a.json", b"[" * 100_000 + b"]" * 100_000, "nested too deeply|not valid JSON"),
+    ("a.csv", "caf\u00e9;x".encode("latin-1"), "not UTF-8"),
+    ("a.yml", b"a: [1,\n", "not valid YAML"),
+    ("a.yaml", b"[" * 5000 + b"]" * 5000, "nested too deeply"),
+    ("a.png", b"GIF89a....", "not a valid PNG"),
+    ("a.jpg", b"\x89PNG\r\n\x1a\n", "not a valid JPEG"),
+    ("a.png", b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00#(\x00\x00#(", "million"),  # 9000 x 9000
+    ("a.gif", b"GIF89a", "Only PDF"),
+    ("a.csv", (b"h," * 600 + b"\n") * 3, "columns"),
+    ("a.md", b"  \n\n", "no content"),
+    ("a.json", b"{}", "no content"),
+    ("a.yaml", b"# only a comment\n", "no content"),
+    ("a.yaml", b"- a\n" * 250_000, "more than 200,000 values"),
 ])
 def test_upload_refused(name, data, reason):
     with pytest.raises(UploadError, match=reason):
@@ -84,6 +96,11 @@ def test_filename_sanitized():
     ("Escalation_Matrix.xlsx", samples.xlsx, "| L2 | Mario Rossi | 085 123 4567 |"),
     ("Runbook.md", lambda: "# Escalation\n\nCall **Mario Rossi**, 085 123 4567.\n\n# Phishing\n\nCheck headers.\n".encode(), "Call **Mario Rossi**"),
     ("Contacts.json", lambda: b'[{"name": "Mario Rossi", "role": "L2", "phone": "085 123 4567"}]', "- **phone**: 085 123 4567"),
+    ("Escalation.csv", lambda: b"Level;Name;Phone\nL2;Mario Rossi;085 123 4567\n", "| L2 | Mario Rossi | 085 123 4567 |"),
+    ("Contacts.tsv", lambda: b"Level\tName\nL2\tMario Rossi\n", "| L2 | Mario Rossi |"),
+    ("rule.yml", lambda: b"title: Suspicious PowerShell\nlevel: high\ndetection:\n  condition: sel\n", "## Suspicious PowerShell"),
+    ("Matrix.png", samples.png, "Mario Rossi"),
+    ("Matrix.jpeg", samples.jpg, "Mario Rossi"),
 ])
 def test_ingest_each_format(super_admin, filename, builder, expect):
     t = _tenant(super_admin)
@@ -97,6 +114,112 @@ def test_ingest_each_format(super_admin, filename, builder, expect):
     pages = super_admin.get(f"/api/tenants/{t['id']}/documents/versions/{v['id']}/pages").json()
     assert expect in "\n".join(p["text"] for p in pages)
     assert _db().scalars(select(Chunk).where(Chunk.version_id == uuid.UUID(v["id"]))).first() is not None
+
+
+def test_yaml_kept_as_written_without_expanding_aliases():
+    from app.ingestion.datafiles import parse_yaml
+    from app.ingestion.types import ParseLimits
+
+    bomb = b"a: &a [x, x, x, x, x, x, x, x, x]\nb: &b [*a, *a, *a, *a, *a, *a, *a, *a, *a]\nc: [*b, *b, *b, *b, *b, *b, *b, *b, *b]\n---\nname: Second\n"
+    pages = parse_yaml(bomb, ParseLimits()).pages
+    assert [p.label for p in pages] == ["Document 1", "Second"]
+    assert "c: [*b, *b" in pages[0].text and len(pages[0].text) < 300
+
+
+def test_csv_semicolon_and_row_limit():
+    from app.ingestion.datafiles import parse_csv
+    from app.ingestion.types import ParseLimits
+
+    r = parse_csv(b"a;b\n" + b"1;2\n" * 20, ParseLimits(max_sheet_rows=10))
+    assert r.pages[0].text.startswith("| a | b |") and "truncated" in r.pages[0].flags
+
+
+def test_export_names_strip_only_file_extensions():
+    from app.services.doc_export import stem
+
+    assert stem("notes.markdown") == "notes" and stem("rule.YML") == "rule" and stem("Runbook.docx") == "Runbook"
+    assert stem("Contoso.Holding") == "Contoso.Holding" and stem("Runbook v2.1") == "Runbook v2.1"
+
+
+def test_tsv_quotes_are_text():
+    from app.ingestion.datafiles import read_rows
+
+    rows, _ = read_rows(b'a\tb\n"quoted\tx\nc\td\n', "tsv", 100)
+    assert rows == [["a", "b"], ['"quoted', "x"], ["c", "d"]]
+
+
+def test_csv_without_consistent_delimiter_is_one_column():
+    from app.ingestion.datafiles import read_rows
+
+    rows, _ = read_rows(b"Call the SOC, then escalate\nCheck logs; notify\nDone\n", "csv", 100)
+    assert rows == [["Call the SOC, then escalate"], ["Check logs; notify"], ["Done"]]
+
+
+def test_markdown_fences_follow_commonmark():
+    from app.ingestion.textfiles import parse_md
+    from app.ingestion.types import ParseLimits
+
+    labels = lambda t: [p.label for p in parse_md(t.encode(), ParseLimits()).pages]
+    assert labels("# A\n```x```\n# B\nb") == ["A", "B"]
+    assert labels("# A\n````\n```\n# not\n```\n````\n# B\nx") == ["A", "B"]
+    assert labels("# C#\nx") == ["C#"]
+
+
+def test_yaml_keeps_comments_with_their_document():
+    from app.ingestion.datafiles import parse_yaml
+    from app.ingestion.types import ParseLimits
+
+    pages = parse_yaml(b"# header\ntitle: |\n  Long\n  title\n# end of A\n---\n# about B\nname: B\n", ParseLimits()).pages
+    assert [p.label for p in pages] == ["Long title", "B"]
+    assert "# header" in pages[0].text and "# end of A" in pages[0].text and "# about B" in pages[1].text
+
+
+def test_code_blocks_are_not_split_into_headings():
+    from app.ingestion.chunking import MAX_CHARS, chunk_pages
+    from app.ingestion.types import ExtractedPage
+
+    text = "## Rule\n\n```yaml\ntitle: Rule\n\n# False positives\nfalsepositives:\n  - admin\n```"
+    chunks = chunk_pages([ExtractedPage(index=1, kind="section", label="Rule", text=text)])
+    assert len(chunks) == 1 and chunks[0].heading == "Rule"
+    big = "```yaml\n" + "\n".join(f"key{i}: value {i}" for i in range(800)) + "\n```"
+    chunks = chunk_pages([ExtractedPage(index=1, kind="section", label="R", text=big)])
+    assert len(chunks) > 1 and all(c.text.startswith("```yaml") and c.text.endswith("```") for c in chunks)
+    assert all(len(c.text) <= MAX_CHARS for c in chunks)
+
+
+def test_mentis_json_keeps_quality_signals():
+    from app.ingestion.textfiles import parse_json
+    from app.ingestion.types import ParseLimits
+
+    doc = {"format": "mentis-document/1", "pages": [{"index": 1, "kind": "page", "label": "Page 1", "method": "ocr",
+                                                    "ocr_confidence": 0.4, "tables": 2, "flags": ["low_confidence"], "text": "x"}] * 3}
+    r = parse_json(__import__("json").dumps(doc).encode(), ParseLimits(max_pages=2))
+    p = r.pages[0]
+    assert (p.method, p.ocr_confidence, p.tables, p.flags) == ("ocr", 0.4, 2, ["low_confidence"])
+    assert any("2 of 3" in w for w in r.warnings)
+
+
+def test_phone_jpeg_with_multi_picture_header():
+    import io
+
+    from PIL import Image
+
+    from app.ingestion.images import parse_image
+    from app.ingestion.types import ParseLimits
+
+    img = samples.text_image(["Escalation: call Mario Rossi"]).convert("RGB")
+    buf = io.BytesIO()
+    img.save(buf, format="MPO", save_all=True, append_images=[img])
+    assert Image.open(io.BytesIO(buf.getvalue())).format == "MPO"
+    assert "Mario Rossi" in parse_image(buf.getvalue(), ParseLimits()).pages[0].text
+
+
+def test_picture_marked_as_ocr_with_image(super_admin):
+    t = _tenant(super_admin)
+    vid = _upload(super_admin, t["id"], "Matrix.png", samples.png()).json()["id"]
+    run_jobs(super_admin)
+    pages = super_admin.get(f"/api/tenants/{t['id']}/documents/versions/{vid}/pages").json()
+    assert pages[0]["method"] == "ocr" and pages[0]["has_image"] and pages[0]["label"] == "Image"
 
 
 def test_scanned_pdf_marked_as_ocr_with_image(super_admin):

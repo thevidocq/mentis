@@ -1,6 +1,6 @@
 [project]
 name = "mentis-backend"
-version = "0.4.1"
+version = "0.5.0"
 description = "Mentis API and core services"
 requires-python = ">=3.12"
 # Minimum versions are security floors (pip-audit clean): raise them when an advisory appears.
@@ -22,6 +22,7 @@ dependencies = [
     "rq>=1.16",
     "httpx>=0.27",
     "qdrant-client>=1.12",
+    "pyyaml>=6.0.2",       # YAML uploads (validated in the API, parsed in the worker)
     # Security floors of indirect dependencies (FastAPI, uvicorn, httpx, minio, qdrant-client).
     "starlette>=1.3.1",
     "h11>=0.16",

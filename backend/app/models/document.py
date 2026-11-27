@@ -58,7 +58,7 @@ class DocumentVersion(IdMixin, Base):
     version: Mapped[int] = mapped_column(Integer, nullable=False)
 
     original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
-    file_type: Mapped[str] = mapped_column(String(10), nullable=False)  # pdf | docx | pptx | xlsx | md | json
+    file_type: Mapped[str] = mapped_column(String(10), nullable=False)  # pdf | docx | pptx | xlsx | md | json | csv | tsv | yaml | png | jpg
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     storage_key: Mapped[str] = mapped_column(String(255), nullable=False)

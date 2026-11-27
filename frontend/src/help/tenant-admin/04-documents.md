@@ -16,10 +16,13 @@ On a phone the list fills the screen; tap a document to open it, **‹** to go b
 
 Select **Upload** above the list, or drop files on the list. You can upload several files at once; a single new document opens when it is uploaded.
 
-Accepted: **PDF, DOCX, PPTX, XLSX, Markdown (.md) and JSON**, up to 50 MB each.
+Accepted: **PDF, DOCX, PPTX, XLSX, Markdown (.md, .markdown), JSON, CSV, TSV, YAML (.yaml, .yml) and pictures (PNG, .jpg, .jpeg)**, up to 50 MB each. Empty files are refused.
 
 - **Markdown** (exports of wikis such as Confluence, Notion, GitHub): one section per top-level heading; must be UTF-8 text.
 - **JSON**: a file downloaded from Mentis as JSON (Documents → download → JSON) is read back with its own pages, so documentation moves between customers or installations as it was. Any other JSON (contact lists, escalation matrices exported from a tool) becomes readable text: one section per top-level key or per item, lists of records as tables. It must be valid UTF-8 JSON.
+- **CSV / TSV** (contact lists, escalation matrices, shifts exported from Excel or a tool): read as one table, like an Excel sheet. Comma, semicolon, pipe and tab separators are recognised; a file without a consistent separator is read as one column of lines. Save as **CSV UTF-8**; up to 5,000 rows and 500 columns are read. In TSV, quotes are plain text.
+- **YAML** (`.yaml`, `.yml`: Sigma rules, SOAR playbooks, configurations): one section per YAML document (separated by `---`), named after its `title`, `name` or `id`; the text is kept exactly as written, so analysts can ask what a rule detects. Comments are kept with the document they precede. Must be valid UTF-8 YAML, at most 200,000 values.
+- **Pictures** (PNG, JPEG: screenshots of a matrix, photos of a procedure, diagrams with text): read with OCR like a scanned page, with the confidence score; the picture is shown in the preview. At most 50 million pixels (e.g. 7000 × 7000). Check the **Text read** tab: OCR can misread small or blurred text. A picture with no readable text (a photo, a diagram without labels) ends as **Failed**: Mentis answers from text only.
 
 Refused, with the reason shown:
 
@@ -64,7 +67,7 @@ The **Versions** tab lists them all: **View** one in the preview, download it, *
 
 ## Preview and Text read: check what Mentis read
 
-**Preview** shows each page as in the original (PDF); for Word, PowerPoint and Excel, which have no page image, it shows the text read. **Text read** always shows the extracted text, with headings and tables, and how it was read: native text or **OCR** with its confidence, and the tables found. Move between pages, sections (Word, split at top-level headings), slides or sheets with **‹ ›**.
+**Preview** shows each page as in the original (PDF) or the picture itself (PNG, JPEG); for the other formats, which have no page image, it shows the text read. **Text read** always shows the extracted text, with headings and tables, and how it was read: native text or **OCR** with its confidence, and the tables found. Move between pages, sections (Word and Markdown at top-level headings, JSON per key or item, YAML per document), slides, sheets or tables (CSV) with **‹ ›**.
 
 Warnings next to the page number need a look:
 

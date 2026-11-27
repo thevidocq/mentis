@@ -22,6 +22,7 @@ from fastapi import (
 )
 from fastapi.responses import Response, StreamingResponse
 from starlette.background import BackgroundTask
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -46,7 +47,7 @@ from app.services.embeddings import EmbeddingError
 from app.services.vector_index import VectorIndexError
 from app.services.logs import log_event
 from app.services.public_errors import public_message
-from app.services.uploads import UploadError, check_upload, safe_filename
+from app.services.uploads import UploadError, check_upload, file_type_of, safe_filename
 
 _log = logging.getLogger("mentis.documents")
 router = APIRouter(prefix="/tenants/{tenant_id}/documents", tags=["documents"])
@@ -59,6 +60,11 @@ _MIME = {
     "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "md": "text/markdown; charset=utf-8",
     "json": "application/json",
+    "csv": "text/csv; charset=utf-8",
+    "tsv": "text/tab-separated-values; charset=utf-8",
+    "yaml": "application/yaml; charset=utf-8",
+    "png": "image/png",
+    "jpg": "image/jpeg",
 }
 
 
@@ -208,7 +214,7 @@ async def upload(
     limit = get_settings().max_upload_mb * 1024 * 1024
     data = await file.read(limit + 1)
     try:
-        checked = check_upload(file.filename or "", data)
+        checked = await run_in_threadpool(check_upload, file.filename or "", data)  # parsing checks are CPU-bound
     except UploadError as e:
         log_event(db, "document.upload_refused", level="warning", actor=user, tenant_id=tenant.id,
                   target=(file.filename or "")[:200], ip=client_ip(request), detail={"reason": str(e)})
@@ -312,8 +318,8 @@ def rename_document(tenant_id: uuid.UUID, document_id: uuid.UUID, body: Rename, 
         name = safe_filename(body.name)
     except UploadError as e:
         raise HTTPException(422, str(e)) from None
-    # Keep the extension: versions of one document must all be the same file type.
-    if "." not in name or name.rsplit(".", 1)[-1].lower() != doc.name.rsplit(".", 1)[-1].lower():
+    # Keep the file type: versions of one document must all be the same type (.yml and .yaml are one).
+    if "." not in name or file_type_of(name) != file_type_of(doc.name):
         raise HTTPException(422, f"Keep the .{doc.name.rsplit('.', 1)[-1].lower()} extension.")
     old = doc.name
     doc.name, doc.name_key = name, name.lower()
@@ -368,11 +374,10 @@ def download_original(tenant_id: uuid.UUID, version_id: uuid.UUID, request: Requ
     tenant = _tenant(db, user, tenant_id)
     v = _version(db, tenant, version_id)
     data = _stored(v.storage_key)
-    ascii_name = v.original_filename.encode("ascii", "replace").decode().replace('"', "").replace("?", "_")
     log_event(db, "document.downloaded", actor=user, tenant_id=tenant.id, target=v.original_filename, ip=client_ip(request),
               detail={"version": v.version})
     return Response(data, media_type="application/octet-stream", headers={
-        "Content-Disposition": f'attachment; filename="{ascii_name}"',
+        "Content-Disposition": _attachment(v.original_filename),
         "X-Content-Type-Options": "nosniff",
     })
 

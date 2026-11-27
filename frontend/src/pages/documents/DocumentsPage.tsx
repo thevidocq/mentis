@@ -10,7 +10,7 @@ import { DocOverview } from "./DocOverview";
 import { isBusy } from "./status";
 import "./documents.css";
 
-const ACCEPT = ".pdf,.docx,.pptx,.xlsx,.md,.markdown,.json";
+const ACCEPT = ".pdf,.docx,.pptx,.xlsx,.md,.markdown,.json,.csv,.tsv,.yaml,.yml,.png,.jpg,.jpeg";
 
 interface Props {
   tenantId: string;
@@ -136,7 +136,7 @@ export function DocumentsPage({ tenantId, title, scopeName = "this customer", ge
         {loadError && <div className="error doc-error" role="alert">{loadError}</div>}
         {exportError && <div className="error doc-error" role="alert">{exportError}</div>}
         <DocList docs={docs ?? []} selected={doc?.id ?? null} onSelect={(id) => select(id)} onOverview={() => select(null)} />
-        <div className="doc-drop-hint muted small">Drop files here · PDF, DOCX, PPTX, XLSX, MD, JSON · the same file name adds a new version</div>
+        <div className="doc-drop-hint muted small">Drop files here · PDF, Office, MD, JSON, CSV, YAML, PNG, JPG · the same file name adds a new version</div>
       </aside>
       {doc ? (
         <DocDetail key={doc.id} base={base} doc={doc} refreshKey={refreshKey} onChanged={() => void load()}
@@ -149,7 +149,7 @@ export function DocumentsPage({ tenantId, title, scopeName = "this customer", ge
           {docs && docs.length === 0 && (
             <div className="doc-pad doc-notready">
               <Icon name="upload" size={26} />
-              <p><strong>Upload the first document</strong><br /><span className="muted">PDF, DOCX, PPTX, XLSX, Markdown or JSON: procedures, escalation matrices, runbooks. Macro-enabled or password-protected files are refused.</span></p>
+              <p><strong>Upload the first document</strong><br /><span className="muted">PDF, Word, Excel, PowerPoint, Markdown, JSON, CSV, YAML or pictures: procedures, escalation matrices, runbooks, detection rules. Macro-enabled or password-protected files are refused.</span></p>
               <button className="btn btn-primary" onClick={() => input.current?.click()}><Icon name="plus" />Upload</button>
             </div>
           )}

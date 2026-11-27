@@ -41,9 +41,13 @@ def _owner(tenant: Tenant) -> str:
     return GENERAL_NAME if tenant.is_global else tenant.name
 
 
+_EXTENSIONS = re.compile(r"\.(pdf|docx|pptx|xlsx|md|markdown|json|csv|tsv|yaml|yml|png|jpg|jpeg)$", re.IGNORECASE)
+
+
 def stem(name: str) -> str:
-    """File name without extension, safe in a ZIP and on Windows."""
-    base = re.sub(r"\.[A-Za-z0-9]{1,5}$", "", name or "document")
+    """Name without the file extension of an accepted type, safe in a ZIP and on Windows.
+    Other dots stay: "Contoso.Holding" (a customer) and "Runbook v2.1" keep their names."""
+    base = _EXTENSIONS.sub("", name or "document")
     base = re.sub(r'[\x00-\x1f<>:"/\\|?*]+', "_", base).strip(" .") or "document"
     return base[:150]
 
@@ -151,7 +155,8 @@ def _zip_all(db: Session, tenant: Tenant, fmt: str, read_original, max_bytes: in
     try:
         for doc, v in rows:
             if fmt == "original":
-                name, data = _unique(stem(doc.name) + "." + v.file_type, used), read_original(v.storage_key)
+                ext = v.original_filename.rsplit(".", 1)[-1].lower() if "." in v.original_filename else v.file_type
+                name, data = _unique(stem(doc.name) + "." + ext, used), read_original(v.storage_key)
             elif fmt == "md":
                 name, data = _unique(stem(doc.name) + ".md", used), markdown(db, tenant, doc, v).encode()
             else:
