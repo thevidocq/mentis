@@ -89,6 +89,31 @@ def restore(db: Session, version: DocumentVersion) -> None:
     activate(db, version)
 
 
+def duplicate_message(db: Session, tenant_id, sha256: str, document: Document | None) -> str | None:
+    """Why a file with this content should not be uploaded again for this customer, or None.
+
+    Any version of any document of the customer counts (all file types: the hash is of the bytes),
+    except versions that failed to be read or were rejected: uploading those again is allowed.
+    """
+    rows = db.execute(
+        select(DocumentVersion, Document).join(Document, Document.id == DocumentVersion.document_id)
+        .where(DocumentVersion.tenant_id == tenant_id, DocumentVersion.sha256 == sha256,
+               DocumentVersion.status != VersionStatus.FAILED, DocumentVersion.approval != Approval.REJECTED)
+        .order_by(DocumentVersion.is_active.desc(), DocumentVersion.version.desc())
+    ).all()
+    if not rows:
+        return None
+    same = [(v, d) for v, d in rows if document is not None and d.id == document.id]
+    v, d = (same or rows)[0]
+    if d.id != getattr(document, "id", None):
+        return f"This file is identical to {d.name} v{v.version}: it is already uploaded under that name."
+    if v.is_active:
+        return "This file is identical to the active version."
+    if v.approval == Approval.PENDING:
+        return f"This file is identical to v{v.version}, which is waiting for approval."
+    return f"This file is identical to v{v.version} of this document: restore it from Versions instead."
+
+
 def next_version_number(db: Session, document: Document) -> int:
     current = db.scalars(select(DocumentVersion.version).where(DocumentVersion.document_id == document.id)).all()
     return max(current, default=0) + 1

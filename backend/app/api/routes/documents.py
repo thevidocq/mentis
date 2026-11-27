@@ -231,6 +231,13 @@ async def upload(
             raise HTTPException(422, f"A new version must be a {latest.file_type.upper()} file, like the previous ones.")
     else:
         doc = db.scalar(select(Document).where(Document.tenant_id == tenant.id, Document.name_key == name_key))
+    # Same content already uploaded for this customer (any name, any version, any file type)?
+    duplicate = versions.duplicate_message(db, tenant.id, checked.sha256, doc)
+    if duplicate:
+        db.rollback()
+        log_event(db, "document.upload_refused", level="warning", actor=user, tenant_id=tenant.id,
+                  target=checked.filename[:200], ip=client_ip(request), detail={"reason": duplicate, "sha256": checked.sha256})
+        raise HTTPException(status.HTTP_409_CONFLICT, duplicate)
     if doc is None:
         doc = Document(tenant_id=tenant.id, name=checked.filename, name_key=name_key, created_by=user.id)
         db.add(doc)
@@ -239,11 +246,6 @@ async def upload(
         except IntegrityError:  # concurrent upload of the same new name
             db.rollback()
             raise HTTPException(status.HTTP_409_CONFLICT, "This document is being uploaded right now. Try again.") from None
-    else:
-        active = db.scalar(select(DocumentVersion).where(DocumentVersion.document_id == doc.id, DocumentVersion.is_active.is_(True)))
-        if active is not None and active.sha256 == checked.sha256:
-            db.rollback()
-            raise HTTPException(status.HTTP_409_CONFLICT, "This file is identical to the active version.")
 
     version = DocumentVersion(
         document_id=doc.id, tenant_id=tenant.id, version=versions.next_version_number(db, doc),
