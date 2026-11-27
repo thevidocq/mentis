@@ -15,6 +15,21 @@ from dataclasses import dataclass
 
 from app.core.config import get_settings
 
+MIME = {  # content type of each accepted type, for storage and downloads
+    "pdf": "application/pdf",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "md": "text/markdown; charset=utf-8",
+    "json": "application/json",
+    "csv": "text/csv; charset=utf-8",
+    "tsv": "text/tab-separated-values; charset=utf-8",
+    "yaml": "application/yaml; charset=utf-8",
+    "png": "image/png",
+    "jpg": "image/jpeg",
+}
+
+
 ALLOWED = {"pdf", "docx", "pptx", "xlsx", "md", "json", "csv", "tsv", "yaml", "png", "jpg"}
 TEXT_TYPES = {"md", "json", "csv", "tsv", "yaml"}
 IMAGE_TYPES = {"png", "jpg"}

@@ -19,7 +19,9 @@ def _ver(v: DocumentVersion, name: str) -> dict:
 
 
 def build(db: Session, tenant: Tenant) -> dict:
-    docs = {d.id: d.name for d in db.scalars(select(Document).where(Document.tenant_id == tenant.id))}
+    all_docs = db.scalars(select(Document).where(Document.tenant_id == tenant.id)).all()
+    docs = {d.id: d.name for d in all_docs}
+    link_errors = {d.id: d.source_error for d in all_docs if d.source_url and d.source_status == "error"}
     versions = db.scalars(select(DocumentVersion).where(DocumentVersion.tenant_id == tenant.id)
                           .order_by(DocumentVersion.uploaded_at.desc())).all()
     latest: dict[uuid.UUID, DocumentVersion] = {}
@@ -34,6 +36,9 @@ def build(db: Session, tenant: Tenant) -> dict:
     for v in sorted(latest.values(), key=lambda x: docs.get(x.document_id, "").lower()):
         if v.status in ("queued", "processing", "failed") or v.approval == "pending":
             attention.append(_ver(v, docs.get(v.document_id, "")))
+        elif v.document_id in link_errors:  # the version in use is fine, but its link could not be read
+            attention.append({**_ver(v, docs.get(v.document_id, "")), "status": "link_error",
+                              "error": f"Link not read: {link_errors[v.document_id]}"})
 
     by_type: dict[str, int] = {}
     for v in active:

@@ -19,7 +19,7 @@ from app.services.answer_check import values
 
 MODES = ("warn", "hide", "off")
 DEFAULT_MODE = "warn"
-PENDING_TIMEOUT_S = 120
+PENDING_TIMEOUT_S = 200  # longer than the check itself (judge.TOTAL_SECONDS)
 
 
 def mode_of(settings: dict | None) -> str:
@@ -28,9 +28,9 @@ def mode_of(settings: dict | None) -> str:
 
 
 def _substantive(u: units_mod.Unit) -> bool:
-    """A statement that must cite a source: not an introduction ("For Acme:"), and either a value
-    (contact, time, code...) or at least six words."""
-    return not u.intro and (bool(values.extract(u.raw)) or len(u.plain.split()) >= 6)
+    """A statement that must cite a source: any line with a value (contact, time, code...), or a
+    statement of at least six words that is not an introduction ("For Acme:", a list heading)."""
+    return bool(values.extract(u.raw)) or (not u.intro and len(u.plain.split()) >= 6)
 
 
 def level1(content: str, citations: list[dict], passages: dict[int, str]) -> list[dict]:
@@ -50,11 +50,21 @@ def level1(content: str, citations: list[dict], passages: dict[int, str]) -> lis
     issues: list[dict] = []
     for u in units_mod.split(content):
         if not u.cites:
-            if _substantive(u):
+            if u.scope and values.extract(u.raw):
+                # An uncited heading over cited items: its values must be in the passages its items cite.
+                scope = {n: passages[n] for n in u.scope if n in passages}
+                issues += values.check(u.raw, scope, list(scope.values()))
+            elif _substantive(u):
                 issues.append({"level": [1], "kind": "uncited", "text": u.raw})
             continue
         own = {n: passages[n] for n in u.cites if n in passages}
         issues += values.check(u.raw, own, list(own.values()))
+    # Table rows are not statements, but their values (a phone, an address) must still come from the
+    # passages: the row's own citations, else any passage the answer cites.
+    cited_all = {c for u in units_mod.split(content) for c in u.cites} | {c for _, cs in units_mod.table_rows(content) for c in cs}
+    for row, cites in units_mod.table_rows(content):
+        scope = {n: passages[n] for n in (cites or cited_all) if n in passages}
+        issues += values.check(units_mod.plain(row), scope, list(scope.values()))
     out, seen = [], set()
     for i in issues:
         key = (i["kind"], i["text"])
@@ -75,6 +85,7 @@ def merge(l1: list[dict], l2: list[dict]) -> list[dict]:
     """A statement rejected by level 2 that holds a value already flagged by level 1 is one problem
     found by both: the value issue becomes level [1, 2] and the statement is not repeated."""
     out = [dict(i) for i in l1]
+    l2 = list({(s["kind"], s["text"]): s for s in l2}.values())  # the checker may name a statement twice
     for s in l2:
         same = [i for i in out if i["kind"] == "value" and i["text"] and i["text"] in units_mod.plain(s["text"]) + s["text"]]
         if same:

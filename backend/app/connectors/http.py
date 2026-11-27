@@ -61,7 +61,7 @@ def _resolve(host: str, port: int) -> list[str]:
         return list(_resolver(host))
     try:
         return sorted({i[4][0] for i in socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)})
-    except OSError:
+    except (OSError, UnicodeError, ValueError):  # unresolvable or invalid names (IDNA errors too)
         return []
 
 
@@ -92,7 +92,7 @@ def destination_problem(ip_text: str, allow_private: bool) -> str | None:
     if ip in _internal_ips():
         return "a Mentis internal service"
     if not allow_private and (ip.is_private or ip in _SHARED):
-        return "a private network address (allowed only if a super-admin enables private addresses)"
+        return "a private network address (not allowed here)"
     return None
 
 
@@ -101,6 +101,10 @@ class Response:
         self.status = status
         self.headers = headers
         self._body = body
+
+    @property
+    def content(self) -> bytes:
+        return self._body
 
     @property
     def text(self) -> str:
@@ -207,13 +211,20 @@ class SafeHttp:
         enc = (r.headers.get("content-encoding") or "identity").lower().strip()
         if enc not in ("identity", "gzip", "x-gzip", "deflate"):
             raise self._fail(f"unsupported answer encoding ({enc[:20]})")
-        inflate = zlib.decompressobj(32 + zlib.MAX_WBITS) if enc != "identity" else None
+        inflate = None
         chunks, size = [], 0
         for chunk in r.iter_raw():
             if time.monotonic() > self._until:
                 raise ConnectorError(f"{self.product} timed out", public=True)
+            if enc != "identity" and inflate is None and chunk:
+                # gzip and zlib-wrapped deflate have a header; some servers send raw deflate.
+                raw = enc == "deflate" and (chunk[0] & 0x0F) != 8
+                inflate = zlib.decompressobj(-zlib.MAX_WBITS if raw else 32 + zlib.MAX_WBITS)
             if inflate is not None:
-                chunk = inflate.decompress(chunk, self._max_bytes - size + 1)
+                try:
+                    chunk = inflate.decompress(chunk, self._max_bytes - size + 1)
+                except zlib.error:
+                    raise self._fail("unreadable compressed answer") from None
                 if inflate.unconsumed_tail:
                     raise self._fail("answer too large")
             size += len(chunk)
@@ -221,7 +232,10 @@ class SafeHttp:
                 raise self._fail("answer too large")
             chunks.append(chunk)
         if inflate is not None:
-            tail = inflate.flush(self._max_bytes - size + 1)
+            try:
+                tail = inflate.flush(self._max_bytes - size + 1)
+            except zlib.error:
+                raise self._fail("unreadable compressed answer") from None
             size += len(tail)
             if size > self._max_bytes:
                 raise self._fail("answer too large")

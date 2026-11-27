@@ -8,13 +8,13 @@ Upload your customer's procedures, escalation matrices, runbooks and playbooks. 
 
 - **On the left, the list.** Search by name, and filter **All**, **In use** or **To review**. Documents that need you (**Failed**, **To approve**, **Processing**) are grouped at the top under *Needs attention*; then *In use*, then *Not in use*.
 - **On the right, the Overview** when you open the page (or select **Overview** at the top of the list): documents in use, pages read (and how many with OCR), passages searchable, questions asked in chats on this customer in the last 30 days and how many found nothing; what needs attention, with a direct **Retry** or **Review**; content in use by file type, last indexed, oldest in use, pages to check; recent uploads and approvals. Select any line to open that document.
-- **On the right, the selected document**, once you select one. Its name and state, the actions, and four tabs: **Preview**, **Text read**, **Versions**, **Test a question**. A column with the details and the latest versions is on the right on wide screens.
+- **On the right, the selected document**, once you select one. Its name and state with a line of facts (type, size, pages, how it was read, date), the actions, the **Read from a link** panel for documents added from a link, and four tabs: **Preview**, **Text read**, **Versions**, **Test a question**.
 
 On a phone the list fills the screen; tap a document to open it, **‹** to go back.
 
 ## Upload
 
-Select **Upload** above the list, or drop files on the list. You can upload several files at once; a single new document opens when it is uploaded.
+Select **Upload files** above the list, or drop files on the list. You can upload several files at once; a single new document opens when it is uploaded.
 
 Accepted: **PDF, DOCX, PPTX, XLSX, Markdown (.md, .markdown), JSON, CSV, TSV, YAML (.yaml, .yml) and pictures (PNG, .jpg, .jpeg)**, up to 50 MB each. Empty files are refused.
 
@@ -32,15 +32,34 @@ Refused, with the reason shown:
 
 A PDF that only restricts printing or copying is accepted and read normally. A PDF that needs a password to open is stored but ends as **Failed** ("The file is password-protected"): remove the password and upload it again.
 
+## Add from link
+
+**Add from link** (above the list) adds documentation published on a site: a wiki or documentation page, a Markdown or text file, a PDF, JSON, YAML or CSV, or a file on GitHub (paste the normal GitHub link of the file: Mentis reads its raw version).
+
+1. Paste the **address** (https).
+2. Optionally give a **name** (otherwise the page title or the file name).
+3. Choose how often to **check for changes**: every 6 hours, every day (default), every week, or only with **Check now**.
+
+Mentis reads the page at once: web pages are converted to text (menus, headers, footers and scripts are left out), then the document is read and indexed like an upload, with the same approval if your customer requires it.
+
+The document shows **from link** next to its name and, above the tabs, the **Read from a link** panel: the address, **Check for changes** (change it there at any time), **Last check** with its result, **Next check** (not shown while the last check failed), and **Check now**.
+
+- **The page changed**: a new version is created (note *Page changed*), approved like an upload when approval is on.
+- **No change**: only *Last check* is updated; no new version.
+- **The page cannot be read** (removed, moved, error, sign-in required): the version in use stays, the panel shows the reason in red and the document appears in **Needs attention** (*Link not read*) until a check succeeds.
+
+What cannot be read: pages that need a sign-in, and pages that show their text only through JavaScript (single-page apps). Only public **https://** addresses are read, never private networks (documents are shared with all the customer's users). Pages larger than 20 MB, or the upload limit if lower, are refused; a very long page is read up to a size limit and says so at its end. A linked document gets its versions from the page only: **Upload a new version** is not offered. Deleting the document stops the checks.
+
 ## Actions
 
-At the top of the document:
+At the top of the document, under its name, one line sums up the version on screen: type and size, pages or sections, how it was read (native text or OCR), when it was uploaded or read from its link, and its note. Then:
 
 - **Approve vN** / **Reject**: when the latest version waits for approval.
 - **Retry vN**: when the latest version failed (fix the cause first, e.g. the embedding service).
-- **New version**: upload a file as the next version of **this** document, whatever its file name (same file type).
 - Download icon: a menu with the formats of the version on screen: **Original** (the file as uploaded), **Markdown** (the text Mentis read, page by page, with a header: customer, version, file, date, SHA-256) and **JSON** (the same text plus the passages as indexed, with page and section: to import the documentation into another system). Markdown and JSON are available once the version has been read.
-- **⋯**: **Rename**, **Versions and restore**, **Delete document**.
+- **⋯**: **Upload a new version** (a file as the next version of **this** document, whatever its file name, same file type; not for documents read from a link), **Rename**, **Versions and restore**, **Delete document**.
+
+Warnings about how the file was read (for example *only the first 5,000 rows were read*) appear under the header. When you view an older version, a note next to the tabs takes you back to the version in use.
 
 ## Download all
 
@@ -48,7 +67,7 @@ At the top of the document:
 
 ## Versions
 
-Uploading a file with the **same name** as an existing document (or with **New version**) adds a new version. Only one version is **in use** at a time; older ones stay available.
+Uploading a file with the **same name** as an existing document (or with **Upload a new version** in ⋯) adds a new version. Only one version is **in use** at a time; older ones stay available.
 
 | State | Meaning |
 | --- | --- |
@@ -59,7 +78,9 @@ Uploading a file with the **same name** as an existing document (or with **New v
 | Rejected | You rejected it |
 | Failed | Could not be read or indexed; the error is shown. Use **Retry** after fixing the cause |
 
-A failed or rejected version never replaces the one in use. Uploading a file identical to the active version is refused.
+A failed or rejected version never replaces the one in use.
+
+**Identical files are refused**, whatever their name and type: Mentis compares the content (SHA-256 of the file) with every document and version of the customer and says which one it matches: *identical to Escalation.pdf v2* (already uploaded under another name), *identical to the active version*, *waiting for approval* (approve or reject that one), or an older version (restore it from **Versions** instead of uploading it again). Versions that could not be read or were rejected do not count: you can upload the same file again. Another customer may hold the same file. A file saved again by its program (for example a Word document reopened and saved) usually has a different fingerprint even with the same text, so it is accepted as a new version.
 
 If the worker stops in the middle of a document (restart, crash, timeout), the version becomes **Failed** with "Processing was interrupted" within about half an hour: use **Retry**. A version left **Queued** because its job was lost is queued again automatically.
 

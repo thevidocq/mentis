@@ -19,6 +19,7 @@ const n = (x: number) => x.toLocaleString();
 
 function stateText(v: Ver): { text: string; tone: string } {
   if (v.status === "failed") return { text: `Failed${v.error ? ` · ${v.error}` : ""}`, tone: "fail" };
+  if (v.status === "link_error") return { text: v.error ?? "Link not read", tone: "fail" };
   if (v.status === "queued" || v.status === "processing") return { text: "Processing", tone: "" };
   if (v.approval === "pending") return { text: "Waiting approval", tone: "warn" };
   if (v.approval === "rejected") return { text: "Rejected", tone: "" };

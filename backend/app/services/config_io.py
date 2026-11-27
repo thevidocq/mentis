@@ -266,6 +266,8 @@ def import_config(db: Session, data: dict, apply: bool) -> list[str]:
         if t.get("general"):
             cur = next((x for x in tenants.values() if x.is_global), None)
         settings = {**DEFAULT_TENANT_SETTINGS, **(t.get("settings") or {})}
+        # Settings the file actually has: an older export lacks newer ones, which keep their current value.
+        in_file = set(t.get("settings") or {}) & set(DEFAULT_TENANT_SETTINGS)
         for key, field in (("llm", "llm_provider_id"), ("llm_fallback", "llm_fallback_id"), ("checker", "checker_provider_id")):
             if key not in t:  # files exported before 0.3.6 have no checker: keep the current choice
                 continue
@@ -288,7 +290,7 @@ def import_config(db: Session, data: dict, apply: bool) -> list[str]:
             cs = cur.settings or {}
             # A key missing from the file (older export) keeps the current value.
             changed = (not cur.is_global and cur.status != t.get("status", cur.status)) or any(
-                cs.get(k, DEFAULT_TENANT_SETTINGS[k]) != settings[k] for k in DEFAULT_TENANT_SETTINGS) or any(
+                cs.get(k, DEFAULT_TENANT_SETTINGS[k]) != settings[k] for k in in_file) or any(
                 key in t and names.get(str(cs.get(field))) != t[key]
                 for key, field in (("llm", "llm_provider_id"), ("llm_fallback", "llm_fallback_id"), ("checker", "checker_provider_id"))) or (
                 "answer_check" in t and cs.get("answer_check", "warn") != t["answer_check"]) or (
@@ -298,7 +300,9 @@ def import_config(db: Session, data: dict, apply: bool) -> list[str]:
         if apply and cur is not None:
             if not cur.is_global:
                 cur.status = t.get("status", cur.status)
-            merged = {**(cur.settings or {}), **{k: v for k, v in settings.items() if k in DEFAULT_TENANT_SETTINGS}}
+            fresh = not cur.settings  # a tenant created by this import gets every default
+            merged = {**(cur.settings or {}), **{k: v for k, v in settings.items()
+                                                 if k in DEFAULT_TENANT_SETTINGS and (fresh or k in in_file)}}
             if "answer_check" in t or "answer_check" not in merged:
                 merged["answer_check"] = t.get("answer_check", "warn")
             if "integration_mode" in t:  # older files have none: keep the current mode

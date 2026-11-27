@@ -94,6 +94,18 @@ export interface DocVersion {
   processed_at: string | null;
 }
 
+export type LinkCheck = "6h" | "1d" | "7d" | "manual";
+
+/** Documentation read from a link: where, how often, and the last check. */
+export interface DocLink {
+  url: string;
+  check: LinkCheck;
+  checked_at: string | null;
+  next_check_at: string | null;
+  status: "new_version" | "unchanged" | "error" | null;
+  error: string | null;
+}
+
 export interface DocSummary {
   id: string;
   name: string;
@@ -101,6 +113,7 @@ export interface DocSummary {
   active: DocVersion | null;
   latest: DocVersion;
   versions: number;
+  link?: DocLink | null;
 }
 
 export interface DocPage {

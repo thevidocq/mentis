@@ -57,7 +57,24 @@ def test_list_items_take_the_citation_of_their_heading():
     assert by["Triage (rule 'Apache"].intro and not by["Triage (rule 'Apache"].cites
     assert by["Immediately: isolate"].cites == [2] and by["Immediately: isolate"].inherited
     assert by["Within 30 minutes: e"].cites == [2]
-    assert answer_check.level1(text, [{"n": 1}, {"n": 2}], {1: "x", 2: "Isolate the entity; within 30 minutes export 72 hours of logs"}) == []
+    assert answer_check.level1(text, [{"n": 1}, {"n": 2}], {1: "Rule Apache 2.4.49 flaw CVE-2021-41773: check the log", 2: "Isolate the entity; within 30 minutes export 72 hours of logs"}) == []
+    # The heading's values are checked against the passages of its items: an invented one is caught.
+    bad = text.replace("CVE-2021-41773", "CVE-2099-00001")
+    assert [(i["kind"], i["text"]) for i in answer_check.level1(bad, [{"n": 1}, {"n": 2}], {1: "Rule Apache 2.4.49 flaw CVE-2021-41773", 2: "Isolate the entity; within 30 minutes export 72 hours of logs"})] \
+        == [("value", "CVE-2099-00001")]
+
+
+def test_uncited_heading_values_and_lead_lines_are_still_checked():
+    passages = {1: "Email soc@acme.com for escalation."}
+    for text in ("- Call the CEO at +39 333 9999888 now\n  - Email soc@acme.com [1]",
+                 "**Call +39 333 9999888**\n- Email soc@acme.com [1]",
+                 "Call +39 333 9999888 first:\n- Email soc@acme.com [1]"):
+        assert [i["text"] for i in answer_check.level1(text, [{"n": 1}], passages)] == ["+39 333 9999888"], text
+    # Lead lines and headings go to level 2, marked, with the passages of their items.
+    us = units.split("Never contact the CISO, wait for the customer [1]:\n- Email soc@acme.com")
+    assert us[0].intro and us[0].cites == [1]
+    from app.services.answer_check import judge
+    assert judge.TOTAL_SECONDS > 0 and not hasattr(judge, "INTRO_WORDS")
 
 
 def test_sentences_on_the_same_line_do_not_inherit():
@@ -313,3 +330,16 @@ def test_a_crash_around_the_check_keeps_the_answer(super_admin, fake_llm, monkey
     monkeypatch.setattr(chat_routes.check_runner, "before_save", boom)
     ex, msg = _ask(an, alfa["id"])
     assert ex["answer"]["status"] == "ok" and msg["check"]["level2"] == "unavailable"
+
+
+def test_sections_do_not_lend_citations_code_is_not_text_and_tables_are_checked():
+    from app.services.answer_check import level1, units
+
+    passages = {1: "Isolate hosts. Call 06 1111 2222."}
+    a = "## Containment [1]\n- Isolate the host from the network\n## Communication\n- Inform the customer's CISO by phone right away"
+    assert level1(a, [{"n": 1}], passages) == [{"level": [1], "kind": "uncited", "text": "Inform the customer's CISO by phone right away"}]
+    a = "## Containment [1]\n### Network\n- Isolate the host from the network now"
+    assert [u.cites for u in units.split(a)] == [[1], [1]]  # a sub-heading still hangs from its section
+    assert level1("Steps [1]:\n```\n# list sessions\nquser /server:10.0.0.1\n```", [{"n": 1}], passages) == []
+    issues = level1("| SOC | 06 9999 0000 |\n|---|---|\nThe answer above [1].", [{"n": 1}], passages)
+    assert [(i["kind"], i["text"]) for i in issues] == [("value", "06 9999 0000")]

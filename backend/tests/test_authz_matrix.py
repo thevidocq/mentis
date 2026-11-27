@@ -557,6 +557,12 @@ def _routes(w: World) -> dict[tuple[str, str], list[Probe]]:
     add("GET", "/tenants/{tenant_id}/documents/{document_id}", tenant_route(w, "GET", D + "/{doc}"))
     add("PATCH", "/tenants/{tenant_id}/documents/{document_id}", tenant_route(w, "PATCH", D + "/{doc}", lambda k, o: {"json": {"name": DOC_NAME[o]}}))
     add("DELETE", "/tenants/{tenant_id}/documents/{document_id}", tenant_route(w, "DELETE", D + "/{doc}", skip_allowed="would delete a world document"))
+    # Links: plain http is refused before any request (422); world documents are not linked (422).
+    add("POST", "/tenants/{tenant_id}/documents/link", tenant_route(
+        w, "POST", D + "/link", lambda k, o: {"json": {"url": "http://docs.example.com/page"}}, obj=False, allowed_status=422))
+    add("PATCH", "/tenants/{tenant_id}/documents/{document_id}/link", tenant_route(
+        w, "PATCH", D + "/{doc}/link", lambda k, o: {"json": {"check": "1d"}}, allowed_status=422))
+    add("POST", "/tenants/{tenant_id}/documents/{document_id}/link/check", tenant_route(w, "POST", D + "/{doc}/link/check", allowed_status=422))
     V = D + "/versions/{ver}"
     add("GET", "/tenants/{tenant_id}/documents/versions/{version_id}", tenant_route(w, "GET", V))
     add("GET", "/tenants/{tenant_id}/documents/versions/{version_id}/pages", tenant_route(w, "GET", V + "/pages"))

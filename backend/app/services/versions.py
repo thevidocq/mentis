@@ -9,9 +9,10 @@ Rules
 - Restore activates an older ready version that is not pending or rejected.
 """
 
+import hashlib
 import logging
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, select, true, update
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -87,6 +88,87 @@ def restore(db: Session, version: DocumentVersion) -> None:
     if version.approval in (Approval.PENDING, Approval.REJECTED):
         raise VersionError("Approve this version first.")
     activate(db, version)
+
+
+def lock_content(db: Session, tenant_id, sha256: str) -> None:
+    """Serialise uploads of the same content for one customer until the transaction ends (PostgreSQL),
+    so two simultaneous uploads cannot both pass the duplicate check."""
+    if db.get_bind().dialect.name != "postgresql":
+        return
+    from sqlalchemy import text
+
+    key = int.from_bytes(hashlib.sha256(f"{tenant_id}:{sha256}".encode()).digest()[:8], "big", signed=True)
+    db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": key})
+
+
+def duplicate_message(db: Session, tenant_id, sha256: str, document: Document | None,
+                      exclude_version_id=None) -> str | None:
+    """Why a file with this content should not be uploaded again for this customer, or None.
+
+    Any version of any document of the customer counts (all file types: the hash is of the bytes),
+    except versions that failed to be read or were rejected: uploading those again is allowed.
+    """
+    rows = db.execute(
+        select(DocumentVersion, Document).join(Document, Document.id == DocumentVersion.document_id)
+        .where(DocumentVersion.tenant_id == tenant_id, DocumentVersion.sha256 == sha256,
+               DocumentVersion.status != VersionStatus.FAILED, DocumentVersion.approval != Approval.REJECTED,
+               DocumentVersion.id != exclude_version_id if exclude_version_id else true())
+        .order_by(DocumentVersion.is_active.desc(), DocumentVersion.version.desc())
+    ).all()
+    if not rows:
+        return None
+    same = [(v, d) for v, d in rows if document is not None and d.id == document.id]
+    v, d = (same or rows)[0]
+    if d.id != getattr(document, "id", None):
+        return f"This file is identical to {d.name} v{v.version}: it is already uploaded under that name."
+    if v.is_active:
+        return "This file is identical to the active version."
+    if v.status != VersionStatus.READY:
+        return f"This file is identical to v{v.version}, which is still being processed."
+    if v.approval == Approval.PENDING:
+        return f"This file is identical to v{v.version}, which is waiting for approval."
+    return f"This file is identical to v{v.version} of this document: restore it from Versions instead."
+
+
+class VersionConflict(RuntimeError):
+    """Another version of the same document was created at the same moment."""
+
+
+class StorageDown(RuntimeError):
+    """The original could not be stored (MinIO unreachable)."""
+
+
+def store_version(db: Session, tenant_id, doc: Document, *, filename: str, file_type: str, data: bytes, sha256: str,
+                  content_type: str, user_id=None, note: str | None = None) -> DocumentVersion:
+    """A new queued version of `doc` with its original stored; the caller queues the processing.
+
+    Raises VersionConflict or StorageDown; on StorageDown the version (and a document left empty)
+    is removed again.
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    version = DocumentVersion(
+        document_id=doc.id, tenant_id=tenant_id, version=next_version_number(db, doc), original_filename=filename,
+        file_type=file_type, size_bytes=len(data), sha256=sha256, storage_key="", note=note, uploaded_by=user_id,
+    )
+    try:  # the INSERT happens at flush: a racing upload of the same document fails here
+        db.add(version)
+        db.flush()
+        version.storage_key = storage.original_key(tenant_id, version.id, file_type)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise VersionConflict("Another version of this document is being uploaded. Try again.") from None
+    try:
+        storage.get_storage().put(version.storage_key, data, content_type)
+    except Exception:  # noqa: BLE001 - any storage failure: the version cannot be processed without its file
+        db.delete(version)
+        db.flush()
+        if db.scalar(select(DocumentVersion.id).where(DocumentVersion.document_id == doc.id)) is None:
+            db.delete(doc)
+        db.commit()
+        raise StorageDown("Document storage is not reachable. Try again later.") from None
+    return version
 
 
 def next_version_number(db: Session, document: Document) -> int:

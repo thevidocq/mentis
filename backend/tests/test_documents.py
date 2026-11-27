@@ -281,9 +281,10 @@ def _docx_variant() -> bytes:
 
 def test_identical_file_refused(super_admin):
     t = _tenant(super_admin)
-    _upload(super_admin, t["id"], "Runbook.docx", samples.docx())
+    data = samples.docx()  # built once: generators embed the time, two builds may differ
+    _upload(super_admin, t["id"], "Runbook.docx", data)
     run_jobs(super_admin)
-    assert _upload(super_admin, t["id"], "Runbook.docx", samples.docx()).status_code == 409
+    assert _upload(super_admin, t["id"], "Runbook.docx", data).status_code == 409
 
 
 def test_approval_flow(super_admin):
@@ -313,6 +314,21 @@ def test_retry_failed(super_admin):
 
 
 # --- Isolation -----------------------------------------------------------------------
+
+def test_identical_files_are_refused_whatever_the_name(super_admin):
+    alfa, beta = _tenant(super_admin, "Alfa"), _tenant(super_admin, "Beta")
+    data = b"# Escalation\n\nCall Mario Rossi, 085 123 4567.\n"
+    assert _upload(super_admin, alfa["id"], "Escalation.md", data).status_code == 201
+    run_jobs(super_admin)
+    r = _upload(super_admin, alfa["id"], "Copy of escalation.md", data)
+    assert r.status_code == 409 and "Escalation.md v1" in r.json()["detail"]
+    r = _upload(super_admin, alfa["id"], "Escalation.md", data)
+    assert r.status_code == 409 and "active version" in r.json()["detail"]
+    # Another customer may hold the same file.
+    assert _upload(super_admin, beta["id"], "Escalation.md", data).status_code == 201
+    # The same bytes in another format name are still the same file.
+    assert _upload(super_admin, alfa["id"], "Escalation.markdown", data).status_code == 409
+
 
 def test_tenant_admin_cannot_reach_other_tenant(super_admin):
     alfa, beta = _tenant(super_admin, "Alfa"), _tenant(super_admin, "Beta")
@@ -432,7 +448,7 @@ def test_stuck_versions_are_recovered(super_admin, monkeypatch):
 
     t = super_admin.post("/api/tenants", json={"name": "Alfa"}).json()
     a = _upload(super_admin, t["id"], "A.docx", samples.docx()).json()
-    b = _upload(super_admin, t["id"], "B.docx", samples.docx()).json()
+    b = _upload(super_admin, t["id"], "B.pdf", samples.native_pdf()).json()  # other content: duplicates are refused
     super_admin.queued.clear()
     db = next(db_module.get_db())
     va, vb = db.get(DocumentVersion, uuid.UUID(a["id"])), db.get(DocumentVersion, uuid.UUID(b["id"]))
