@@ -281,9 +281,10 @@ def _docx_variant() -> bytes:
 
 def test_identical_file_refused(super_admin):
     t = _tenant(super_admin)
-    _upload(super_admin, t["id"], "Runbook.docx", samples.docx())
+    data = samples.docx()  # built once: generators embed the time, two builds may differ
+    _upload(super_admin, t["id"], "Runbook.docx", data)
     run_jobs(super_admin)
-    assert _upload(super_admin, t["id"], "Runbook.docx", samples.docx()).status_code == 409
+    assert _upload(super_admin, t["id"], "Runbook.docx", data).status_code == 409
 
 
 def test_approval_flow(super_admin):

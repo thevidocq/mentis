@@ -64,7 +64,12 @@ def run_link_checks_once() -> dict | None:
     try:
         counts = {"new_version": 0, "unchanged": 0, "error": 0}
         for doc in link_sources.due(db):
-            counts[link_sources.sync(db, doc)] += 1
+            try:
+                counts[link_sources.sync(db, doc)] += 1
+            except Exception:  # noqa: BLE001 - one broken link must not stop the others
+                db.rollback()
+                counts["error"] += 1
+                _log.exception("link check of document %s failed", doc.id)
         if counts["new_version"] or counts["error"]:
             _log.info("link checks: %s", counts)
         return counts

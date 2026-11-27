@@ -253,6 +253,7 @@ async def upload(
     if doc is not None and doc.source_url:  # by id or by the same name: its versions come from its link
         raise HTTPException(422, "This document is read from a link: use Check now to read the page again.")
     # Same content already uploaded for this customer (any name, any version, any file type)?
+    versions.lock_content(db, tenant.id, checked.sha256)
     duplicate = versions.duplicate_message(db, tenant.id, checked.sha256, doc)
     if duplicate:
         db.rollback()
@@ -511,6 +512,11 @@ def retry_version(tenant_id: uuid.UUID, version_id: uuid.UUID, request: Request,
     v = _version(db, tenant, version_id)
     if v.status != VersionStatus.FAILED:
         raise HTTPException(status.HTTP_409_CONFLICT, "Only a failed version can be processed again.")
+    # Its content may have been uploaded again meanwhile (failed versions do not count as duplicates).
+    doc = db.get(Document, v.document_id)
+    duplicate = versions.duplicate_message(db, tenant.id, v.sha256, doc, exclude_version_id=v.id)
+    if duplicate:
+        raise HTTPException(status.HTTP_409_CONFLICT, duplicate.replace("This file", "This version"))
     v.status, v.error, v.status_at = VersionStatus.QUEUED, None, utcnow()
     db.commit()
     log_event(db, "document.retry", actor=user, tenant_id=tenant.id, target=v.original_filename, ip=client_ip(request), detail={"version": v.version})

@@ -33,7 +33,7 @@ from app.models.base import utcnow
 from app.services import jobs, versions
 from app.services.integrations import instances
 from app.services.logs import log_event
-from app.services.uploads import MIME, UploadError, check_upload, safe_filename
+from app.services.uploads import MIME, UploadError, check_upload, file_type_of, safe_filename
 
 _log = logging.getLogger("mentis.links")
 
@@ -175,7 +175,7 @@ def _latest(db: Session, doc: Document) -> DocumentVersion | None:
 
 
 def _new_version(db: Session, tenant: Tenant, doc: Document, fetched: Fetched, user_id, note: str) -> DocumentVersion:
-    if not doc.name.lower().endswith(f".{fetched.file_type}"):
+    if file_type_of(doc.name) != fetched.file_type:  # .markdown / .yml names after a rename are the same type
         raise LinkError(f"The link now returns a {fetched.file_type.upper()} file instead of a "
                         f"{doc.name.rsplit('.', 1)[-1].upper()} one: add it as a new document.")
     name = doc.name
@@ -206,7 +206,9 @@ def add(db: Session, tenant: Tenant, url: str, name: str | None, check: str, use
         doc_name = f"{doc_name.rsplit('.', 1)[0] if '.' in doc_name else doc_name}.{fetched.file_type}"
     if db.scalar(select(Document.id).where(Document.tenant_id == tenant.id, Document.name_key == doc_name.lower())):
         raise LinkError(f"A document named {doc_name} already exists: choose another name.")
-    duplicate = versions.duplicate_message(db, tenant.id, hashlib.sha256(fetched.data).hexdigest(), None)
+    sha = hashlib.sha256(fetched.data).hexdigest()
+    versions.lock_content(db, tenant.id, sha)
+    duplicate = versions.duplicate_message(db, tenant.id, sha, None)
     if duplicate:  # the same rule as uploads: any document or version of the customer
         raise LinkError(duplicate.replace("This file is", "This content is"))
     doc = Document(tenant_id=tenant.id, name=doc_name, name_key=doc_name.lower(), created_by=user_id, source_url=url,
