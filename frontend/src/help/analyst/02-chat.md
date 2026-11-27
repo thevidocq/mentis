@@ -40,18 +40,18 @@ The answer cites the records like documents: their numbers open the **Sources** 
 
 ## The answer check
 
-Under each answer, a short line says whether it matches its sources:
+Under each answer, one short line says whether it matches its sources:
 
 - **✓ Matches the sources**: every statement cites a source, and every value and statement was found in the passages it cites.
-- **⚠ Level 1 ·** a statement **cites no source**, so nothing could check it: it is highlighted. Ask again, or check it yourself.
-- **⚠ Level 1 ·** a contact, time, code or other value is **not in the passages that statement cites** (a value found only in another passage, for example a ticket, does not count); it is highlighted in the answer, and when the source leaves no doubt the line shows the right value ("the source says 30 minutes").
-- **⚠ Level 2 ·** a statement is **not supported** by its sources: a model re-read the answer and the passages; the statement is highlighted.
-- **⚠ Level 1 + 2 ·** both checks found the same problem.
-- **Unverified answer**: it cites no source.
+- **⚠ values not in the sources / statements not supported by the sources**: a contact, time, code or other value is not in the passages its statement cites, or a model re-read the answer and found a statement its passages do not support. These parts are **highlighted** in the answer: check them before acting.
+- **ⓘ statements without a citation**: a statement cites no source, so nothing could verify it. It is only **dotted-underlined**: not an error, but check it yourself if you rely on it.
+- **Unverified answer**: it cites no source at all.
 - **Checking…**: the check is running (a second or two); the answer is already readable.
 - **Check not available**: the check could not run; verify the sources yourself.
 
-**Open source ›** opens the passage to compare. When you report a problem, say which level found it. For some customers an answer that does not match its sources is not shown at all: you get *Not found* with "did not match the sources".
+**Details ›** lists each finding with the start of the statement and which check found it (**Level 1**: values, no model; **Level 2**: a model; **Level 1 + 2**: both). To compare with the passage, open **Sources** above the line. When you report a problem, say which level found it. For some customers an answer that does not match its sources is not shown at all: you get *Not found* with "did not match the sources".
+
+Items of a list take the citation of their heading: under "If it is a true positive [2]", each step counts as citing passage 2 and is checked against it. An answer from the **General Knowledge Base** is a normal answer, not a warning: the source is shown above it. An answer that reached the AI provider's length limit ends with a note saying it was cut: ask for the rest.
 
 > Always check the source before acting on a contact or a time. Answers come only from the documents, but the documents can be out of date.
 

@@ -60,7 +60,7 @@ export function AssistantMessage({ m, onFollowup, onFeedback, onRetry, busy, onS
       {m.citations.length > 0 && (
         <SourcesBar citations={m.citations} active={sourcesOpen} onOpen={() => onSources(null)} />
       )}
-      <CheckNotes check={m.check} onOpenSource={m.citations.length ? () => onSources(null) : undefined} />
+      <CheckNotes check={m.check} />
       {m.followups.length > 0 && onFollowup && (
         <div className="followups">
           {m.followups.map((f) => (

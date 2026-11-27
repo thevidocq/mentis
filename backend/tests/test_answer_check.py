@@ -3,6 +3,7 @@
 import json
 
 import pytest
+from app.services import answer_check
 from app.services.answer_check import merge, units, values
 
 from tests.test_chat import _analyst, _provider, _setup
@@ -43,6 +44,32 @@ def test_units_and_merge():
     l2 = [{"level": [2], "kind": "statement", "text": us[1].raw}, {"level": [2], "kind": "statement", "text": us[3].raw}]
     merged = merge(l1, l2)
     assert merged[0]["level"] == [1, 2] and [m["text"] for m in merged[1:]] == ["Apri un ticket"]
+
+
+def test_list_items_take_the_citation_of_their_heading():
+    text = ("1. **Triage (rule 'Apache 2.4.49 flaw CVE-2021-41773')**\n"
+            "   1. Check source IP, target, HTTP method and timestamp in CommonSecurityLog [1].\n"
+            "2. **If it is a true positive** [2]\n"
+            "   - Immediately: isolate the entity, block the anomalous access, revoke tokens and sessions.\n"
+            "   - Within 30 minutes: export 72 hours of CommonSecurityLog before the alert.\n")
+    us = units.split(text)
+    by = {u.plain[:20]: u for u in us}
+    assert by["Triage (rule 'Apache"].intro and not by["Triage (rule 'Apache"].cites
+    assert by["Immediately: isolate"].cites == [2] and by["Immediately: isolate"].inherited
+    assert by["Within 30 minutes: e"].cites == [2]
+    assert answer_check.level1(text, [{"n": 1}, {"n": 2}], {1: "x", 2: "Isolate the entity; within 30 minutes export 72 hours of logs"}) == []
+
+
+def test_sentences_on_the_same_line_do_not_inherit():
+    us = units.split("Escalate to Mario Rossi [1]. Then isolate the host immediately and reset every password.")
+    assert [u.cites for u in us] == [[1], []]
+
+
+def test_cut_answer_is_recognised():
+    from app.services.answer import _parse_json
+    data = _parse_json('{"answer": "Step one [1]. Step two and then ve')
+    assert data == {"answer": "Step one [1]. Step two and then ve", "_cut": True}
+    assert "_cut" not in _parse_json('{"answer": "ok [1]", "not_found": false}')
 
 
 # --- In the chat -----------------------------------------------------------------------

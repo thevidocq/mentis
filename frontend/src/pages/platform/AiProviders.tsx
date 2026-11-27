@@ -238,7 +238,7 @@ export function AiProviders() {
                 <option value="">Model default</option><option value="minimal">Minimal</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
               </select>
             </label>
-            <label className="field" style={{ flex: 1 }}>Max answer tokens<input className="input" type="number" min={100} max={16000} value={form.max_tokens} placeholder="1500" onChange={(e) => set("max_tokens", e.target.value)} /></label>
+            <label className="field" style={{ flex: 1 }}>Max answer tokens<input className="input" type="number" min={100} max={16000} value={form.max_tokens} placeholder="4000" onChange={(e) => set("max_tokens", e.target.value)} /></label>
           </div>
           <span className="muted small">Reasoning effort applies to the OpenAI Responses API.</span>
           <div className="row" style={{ alignItems: "flex-end" }}>
