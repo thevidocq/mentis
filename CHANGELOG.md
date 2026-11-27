@@ -6,6 +6,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-27
+
 ### Added
 - **Reprocess all documents** (super-admin, **Embedding and Qdrant**): reads every document again with the current readers, in place; documents stay in answers and approvals do not change. Run it once after upgrading to this version.
 
