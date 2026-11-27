@@ -67,7 +67,7 @@ Items of a list take the citation of their heading: under "If it is a true posit
 
 **Share** at the top right of a chat (on a phone, the share icon next to **+**) creates a link to send to a colleague, for example at a shift change.
 
-- The link opens the chat **read-only**, with its sources. Only colleagues **signed in to Mentis** can open it, and only if they see the chat's customer; for an *All customers* chat, every customer it searched. Answers that used a customer they do not see stay hidden, with their questions.
+- The link opens the chat **read-only**, with its sources. Only colleagues **signed in to Mentis** can open it, and only if they see the chat's customer; for an *All customers* chat, every customer it searched (the link closes if you no longer have any customer). It also closes when the chat's customer is disabled. Answers that used a customer they do not see stay hidden, with their questions.
 - Copy the link when you create it: for security Mentis does not keep it. **New link** creates another one and the old one stops working; **Revoke link** stops it. A link expires after 30 days, or when the chat is deleted.
 - Whoever opens it cannot add questions or see your ratings. Creating, revoking and opening links is in the audit log.
 
@@ -87,4 +87,5 @@ The chat fills the screen. The ☰ button at the top left opens the history; **+
 - **The answer could not be generated**: the AI model or the document search did not respond. Click **Retry**. If it keeps failing, tell your administrator: the technical cause is in the super-admin's Logs.
 - **This customer is no longer available**: the customer was disabled, deleted or removed from your account. Start a new chat.
 - **This answer is hidden**: the answer used the documentation of a customer that is no longer assigned to you. Your question stays; the answer, its sources and suggestions do not.
+- **This answer was removed**: a document it used was deleted (a document uploaded by mistake, for example). Your question stays; ask again to get an answer from the documents in use.
 - **Integrations** is greyed out: the chat is on several customers, or the customer has no integration yet (ask your tenant admin).

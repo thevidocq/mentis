@@ -243,8 +243,8 @@ def manages(actor: str, target: str) -> bool:
         return True
     if actor not in TAS or target == "sa":
         return False
-    if target == "ta_all":
-        return actor == "ta_all"
+    if target == "ta_all" or not (TICKED[target] - {"G"}):
+        return actor == "ta_all"  # no customer of its own: only an admin of all customers (or a super-admin)
     return TICKED[target] <= TICKED[actor]
 
 

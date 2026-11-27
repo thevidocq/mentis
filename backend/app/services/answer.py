@@ -35,6 +35,7 @@ class Answer:
     input_tokens: int | None = None
     output_tokens: int | None = None
     passages: int = 0
+    searched: list[str] = field(default_factory=list)  # tenants whose passages the model read (visibility)
     # For the answer check (not stored): the passages given to the model, and the model that answered.
     passage_texts: dict[int, str] = field(default_factory=dict)
     used: dict | None = None
@@ -169,6 +170,8 @@ def _cited(answer_text: str, passages) -> tuple[str, list[dict]]:
         citations.append({
             "n": n, "tenant": GENERAL_NAME if p.is_general else p.tenant_name, "tenant_id": str(p.tenant_id), "is_general": p.is_general,
             "document": p.document_name, "version": p.version, "page": p.page_label, "heading": p.heading,
+            "document_id": str(p.document_id) if getattr(p, "document_id", None) else None,
+            "version_id": str(p.version_id) if getattr(p, "version_id", None) else None,
             "text": _shown(p.text),
         })
     return text, citations
@@ -280,7 +283,8 @@ def answer(db: Session, chat: Chat, question: str, first: bool, correction: str 
         provider_name=used["name"], model=used["model"], latency_ms=latency,
         passage_texts={i: p.text for i, p in enumerate(passages, start=1)}, used=used,
         input_tokens=reply.input_tokens, output_tokens=reply.output_tokens,
-        passages=len(passages), live_notes=live.notes, live_calls=live.calls, live=live,
+        passages=len(passages), searched=[str(t) for t in dict.fromkeys(p.tenant_id for p in passages)],
+        live_notes=live.notes, live_calls=live.calls, live=live,
         live_links=[] if is_not_found else _missing_links(text, citations),
         cut=cut and not is_not_found,
     )

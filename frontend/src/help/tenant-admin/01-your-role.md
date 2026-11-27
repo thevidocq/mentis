@@ -9,7 +9,7 @@ If you administer more than one customer, the **customer selector** at the top o
 ## What you can do today
 
 - **Documents**: upload procedures, escalation matrices and runbooks (PDF, Word, Excel, PowerPoint, Markdown, JSON, CSV, YAML, pictures), manage versions and check what Mentis read in the preview, and test questions against it.
-- **Users**: invite and manage tenant admins and analysts of your customers.
+- **Users**: invite and manage tenant admins and analysts of your customers. A user or invitation with no customer (General Knowledge Base only) is managed by a super-admin or by a tenant admin of all customers, so you always give at least one of your customers.
 - **Settings**: decide how answers use your documentation.
 - **LLM**: choose which AI model answers for your customer, and a fallback (when the super-admin allows it).
 - **Integrations**: connect the customer's ticketing, EDR and identity tools (ServiceNow, Jira, CrowdStrike, Microsoft Defender, Trend Vision One, Microsoft Entra ID), read only; analysts use them in the chat with `#`.

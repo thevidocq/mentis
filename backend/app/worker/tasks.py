@@ -8,7 +8,8 @@ from sqlalchemy import delete
 
 from app.core.config import get_settings
 from app.core.db import get_db
-from app.ingestion import ParseLimits, parse
+from app.ingestion import ParseLimits
+from app.ingestion.isolated import parse_isolated
 from app.ingestion.chunking import chunk_pages
 from app.models import Chunk, DocumentVersion, VersionPage, VersionStatus
 from app.models.base import utcnow
@@ -47,7 +48,8 @@ def ingest_version(version_id: str) -> None:
         except Exception as e:  # noqa: BLE001 - the raw error carries the storage address and key
             raise StorageUnavailable("The stored file could not be read (document storage not reachable). Use Retry.") from e
         s = get_settings()
-        result = parse(data, version.file_type, ParseLimits(max_pages=s.max_pages), parser=os.getenv("MENTIS_PARSER", "standard"))
+        result = parse_isolated(data, version.file_type, ParseLimits(max_pages=s.max_pages),
+                                parser=os.getenv("MENTIS_PARSER", "standard"))
         if not result.pages:
             raise ValueError("No content could be read from this file.")
 
@@ -268,7 +270,7 @@ def _reprocess_version(db, version_id, cfg: dict) -> None:
         return
     store = storage.get_storage()
     s = get_settings()
-    result = parse(store.get(version.storage_key), version.file_type, ParseLimits(max_pages=s.max_pages),
+    result = parse_isolated(store.get(version.storage_key), version.file_type, ParseLimits(max_pages=s.max_pages),
                    parser=os.getenv("MENTIS_PARSER", "standard"))
     if not result.pages or result.stats()["chars"] == 0:
         raise ValueError("no readable text")
