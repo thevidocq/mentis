@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models import Chat, ChatMessage, Role, Tenant, User
-from app.services import access, answer_check, chat_visibility, llm, prompts, retrieval
+from app.services import access, answer_check, chat_visibility, diversity, llm, prompts, retrieval
 from app.services.integrations import live as integrations_live
 from app.services.llm_config import providers_for
 from app.services.setup import GENERAL_NAME
@@ -179,10 +179,12 @@ def answer(db: Session, chat: Chat, question: str, first: bool, correction: str 
     if live is None:
         live = integrations_live.gather(db, chat, question, _context_text(history), primary, fallback) \
             if tenants and scope_tenant is not None else integrations_live.Live()
-    # Passages per answer: the customer's own setting, else the platform default (.env).
-    limit = (scope_tenant.settings or {}).get("chat_passages") if scope_tenant else None
+    # Passages per answer and their variety: the customer's own settings, else the platform defaults.
+    tset = (scope_tenant.settings or {}) if scope_tenant else {}
+    variety = tset.get("passage_variety") if tset.get("passage_variety") in diversity.LEVELS else diversity.DEFAULT
     docs = retrieval.search_tenants(db, [t.id for t in tenants], _retrieval_query(question, history),
-                                    limit=limit or s.chat_passages, min_score=s.chat_min_score) if tenants else []
+                                    limit=tset.get("chat_passages") or s.chat_passages, min_score=s.chat_min_score,
+                                    variety=variety) if tenants else []
     passages = [*live.passages, *docs]
     if not passages:
         # No LLM call: nothing to ground an answer on, so nothing can be invented.

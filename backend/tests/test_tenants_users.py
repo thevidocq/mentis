@@ -93,6 +93,9 @@ def test_tenant_admin_scope(super_admin):
     for bad in (50, 2, "12", True, 7.5):
         assert ta.patch(f"/api/tenants/{alfa['id']}", json={"settings": {"chat_passages": bad}}).status_code == 422
     assert ta.patch(f"/api/tenants/{alfa['id']}", json={"settings": {"chat_passages": None}}).json()["settings"]["chat_passages"] is None
+    assert ta.get(f"/api/tenants/{alfa['id']}").json()["settings"]["passage_variety"] == "normal"
+    assert ta.patch(f"/api/tenants/{alfa['id']}", json={"settings": {"passage_variety": "high"}}).json()["settings"]["passage_variety"] == "high"
+    assert ta.patch(f"/api/tenants/{alfa['id']}", json={"settings": {"passage_variety": "max"}}).status_code == 422
     assert ta.patch(f"/api/tenants/{alfa['id']}", json={"name": "Hacked"}).status_code == 403
     assert ta.patch(f"/api/tenants/{beta['id']}", json={"settings": {"include_general": False}}).status_code == 403
     assert ta.post("/api/tenants", json={"name": "Gamma"}).status_code == 403

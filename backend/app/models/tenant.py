@@ -9,10 +9,12 @@ DEFAULT_TENANT_SETTINGS = {
     "suggested_followups": True,   # 2-3 follow-up questions under each answer
     "admin_can_set_llm": True,     # tenant admins may choose the tenant's LLM (set by super-admins)
     "chat_passages": None,         # passages read per answer; None = platform default (MENTIS_CHAT_PASSAGES)
+    "passage_variety": "normal",   # off | normal | high: varied passages, for questions asking several things
 }
 
 CHAT_PASSAGES_RANGE = (3, 20)      # fewer misses context, more adds noise and tokens
-NUMBER_SETTINGS = {"chat_passages": CHAT_PASSAGES_RANGE}  # integer settings (None = default); the others are true/false
+NUMBER_SETTINGS = {"chat_passages": CHAT_PASSAGES_RANGE}  # integer settings (None = default)
+CHOICE_SETTINGS = {"passage_variety": ("off", "normal", "high")}  # one of a list; the others are true/false
 
 # Settings only super-admins may change.
 PLATFORM_SETTINGS = {"admin_can_set_llm"}

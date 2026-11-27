@@ -50,9 +50,15 @@ def _passages(nums: list[int], passages: dict[int, str]) -> str:
     return "\n".join(f'<passage n="{n}">\n{data_text(passages[n])}\n</passage>' for n in nums if n in passages)
 
 
+INTRO_WORDS = 12
+
+
 def judge(cfg: dict, units: list[Unit], passages: dict[int, str], timeout: float = 45) -> Verdict:
     """Raises llm.LLMError when the checker cannot be reached or answers nonsense."""
-    todo = [(i, u) for i, u in enumerate(units) if u.cites][:MAX_STATEMENTS]
+    # A short line introducing a list ("Checks to run on the server [1][2]:") states nothing on its own:
+    # its items are checked one by one (they inherit its citations). Only short ones: a long sentence
+    # ending with ":" is still checked. Level 1 still checks the values of every line.
+    todo = [(i, u) for i, u in enumerate(units) if u.cites and not (u.intro and len(u.plain.split()) <= INTRO_WORDS)][:MAX_STATEMENTS]
     t0 = time.monotonic()
     if not todo:
         return Verdict([])

@@ -6,7 +6,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.models import Invitation, Tenant, User, user_tenants
-from app.models.tenant import DEFAULT_TENANT_SETTINGS, NUMBER_SETTINGS
+from app.models.tenant import CHOICE_SETTINGS, DEFAULT_TENANT_SETTINGS, NUMBER_SETTINGS
 
 ALLOWED_SETTINGS = set(DEFAULT_TENANT_SETTINGS)
 STATUSES = {"active", "onboarding", "disabled"}
@@ -38,6 +38,10 @@ def check_setting(key: str, value) -> str | None:
         lo, hi = NUMBER_SETTINGS[key]
         if value is not None and (not isinstance(value, int) or isinstance(value, bool) or not lo <= value <= hi):
             return f"Setting {key} must be a number from {lo} to {hi}, or empty for the platform default."
+        return None
+    if key in CHOICE_SETTINGS:
+        if value not in CHOICE_SETTINGS[key]:
+            return f"Setting {key} must be one of: {', '.join(CHOICE_SETTINGS[key])}."
         return None
     if not isinstance(value, bool):
         return f"Setting {key} must be true or false."

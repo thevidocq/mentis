@@ -30,6 +30,7 @@ export interface TenantSettings {
   require_approval: boolean;
   suggested_followups: boolean;
   chat_passages: number | null; // null: platform default (Tenant.chat_passages_default)
+  passage_variety: "off" | "normal" | "high";
 }
 
 export interface Tenant {

@@ -22,7 +22,7 @@ export function TenantSettings() {
     if (current) api<Tenant>(`/tenants/${current.id}`).then(setTenant).catch((e) => setError(errorText(e)));
   }, [current]);
 
-  async function toggle(key: keyof Settings, value: boolean | number | null) {
+  async function toggle(key: keyof Settings, value: boolean | number | string | null) {
     if (!tenant) return;
     const before = tenant;
     setTenant({ ...tenant, settings: { ...tenant.settings, [key]: value } }); // optimistic
@@ -52,6 +52,18 @@ export function TenantSettings() {
               ))}
               <PassagesField value={tenant.settings.chat_passages ?? null} fallback={tenant.chat_passages_default ?? 8}
                 onSave={(v) => toggle("chat_passages", v)} />
+              <div>
+                <label className="field" style={{ maxWidth: 260 }}>Questions that ask several things
+                  <select className="input" value={tenant.settings.passage_variety ?? "normal"} onChange={(e) => toggle("passage_variety", e.target.value)}>
+                    <option value="normal">Normal (default)</option>
+                    <option value="high">High</option>
+                    <option value="off">Off</option>
+                  </select>
+                </label>
+                <div className="muted small">
+                  Mentis picks passages that are relevant <em>and</em> different from each other, so a question asking two things (a procedure and a contact, say) finds passages for both. <strong>High</strong> gives more room to the second topic; <strong>Off</strong> keeps only the passages closest to the whole question.
+                </div>
+              </div>
             </div>
           </div>
         )}
