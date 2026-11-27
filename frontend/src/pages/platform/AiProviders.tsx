@@ -214,6 +214,12 @@ export function AiProviders() {
             )}
           </label>
           <ModelPicker kind={form.kind} baseUrl={form.base_url} apiKey={form.api_key} providerId={form.id} value={form.model} onChange={(v) => set("model", v)} />
+          {form.role !== "checker" && (
+            <label className="field">Max answer tokens
+              <input className="input" type="number" min={100} max={16000} value={form.max_tokens} placeholder="4000 (default)" onChange={(e) => set("max_tokens", e.target.value)} />
+              <span className="muted small">Longest answer this model may write. Raise it if answers end with "the answer was cut"; reasoning models count their thinking too.</span>
+            </label>
+          )}
           {form.role === "checker" && (
             <span className="muted small">A small, fast model is enough. Fact-checking models such as Bespoke-MiniCheck (on Ollama) are recognised by name and used sentence by sentence.</span>
           )}
@@ -223,7 +229,7 @@ export function AiProviders() {
                 onChange={(e) => set("is_default", e.target.checked)} />{form.role === "checker" ? "Use as the default checker" : "Use as the default for all customers"}
                 <span className="muted small"> (replaces the current one)</span></label>}
           <button type="button" className="advanced-toggle" aria-expanded={advanced || !form.base_url.trim()} onClick={() => setAdvanced(!advanced)}>
-            <Icon name={advanced || !form.base_url.trim() ? "chevronDown" : "chevronRight"} size={14} />Advanced: API type, address, tokens and prices
+            <Icon name={advanced || !form.base_url.trim() ? "chevronDown" : "chevronRight"} size={14} />Advanced: API type, address, reasoning and prices
           </button>
           {(advanced || !form.base_url.trim()) && <>
           <label className="field">API type
@@ -238,7 +244,6 @@ export function AiProviders() {
                 <option value="">Model default</option><option value="minimal">Minimal</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
               </select>
             </label>
-            <label className="field" style={{ flex: 1 }}>Max answer tokens<input className="input" type="number" min={100} max={16000} value={form.max_tokens} placeholder="4000" onChange={(e) => set("max_tokens", e.target.value)} /></label>
           </div>
           <span className="muted small">Reasoning effort applies to the OpenAI Responses API.</span>
           <div className="row" style={{ alignItems: "flex-end" }}>

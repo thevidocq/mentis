@@ -7,7 +7,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 ## [Unreleased]
 
 ### Fixed
-- **Answers cut silently.** An answer longer than the provider's token limit was saved cut mid-sentence. The default limit is now 4,000 tokens (was 1,500; reasoning models count their thinking in it) and a cut answer ends with a note saying so (added after the check, like the record links).
+- **Answers cut silently.** An answer longer than the provider's token limit was saved cut mid-sentence. The default limit is now 4,000 tokens (was 1,500; reasoning models count their thinking in it) and a cut answer ends with a note saying so (added after the check, like the record links). **Max answer tokens** is now shown right under the model in the AI provider form (no longer under Advanced).
 - **Answer check noise.** List items without a citation take the citations of their heading, parent item or lead line ("If it is a true positive [2]") and are verified against them; a line heading nested items is an introduction. The answer prompt asks to cite a list's heading when all items share its passages and no longer to write sentences about where the passages come from (the source is already shown above the answer): these sentences were flagged as uncited and rejected by level 2. Statements without a citation are one line under the answer however many (each wrong value and each rejected statement keeps its own line, same style as before); the per-line **Open source ›** links are gone (the Sources button is right above). An answer from the General Knowledge Base is not shown as a problem. Help (analyst chat, AI providers), DESIGN; tests.
 
 ## [0.5.0] - 2026-11-27
