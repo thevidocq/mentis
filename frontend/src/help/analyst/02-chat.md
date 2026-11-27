@@ -55,6 +55,7 @@ Under the answer, one line sums it up:
 - **Unverified answer**: it cites no source at all.
 - **Checking…**: the check is running (a second or two); the answer is already readable.
 - **Check not available**: the check could not run; verify the sources yourself.
+- **N statements were not checked**: a very long answer has more statements than the check reads; verify those in the sources.
 
 For some customers an answer that does not match its sources is not shown at all: you get *Not found* with "did not match the sources".
 

@@ -54,7 +54,7 @@ export function SourcesBar({ citations, active, onOpen }: { citations: Citation[
  * cited sections; the section picked with [n] is open and in view. The customer badge appears only
  * when the answer mixes customers or uses the General Knowledge Base.
  */
-export function SourcesPanel({ citations, focus, onClose }: { citations: Citation[]; focus: number | null; onClose: () => void }) {
+export function SourcesPanel({ citations, focus, at = 0, onClose }: { citations: Citation[]; focus: number | null; at?: number; onClose: () => void }) {
   const groups = useMemo(() => groupByDocument(citations), [citations]);
   const showTenant = new Set(citations.map((c) => c.tenant)).size > 1 || citations.some((c) => c.is_general);
   const [open, setOpen] = useState<Set<number>>(new Set(focus != null ? [focus] : citations.length === 1 ? [citations[0].n] : []));
@@ -64,7 +64,7 @@ export function SourcesPanel({ citations, focus, onClose }: { citations: Citatio
     if (focus == null) return;
     setOpen((o) => new Set(o).add(focus));
     requestAnimationFrame(() => ref.current?.querySelector(`#src-${focus}`)?.scrollIntoView({ block: "start", behavior: "smooth" }));
-  }, [focus, citations]);
+  }, [focus, citations, at]);
 
   useEffect(() => {
     // Escape handled elsewhere (the @ customer list) or meant for a dialog on top leaves the panel open.

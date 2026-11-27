@@ -49,9 +49,34 @@ def _run_level2(cfg: dict | None, result) -> tuple[list[dict], str, object]:
         return [], "unavailable", None
 
 
+def _unchecked(verdict) -> dict:
+    """Statements of a very long answer the checker never saw: shown, never reported as matching."""
+    n = getattr(verdict, "unchecked", 0)
+    return {"unchecked": n} if n else {}
+
+
+def _problem(issue: dict) -> str:
+    """One issue as the model should read it, with the reason, so the second answer fixes it."""
+    kind, text = issue.get("kind"), issue.get("text") or ""
+    if kind == "value":
+        return f'the value "{text}" is not in the passages it cites'
+    if kind == "uncited":
+        return f'"{text}" has no citation'
+    if kind == "no_citations":
+        return "the answer cites no passage"
+    return f'"{text}" is not supported by its cited passages' + (f" ({issue['reason']})" if issue.get("reason") else "")
+
+
 def _run_level1(result) -> list[dict]:
     try:
-        return answer_check.level1(result.content, result.citations, result.passage_texts)
+        issues = answer_check.level1(result.content, result.citations, result.passage_texts)
+        if getattr(result, "cut", False):
+            # The last statement of an answer cut by the token limit lost its citation to the cut, not
+            # to the model: flagging it would blame the sources (the answer already says it was cut).
+            units = answer_check.units.split(result.content)
+            last = units[-1].raw if units else None
+            issues = [i for i in issues if not (i["kind"] == "uncited" and i["text"] == last)]
+        return issues
     except Exception:  # noqa: BLE001 - same: level 1 is pure code, but never trusted to be bug-free
         _log.exception("answer check (level 1) failed")
         return []
@@ -87,7 +112,7 @@ def before_save(db: Session, chat: Chat, question: str, first: bool, result, reg
     l2, state, verdict = _run_level2(cfg, result)
     issues = answer_check.merge(l1, l2)
     if issues:
-        problems = "; ".join(i["text"] or "no sources cited" for i in issues)[:600]
+        problems = "; ".join(_problem(i) for i in issues)[:900]
         try:
             second = regenerate(problems)
         except Exception:  # noqa: BLE001 - no second answer: the first one stays hidden
@@ -98,7 +123,7 @@ def before_save(db: Session, chat: Chat, question: str, first: bool, result, reg
             l2b, state, verdict = _run_level2(cfg, second)
             issues_b = answer_check.merge(l1b, l2b)
             if not issues_b:
-                check = {"level2": state, "issues": [], "checker": _checker_ref(cfg), "rewritten": True}
+                check = {"level2": state, "issues": [], "checker": _checker_ref(cfg), "rewritten": True, **_unchecked(verdict)}
                 _log_check(db, chat, check, cfg, verdict, mode, commit=False)
                 return second, check, False
             issues = issues_b
@@ -112,7 +137,7 @@ def before_save(db: Session, chat: Chat, question: str, first: bool, result, reg
                  "checker": _checker_ref(cfg), "hidden": True, "hidden_answer": hidden}
         _log_check(db, chat, check, cfg, verdict, mode, commit=False)
         return result, check, False
-    check = {"level2": state, "issues": [], "checker": _checker_ref(cfg)}
+    check = {"level2": state, "issues": [], "checker": _checker_ref(cfg), **_unchecked(verdict)}
     _log_check(db, chat, check, cfg, verdict, mode, commit=False)
     return result, check, False
 
@@ -126,7 +151,8 @@ def after_save(message_id: uuid.UUID, chat_id: uuid.UUID, result) -> None:
             return
         cfg = _checker(db, _tenant(db, chat), result.used)
         l2, state, verdict = _run_level2(cfg, result)
-        check = {**msg.check, "level2": state, "issues": answer_check.merge(msg.check.get("issues") or [], l2)}
+        check = {**msg.check, "level2": state, "issues": answer_check.merge(msg.check.get("issues") or [], l2),
+                 **_unchecked(verdict)}
         msg.check = check
         db.commit()
         _log_check(db, chat, check, cfg, verdict, "warn")

@@ -6,6 +6,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Fixed
+- **Accuracy review: answers, check and sources.**
+  - Answer rules: earlier answers are not sources; partial answers answer the part found and say what is missing ("not found" only when nothing answers, in one sentence without values); conflicting passages of a customer are both given; live lists are never counted unless a total is stated; names, commands and codes stay as written in any language; one number per citation bracket.
+  - History: old answers go back to the model without their [n] markers, so a new answer cannot copy a citation that now points elsewhere.
+  - "Not found" replies that cite passages are treated as answers and checked; with uncited values they show the standard not-found text. A reply cut after `"not_found": true` stays "not found", and only an answer cut mid-text gets the "cut" note.
+  - Live records: a record found twice counts once; a list capped at 10 says so in the passage and under the answer; long field values end with "…"; passages are marked `kind="live"` by Mentis (a document name cannot pass for a live record).
+  - Sources: the passage opened from [n] is the whole passage the model read (was cut at 600 characters, often before the cited value); clicking [n] again reopens it; [n] inside bold or italics is a link.
+  - Check level 1: phones next to a time or date, two phones joined by " - ", a phone missing a digit or with an invented prefix, AM/PM, "9.30", IPs with port, IPv6, lowercase CVE, INC0012345-style tickets, MITRE ids, hashes, months and years, "percent", dates in either order, no-break spaces and Unicode dashes; "(24/7)" after a phone is not part of it.
+  - Check level 2: verdicts written "S2" are read (they were dropped, so the statement passed); statements beyond the 24 checked show "N statements were not checked" instead of "Matches the sources".
+  - Marks: a value is marked in the statement it was found in, on word edges ("5 minutes" never inside "15 minutes"), and its ⚠ opens that statement's passage.
+  - Hide mode: the rewrite gets each problem with its reason; an answer cut by the token limit is not blamed on the sources.
+  - Responses API providers (vLLM preset) answer at temperature 0 like the others.
+
 ## [0.6.0] - 2026-11-27
 
 ### Added

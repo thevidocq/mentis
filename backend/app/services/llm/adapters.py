@@ -45,9 +45,11 @@ def build(kind: str, base_url: str, model: str, api_key: str | None, options: di
 
     if kind == "openai_responses":
         body = {"model": model, "instructions": system, "input": msgs, "max_output_tokens": max_tokens}
-        # Reasoning models on the Responses API refuse temperature: sent only when set explicitly.
-        if "temperature" in options and options["temperature"] is not None:
-            body["temperature"] = options["temperature"]
+        # Temperature 0 by default like the other APIs; reasoning models that refuse it are asked
+        # again without it (call_provider), and an explicit null leaves it out.
+        temperature = options.get("temperature", 0)
+        if temperature is not None:
+            body["temperature"] = temperature
         effort = options.get("reasoning_effort")
         if effort:
             body["reasoning"] = {"effort": effort}
