@@ -1,8 +1,8 @@
 import { useState } from "react";
 import type { ChatMessage, Citation } from "../../api/types";
 import { Icon } from "../../components/Icon";
-import { Markdown } from "../../components/Markdown";
-import { CheckNotes, checkMarks } from "./CheckNotes";
+import { Markdown, placedMarks } from "../../components/Markdown";
+import { CheckFlag, CheckNotes, checkMarks, markedIssues } from "./CheckNotes";
 import { recordLinks, SourcesBar } from "./Sources";
 
 /** Pages of the live records cited by an answer: the only addresses shown as links in it. */
@@ -47,6 +47,12 @@ export function AssistantMessage({ m, onFollowup, onFeedback, onRetry, busy, onS
       ? <button key={key} type="button" className="cite" aria-label={`Source ${n}`} onClick={() => toggle(n)}>{n}</button>
       : null;
 
+  // Answer check: each problem underlined in the text, with a small ⚠ after its citations.
+  const issues = markedIssues(m.check);
+  const marks = checkMarks(m.check);
+  const flag = (k: number, cites: number[], key: string) =>
+    issues[k] ? <CheckFlag key={key} issue={issues[k]} cites={cites} onPassage={(n) => toggle(n)} /> : null;
+
   return (
     <div className="msg-assistant answer-card">
       <div className="answer-meta">
@@ -55,12 +61,12 @@ export function AssistantMessage({ m, onFollowup, onFeedback, onRetry, busy, onS
         {m.status === "not_found" && <span className="answer-flag">Not found</span>}
       </div>
       <div className={m.status === "not_found" ? "answer not-found" : "answer"}>
-        <Markdown source={m.content} cite={cite} marks={checkMarks(m.check)} links={recordUrls(m.citations)} />
+        <Markdown source={m.content} cite={cite} marks={marks} flag={flag} links={recordUrls(m.citations)} />
       </div>
       {m.citations.length > 0 && (
         <SourcesBar citations={m.citations} active={sourcesOpen} onOpen={() => onSources(null)} />
       )}
-      <CheckNotes check={m.check} />
+      <CheckNotes check={m.check} placed={marks.length ? placedMarks(m.content, marks) : []} />
       {m.followups.length > 0 && onFollowup && (
         <div className="followups">
           {m.followups.map((f) => (

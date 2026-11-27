@@ -40,17 +40,23 @@ The answer cites the records like documents: their numbers open the **Sources** 
 
 ## The answer check
 
-Under each answer, short lines say whether it matches its sources and which check found a problem (**Level 1**: values and citations, no model; **Level 2**: a model re-read the answer; **Level 1 + 2**: both):
+A second check compares each answer with its sources. A statement that may not match is **underlined in yellow** in the answer, with a small **⚠** after its source number. Point at the ⚠ (or tap it) to see what the check found:
+
+- **Value not in the sources** (Level 1): a contact, time, code or other value is not in the passage that statement cites (a value found only in another passage, for example a ticket, does not count); when the source leaves no doubt it shows the right value ("the source says 30 minutes").
+- **Not supported by the sources** (Level 2): a model re-read the answer and the passage, with its reason.
+- **No source cited** (Level 1): the statement cites no passage, so nothing could verify it.
+
+**Open passage ›** in the box opens that passage in **Sources**. **Level 1** means values and citations, checked without a model; **Level 2** a model; **Level 1 + 2** both: say which when you report a problem.
+
+Under the answer, one line sums it up:
 
 - **✓ Matches the sources**: every statement cites a source, and every value and statement was found in the passages it cites.
-- **⚠ Level 1 ·** a contact, time, code or other value is **not in the passages that statement cites** (a value found only in another passage, for example a ticket, does not count); when the source leaves no doubt the line shows the right value ("the source says 30 minutes").
-- **⚠ Level 2 ·** a statement is **not supported** by its sources, with the checker's reason.
-- **⚠ Level 1 ·** *N statements cite no source*: nothing could verify them. One line, however many.
+- **⚠ N statements may not match the sources: check the marked ones.**
 - **Unverified answer**: it cites no source at all.
 - **Checking…**: the check is running (a second or two); the answer is already readable.
 - **Check not available**: the check could not run; verify the sources yourself.
 
-Everything the check found is highlighted in the answer. To compare with the passage, open **Sources** above the lines. When you report a problem, say which level found it. For some customers an answer that does not match its sources is not shown at all: you get *Not found* with "did not match the sources".
+For some customers an answer that does not match its sources is not shown at all: you get *Not found* with "did not match the sources".
 
 Items of a list take the citation of their heading: under "If it is a true positive [2]", each step counts as citing passage 2 and is checked against it. An answer from the **General Knowledge Base** is a normal answer, not a warning: the source is shown above it. An answer that reached the AI provider's length limit ends with a note saying it was cut: ask for the rest.
 
