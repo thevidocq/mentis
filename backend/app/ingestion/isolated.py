@@ -33,7 +33,7 @@ def _child(conn, data: bytes, file_type: str, limits: ParseLimits, parser: str, 
     try:
         if memory_mb and parser != "docling":
             resource.setrlimit(resource.RLIMIT_AS, (memory_mb * 1024 * 1024, memory_mb * 1024 * 1024))
-        if cpu_s:
+        if cpu_s and parser != "docling":  # Docling's threads add up CPU time: the job timeout applies
             resource.setrlimit(resource.RLIMIT_CPU, (cpu_s, cpu_s + 5))
         result = parse(data, file_type, limits, parser=parser)
         conn.send(("ok", result))
@@ -57,13 +57,16 @@ def parse_isolated(data: bytes, file_type: str, limits: ParseLimits, parser: str
     cpu_s = _env_int("MENTIS_PARSE_CPU_SECONDS", 1500)
     ctx = multiprocessing.get_context("fork")
     parent, child = ctx.Pipe(duplex=False)
-    proc = ctx.Process(target=_child, args=(child, data, file_type, limits, parser, memory_mb, cpu_s), daemon=True)
+    proc = ctx.Process(target=_child, args=(child, data, file_type, limits, parser, memory_mb, cpu_s),
+                       daemon=parser != "docling")  # Docling may start processes of its own
     proc.start()
     child.close()
     try:
         status, payload = parent.recv()  # EOFError when the child was killed (memory, CPU)
     except EOFError:
         status, payload = "limit", None
+    except Exception:  # noqa: BLE001 - a reply that cannot be read back (an odd exception type)
+        status, payload = "error", ValueError("The file could not be read.")
     finally:
         parent.close()
         proc.join(10)

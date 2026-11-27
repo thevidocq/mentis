@@ -489,7 +489,8 @@ def _routes(w: World) -> dict[tuple[str, str], list[Probe]]:
                              "tenant_ids": [] if k == "all" else [t[k]], "all_tenants": k == "all"}}
             if a in LOGGED_OUT:
                 exp = 401
-            elif a == "sa" or (a in TAS and (a == "ta_all" if k == "all" else k in sees(a))):
+            elif a == "sa" or (a in TAS and (a == "ta_all" if k in ("all", "G") else k in sees(a))):
+                # An analyst with no customer (G only) belongs to no customer's admin.
                 exp = 409
             else:
                 exp = 403

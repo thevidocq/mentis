@@ -176,12 +176,23 @@ def _run_text(el) -> str:
     return "".join(out)
 
 
-def _textboxes(el) -> list[str]:
+MAX_BOX_NESTING = 3  # text boxes inside text boxes: deeper ones are not read
+
+
+def _textboxes(el, budget: "_Budget | None" = None) -> list[str]:
     """Text in text boxes and shapes anchored in a paragraph (each box once: Word stores a copy
-    for older readers)."""
+    for older readers). Each box reads its own paragraphs only (a box inside it is read as its own
+    box), so nested boxes cost no more than their text."""
     seen, out = set(), []
     for box in el.iter(f"{W}txbxContent"):
-        text = "\n".join(t for t in (_run_text(p).strip() for p in box.iter(f"{W}p")) if t)
+        if budget is not None and budget.spent:
+            break
+        if sum(1 for a in box.iterancestors() if _local(a) == "txbxContent") >= MAX_BOX_NESTING:
+            continue
+        own = [p for p in box.iter(f"{W}p") if next(a for a in p.iterancestors() if _local(a) == "txbxContent") is box]
+        text = "\n".join(t for t in (_run_text(p).strip() for p in own) if t)
+        if budget is not None:
+            text = budget.take(text)
         if text and text not in seen:
             seen.add(text)
             out.append(text)
@@ -372,7 +383,7 @@ def parse_docx(data: bytes, limits: ParseLimits) -> ParseResult:
         if tag == "p":
             p = Paragraph(child, doc)
             text = budget.take(_run_text(child).strip())
-            boxes = [budget.take(b) for b in _textboxes(child)]
+            boxes = _textboxes(child, budget)
             style = (p.style.name if p.style is not None else "") or ""
             if text:
                 level = int(style.split()[-1]) if style.startswith("Heading") and style.split()[-1].isdigit() else 0

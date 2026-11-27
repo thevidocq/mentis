@@ -14,7 +14,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
   - Each answer records the customers whose passages it read, cited or not: it is hidden from anyone who no longer sees one of them, also through a shared link. "All customers" chats are titled with the question. Shared links close on a disabled customer, or when the owner has no customer left.
   - Invitation, reset and share tokens are masked in the API and web access logs.
   - Upgrades pull current base images (security fixes of Python, nginx, PostgreSQL, Redis, Qdrant, MinIO); HSTS in the reverse-proxy examples.
-  - Very large pictures in slides are not decoded.
+  - Very large pictures in slides are not decoded; tables keep at most 200 non-empty columns and 1 M cells (a row of thousands of empty spanning cells widened every row); nested text boxes are read once each.
 - **Migration 0015**: `chat_messages.searched`.
 
 ## [0.6.1] - 2026-11-27

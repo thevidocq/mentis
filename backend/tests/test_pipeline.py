@@ -1,8 +1,8 @@
-import pytest
-
 """Robustness of the document pipeline: queue outages, index errors, model changes, huge rows, deletes."""
 
 import uuid
+
+import pytest
 
 from app.core import db as db_module
 from app.ingestion.chunking import MAX_CHARS, chunk_pages
@@ -338,6 +338,8 @@ def test_crafted_web_table_spans_stay_small():
     page = b"<table><tr><td colspan=50 rowspan=50>" + b"x" * 200_000 + b"</td></tr>" + b"<tr></tr>" * 49 + b"</table>"
     md, _ = to_markdown(page)
     assert len(md) < 6_000_000
+    wide = b"<table><tr>" + b"<td colspan=50></td>" * 4900 + b"</tr>" + b"<tr><td>x</td></tr>" * 5000 + b"</table>"
+    assert len(to_markdown(wide)[0]) < 1_000_000  # empty spanning cells never widen every row
 
 
 def test_a_reader_that_runs_out_of_memory_fails_alone(monkeypatch):
