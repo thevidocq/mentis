@@ -6,6 +6,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-27
+
 ### Added
 - **Markdown and JSON uploads.** `.md` / `.markdown` (one section per top-level heading, headings in code blocks ignored; UTF-8) and `.json` (valid UTF-8 JSON). A Mentis JSON export (`mentis-document/1`) is read back with its own pages, so documentation moves between customers or installations without loss; any other JSON becomes readable Markdown (one section per top-level key or item, nested lists, arrays of flat records as tables). Validated at upload (UTF-8, no binary content, JSON parses, depth); parsed by the standard parser also when Docling is on. Upload hints, overview colours, help, README, DESIGN; tests (`test_documents.py`).
 - **CSV, TSV, YAML and picture uploads.** CSV/TSV (`app/ingestion/datafiles.py`) become one table like an Excel sheet (delimiter detected: comma, semicolon, pipe, tab; 5,000-row limit). YAML (`.yaml`/`.yml`) is one section per YAML document, labelled by `title`/`name`/`id`, text kept as written: composed, never constructed, so no Python tags run and anchors/aliases are never expanded (alias bombs stay small), at most 200,000 values. PNG/JPEG (`.jpg`/`.jpeg`, `app/ingestion/images.py`) are read with OCR (EXIF orientation, transparency on white), the picture kept as WebP preview; refused above 50 million pixels, checked from the header at upload and again in the worker. Docling, when on, now applies to PDF and Office files only. New dependency `pyyaml` (already present through `uvicorn[standard]`, now explicit). Help, README, DESIGN; tests.
