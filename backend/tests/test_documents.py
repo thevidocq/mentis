@@ -134,6 +134,13 @@ def test_csv_semicolon_and_row_limit():
     assert r.pages[0].text.startswith("| a | b |") and "truncated" in r.pages[0].flags
 
 
+def test_export_names_strip_only_file_extensions():
+    from app.services.doc_export import stem
+
+    assert stem("notes.markdown") == "notes" and stem("rule.YML") == "rule" and stem("Runbook.docx") == "Runbook"
+    assert stem("Contoso.Holding") == "Contoso.Holding" and stem("Runbook v2.1") == "Runbook v2.1"
+
+
 def test_tsv_quotes_are_text():
     from app.ingestion.datafiles import read_rows
 

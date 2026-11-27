@@ -41,9 +41,13 @@ def _owner(tenant: Tenant) -> str:
     return GENERAL_NAME if tenant.is_global else tenant.name
 
 
+_EXTENSIONS = re.compile(r"\.(pdf|docx|pptx|xlsx|md|markdown|json|csv|tsv|yaml|yml|png|jpg|jpeg)$", re.IGNORECASE)
+
+
 def stem(name: str) -> str:
-    """File name without extension, safe in a ZIP and on Windows."""
-    base = re.sub(r"\.[A-Za-z0-9]{1,8}$", "", name or "document")
+    """Name without the file extension of an accepted type, safe in a ZIP and on Windows.
+    Other dots stay: "Contoso.Holding" (a customer) and "Runbook v2.1" keep their names."""
+    base = _EXTENSIONS.sub("", name or "document")
     base = re.sub(r'[\x00-\x1f<>:"/\\|?*]+', "_", base).strip(" .") or "document"
     return base[:150]
 
