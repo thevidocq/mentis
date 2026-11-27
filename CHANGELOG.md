@@ -6,6 +6,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-11-28
+
 ### Security
 - **Security review of 0.6.1** (`docs/security/review-v0.6.1.md`).
   - Documents are read in a child process with memory and CPU limits, and readers cap what they produce: a crafted Word file or web page (merged cells, deeply nested tables, huge spans, many rows) fails on its own instead of exhausting the worker shared by every customer (it could be killed with a 36 KB file).
