@@ -67,8 +67,17 @@ def call_provider(cfg: dict, system: str, turns: list[Turn], timeout: float = 12
         raise LLMError(f"{cfg['name']} returned non-JSON") from None
     reply = adapters.parse(cfg["kind"], data)
     if not reply.text.strip():
-        raise LLMError(f"{cfg['name']} returned an empty answer")
+        # Say why: a token limit used up before any text (reasoning models), a refusal, or nothing.
+        why = f"stop: {reply.stop}" if reply.stop else "no stop reason"
+        out = f", {reply.output_tokens} output tokens of {body_limit(body)}" if reply.output_tokens is not None else ""
+        _log.warning("%s (%s) returned an empty answer (%s%s)", cfg["name"], cfg["model"], why, out)
+        raise LLMError(f"{cfg['name']} returned an empty answer ({why}{out})")
     return reply
+
+
+def body_limit(body: dict):
+    """The token limit sent in a request body, whatever the API family calls it."""
+    return next((body[k] for k in ("max_tokens", "max_completion_tokens", "max_output_tokens") if k in body), "?")
 
 
 def _models_request(cfg: dict) -> tuple[str, dict]:

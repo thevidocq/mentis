@@ -10,6 +10,7 @@ type CheckMode = "warn" | "hide" | "off";
 interface Choice {
   provider_id: string | null; fallback_id: string | null; checker_id: string | null; answer_check: CheckMode;
   editable?: boolean; admin_can_set_llm?: boolean;
+  check_max_tokens?: number | null; check_max_tokens_default?: number;
 }
 
 const MODES: [CheckMode, string, string][] = [
@@ -41,7 +42,8 @@ export function TenantLlmForm({ tenantId, onSaved }: { tenantId: string; onSaved
     try {
       if (!choice) return;
       setChoice(await api<Choice>(`/tenants/${tenantId}/llm`, { method: "PUT", body: {
-        provider_id: choice.provider_id, fallback_id: choice.fallback_id, checker_id: choice.checker_id, answer_check: choice.answer_check } }));
+        provider_id: choice.provider_id, fallback_id: choice.fallback_id, checker_id: choice.checker_id, answer_check: choice.answer_check,
+        check_max_tokens: choice.check_max_tokens ?? null } }));
       setMsg({ ok: true, text: "Saved." });
       onSaved?.();
     } catch (e) {
@@ -62,6 +64,17 @@ export function TenantLlmForm({ tenantId, onSaved }: { tenantId: string; onSaved
           </button>
         ))}
       </div>
+      {choice.answer_check !== "off" && (
+        <label className="field" style={{ maxWidth: 300 }}>Max check tokens
+          <input className="input" type="number" min={500} max={16000} value={choice.check_max_tokens ?? ""}
+            placeholder={`${choice.check_max_tokens_default ?? 2500} (default)`}
+            onChange={(e) => setChoice({ ...choice, check_max_tokens: e.target.value === "" ? null : Number(e.target.value) })} />
+          <span className="muted small">
+            How long the checker's reply may be, per group of 10 statements (500–16000). Raise it if answers show "Check not available"
+            and the logs say the check was cut or empty; reasoning models (gpt-oss) need more, about 6000.
+          </span>
+        </label>
+      )}
     </div>
   );
 

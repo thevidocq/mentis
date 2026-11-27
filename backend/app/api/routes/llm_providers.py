@@ -59,6 +59,8 @@ class TenantLlmIn(BaseModel):
     fallback_id: uuid.UUID | None = None
     checker_id: uuid.UUID | None = None   # None = platform default checker (or the customer's own LLM)
     answer_check: str | None = Field(default=None, pattern="^(warn|hide|off)$")  # None = unchanged
+    # Token limit of each level-2 check call; null = default. Changed only when sent.
+    check_max_tokens: int | None = Field(default=None, ge=500, le=16000)
 
 
 def _out(p: LlmProvider) -> ProviderOut:
@@ -260,10 +262,12 @@ def get_tenant_llm(tenant_id: uuid.UUID, db: Session = Depends(get_db), user: Us
     t = _tenant_for(db, user, tenant_id)
     s = t.settings or {}
     from app.services import answer_check
+    from app.services.answer_check import judge
 
     return {"provider_id": s.get("llm_provider_id"), "fallback_id": s.get("llm_fallback_id"), "editable": _editable(user, t),
             "admin_can_set_llm": bool(s.get("admin_can_set_llm", True)),
-            "checker_id": s.get("checker_provider_id"), "answer_check": answer_check.mode_of(s)}
+            "checker_id": s.get("checker_provider_id"), "answer_check": answer_check.mode_of(s),
+            "check_max_tokens": s.get("check_max_tokens"), "check_max_tokens_default": judge.DEFAULT_MAX_TOKENS}
 
 
 @router.put("/tenants/{tenant_id}/llm")
@@ -288,8 +292,11 @@ def put_tenant_llm(tenant_id: uuid.UUID, body: TenantLlmIn, request: Request, db
                   "checker_provider_id": str(body.checker_id) if body.checker_id else None}
     if body.answer_check is not None:
         t.settings = {**t.settings, "answer_check": body.answer_check}
+    if "check_max_tokens" in body.model_fields_set:  # like the mode: the tenant admin may always set it
+        t.settings = {**t.settings, "check_max_tokens": body.check_max_tokens}
     db.commit()
     log_event(db, "tenant.llm_updated", actor=user, tenant_id=t.id, target=t.name, ip=client_ip(request),
               detail={"provider_id": t.settings["llm_provider_id"], "fallback_id": t.settings["llm_fallback_id"],
-                      "checker_id": t.settings["checker_provider_id"], "answer_check": t.settings.get("answer_check", "warn")})
+                      "checker_id": t.settings["checker_provider_id"], "answer_check": t.settings.get("answer_check", "warn"),
+                      "check_max_tokens": t.settings.get("check_max_tokens")})
     return get_tenant_llm(tenant_id, db, user)

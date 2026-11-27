@@ -10,10 +10,11 @@ DEFAULT_TENANT_SETTINGS = {
     "admin_can_set_llm": True,     # tenant admins may choose the tenant's LLM (set by super-admins)
     "chat_passages": None,         # passages read per answer; None = platform default (MENTIS_CHAT_PASSAGES)
     "passage_variety": "normal",   # off | normal | high: varied passages, for questions asking several things
+    "check_max_tokens": None,      # token limit of each level-2 check call; None = default (2500)
 }
 
 CHAT_PASSAGES_RANGE = (3, 20)      # fewer misses context, more adds noise and tokens
-NUMBER_SETTINGS = {"chat_passages": CHAT_PASSAGES_RANGE}  # integer settings (None = default)
+NUMBER_SETTINGS = {"chat_passages": CHAT_PASSAGES_RANGE, "check_max_tokens": (500, 16000)}  # integer settings (None = default)
 CHOICE_SETTINGS = {"passage_variety": ("off", "normal", "high")}  # one of a list; the others are true/false
 
 # Settings only super-admins may change.
