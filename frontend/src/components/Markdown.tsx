@@ -9,44 +9,29 @@ import { ReactNode } from "react";
 
 type Cite = (n: number, key: string) => ReactNode;
 
-const OPEN = "\uE000";        // a finding: not in the sources
+const OPEN = "\uE000";
 const CLOSE = "\uE001";
-const OPEN_SOFT = "\uE002";   // a note: a statement without a citation
-const CLOSE_SOFT = "\uE003";
-const MARKERS = /([\uE000-\uE003])/;
 
-export type Mark = string | { text: string; soft?: boolean };
-
-/** Text with highlight markers -> nodes; `state.cls` carries a highlight across bold or code. */
-function marked(text: string, key: string, state: { cls: string | null }): ReactNode[] {
-  if (!MARKERS.test(text)) return [state.cls ? <mark key={key} className={state.cls}>{text}</mark> : text];
+/** Text with highlight markers -> nodes; `state.open` carries a highlight across bold or code. */
+function marked(text: string, key: string, state: { open: boolean }): ReactNode[] {
+  if (!text.includes(OPEN) && !text.includes(CLOSE)) return [state.open ? <mark key={key} className="check-mark">{text}</mark> : text];
   const out: ReactNode[] = [];
-  text.split(MARKERS).forEach((part, i) => {
-    if (part === OPEN) state.cls = "check-mark";
-    else if (part === OPEN_SOFT) state.cls = "check-mark soft";
-    else if (part === CLOSE || part === CLOSE_SOFT) state.cls = null;
-    else if (part) out.push(state.cls ? <mark key={`${key}m${i}`} className={state.cls}>{part}</mark> : part);
+  text.split(/([\uE000\uE001])/).forEach((part, i) => {
+    if (part === OPEN) state.open = true;
+    else if (part === CLOSE) state.open = false;
+    else if (part) out.push(state.open ? <mark key={`${key}m${i}`} className="check-mark">{part}</mark> : part);
   });
   return out;
 }
 
-const opens = (s: string) => (s.match(/[\uE000\uE002]/g) ?? []).length;
-const closes = (s: string) => (s.match(/[\uE001\uE003]/g) ?? []).length;
-
 /** Insert highlight markers around the first occurrence of each mark (longest first). */
-function withMarks(source: string, marks: Mark[]): string {
+function withMarks(source: string, marks: string[]): string {
   let s = source;
-  const all = marks.map((m) => (typeof m === "string" ? { text: m, soft: false } : { text: m.text, soft: !!m.soft }))
-    .filter((m) => m.text && m.text.trim().length > 1)
-    .sort((a, b) => Number(a.soft) - Number(b.soft) || b.text.length - a.text.length); // findings first
-  const seen = new Set<string>();
-  for (const m of all) {
-    if (seen.has(m.text)) continue;
-    seen.add(m.text);
-    const at = s.indexOf(m.text);
-    if (at < 0 || opens(s.slice(0, at)) !== closes(s.slice(0, at))) continue; // not found, or inside another
-    if (MARKERS.test(s.slice(at, at + m.text.length))) continue;
-    s = s.slice(0, at) + (m.soft ? OPEN_SOFT : OPEN) + m.text + (m.soft ? CLOSE_SOFT : CLOSE) + s.slice(at + m.text.length);
+  for (const m of [...new Set(marks.filter((x) => x && x.trim().length > 1))].sort((a, b) => b.length - a.length)) {
+    const at = s.indexOf(m);
+    if (at < 0 || s.slice(0, at).split(OPEN).length !== s.slice(0, at).split(CLOSE).length) continue; // not found, or inside another
+    if (s.slice(at, at + m.length).includes(OPEN) || s.slice(at, at + m.length).includes(CLOSE)) continue;
+    s = s.slice(0, at) + OPEN + m + CLOSE + s.slice(at + m.length);
   }
   return s;
 }
@@ -54,7 +39,7 @@ function withMarks(source: string, marks: Mark[]): string {
 const LINK = /^\[([^\]\n]{1,300})\]\((https?:\/\/[^\s)]{1,1000})\)$/;
 
 function inline(text: string, cite?: Cite, links?: Set<string>): ReactNode[] {
-  const state: { cls: string | null } = { cls: null };
+  const state = { open: false };
   const out: ReactNode[] = [];
   const link = "\\[[^\\]\\n]{1,300}\\]\\(https?:\\/\\/[^\\s)]{1,1000}\\)|";
   const re = new RegExp(`(${links ? link : ""}\\*\\*[^*]+\\*\\*|\`[^\`]+\`|\\*[^*\\s][^*]*\\*${cite ? "|\\[\\d{1,3}\\]" : ""})`, "g");
@@ -97,7 +82,7 @@ function list(lines: string[], key: number, cite?: Cite, links?: Set<string>): R
 }
 
 // `breaks`: keep single line breaks inside paragraphs (extracted document text, OCR lines).
-export function Markdown({ source, breaks = false, cite, marks, links }: { source: string; breaks?: boolean; cite?: Cite; marks?: Mark[]; links?: Set<string> }) {
+export function Markdown({ source, breaks = false, cite, marks, links }: { source: string; breaks?: boolean; cite?: Cite; marks?: string[]; links?: Set<string> }) {
   const lines = (marks?.length ? withMarks(source, marks) : source).replace(/\r/g, "").split("\n");
   const blocks: ReactNode[] = [];
   let i = 0;
