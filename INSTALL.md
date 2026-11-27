@@ -87,6 +87,7 @@ mentis.example.com {
 	request_body {
 		max_size 60MB
 	}
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
 	reverse_proxy mentis-web:8080
 }
 CADDY
@@ -103,6 +104,7 @@ server {
     server_name mentis.example.com;
     # ssl_certificate / ssl_certificate_key ...
     client_max_body_size 60m;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
     location / {
         proxy_pass http://127.0.0.1:8080;     # MENTIS_WEB_PORT
@@ -132,6 +134,8 @@ docker compose logs -f worker
 Embeddings: the `embeddings` container runs BAAI/bge-m3 (Hugging Face TEI, CPU). **On first start it downloads the model (about 2.3 GB)**; until then the Embeddings line on Service status is Down and uploads fail with "Indexing failed" (use Retry afterwards). Follow it with `docker compose logs -f embeddings`. Limits: `MENTIS_EMBEDDINGS_CPUS` / `MENTIS_EMBEDDINGS_MEMORY`. RAM: plan at least 8 GB for the whole host; with less, add swap and set `MENTIS_EMBEDDING_BATCH_SIZE=4` (texts per request), or uploads fail with "The document search service is not available" when the embedding service runs out of memory and restarts.
 
 More workers in parallel: `MENTIS_WORKER_REPLICAS=3` in `.env`, then `docker compose up -d`.
+
+Each document is read in a child process limited to `MENTIS_PARSE_MEMORY_MB` (default 2048; 0 = no limit, standard readers only) and `MENTIS_PARSE_CPU_SECONDS` (default 1500): a damaged or crafted file fails on its own with a clear message instead of exhausting the worker shared by every customer. Readers also cap the text they produce (5 M characters per Word file or web page, 5,000 rows per table, tables nested 5 deep).
 
 Parser: `MENTIS_PARSER=standard` (default). Docling reads PDF and Office files only; Markdown, JSON, CSV, YAML and pictures always use the standard readers. To try Docling in the lab, set `MENTIS_PARSER=docling` and `MENTIS_PARSER_EXTRAS=worker,docling` in `.env`, then `docker compose up -d --build worker` (large download: PyTorch and models).
 
@@ -218,12 +222,14 @@ cd mentis
 ./backup.sh
 git fetch --tags
 git checkout <version-tag>
-docker compose up -d --build
+docker compose build --pull
+docker compose pull --ignore-buildable
+docker compose up -d --remove-orphans
 ./check.sh
 docker image prune -f && docker builder prune -f   # space left by the previous version's images
 ```
 
-If you edited `docker-compose.yml` or `check.sh` by hand, `git checkout` refuses to switch: put your change in `.env` or `docker-compose.override.yml` instead, then `git checkout -- docker-compose.yml check.sh`.
+`build --pull` and `pull` fetch the current base images (Python, nginx, PostgreSQL, Redis, Qdrant, MinIO, the embedding service), so their security fixes arrive with each upgrade; a plain `up -d --build` keeps the images of the first install. If you edited `docker-compose.yml` or `check.sh` by hand, `git checkout` refuses to switch: put your change in `.env` or `docker-compose.override.yml` instead, then `git checkout -- docker-compose.yml check.sh`.
 
 ## Operator commands
 

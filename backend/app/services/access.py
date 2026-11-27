@@ -76,6 +76,19 @@ def general(db: Session) -> Tenant | None:
     return db.scalar(select(Tenant).where(Tenant.is_global.is_(True)))
 
 
+def covers_person(db: Session, actor: User, ids: set[uuid.UUID], all_tenants: bool) -> bool:
+    """True if `actor` may manage a person (user or invitation) with these tenants. A person with no
+    customer (General Knowledge Base at most) belongs to no customer's admin: only super-admins and
+    tenant admins of all customers manage them (an empty set is inside every admin's customers)."""
+    if actor.role == Role.SUPER_ADMIN.value:
+        return True
+    gkb = general(db)
+    customers = ids - ({gkb.id} if gkb is not None else set())
+    if not customers and not all_tenants and not (actor.role == Role.TENANT_ADMIN.value and actor.all_tenants):
+        return False
+    return covers(db, actor, ids, all_tenants)
+
+
 def covers(db: Session, actor: User, ids: set[uuid.UUID], all_tenants: bool) -> bool:
     """True if `actor` may hand out these tenants: only what it has itself."""
     if actor.role == Role.SUPER_ADMIN.value:

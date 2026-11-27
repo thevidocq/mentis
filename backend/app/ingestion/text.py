@@ -10,22 +10,31 @@ def clean_cell(value) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+MAX_COLUMNS = 200       # columns kept per table
+MAX_CELLS = 1_000_000   # cells written per table (rows beyond are reported)
+
+
 def markdown_table(rows: list[list]) -> str:
-    """Rows to a Markdown table; the first non-empty row is the header."""
+    """Rows to a Markdown table; the first non-empty row is the header.
+
+    Bounded: columns empty in every row are dropped before any padding (Excel cells formatted but
+    never filled, often up to column XFD, or a crafted row of thousands of empty spanning cells),
+    at most MAX_COLUMNS columns and MAX_CELLS cells are written."""
     rows = [[clean_cell(c) for c in r] for r in rows]
     rows = [r for r in rows if any(r)]
     if not rows:
         return ""
-    width = max(len(r) for r in rows)
-    rows = [r + [""] * (width - len(r)) for r in rows]
-    # Columns empty in every row carry nothing (Excel cells formatted but never filled, often up
-    # to column XFD): without this a sheet becomes thousands of "|  |" columns per row.
-    keep = [i for i in range(width) if any(r[i] for r in rows)]
-    rows = [[r[i] for i in keep] for r in rows]
+    keep = sorted({i for r in rows for i, c in enumerate(r) if c})[:MAX_COLUMNS]
     width = len(keep)
+    more = max(len(rows) - max(MAX_CELLS // max(width, 1), 2), 0)
+    if more:
+        rows = rows[: len(rows) - more]
+    rows = [[r[i] if i < len(r) else "" for i in keep] for r in rows]
     head, body = rows[0], rows[1:]
     lines = ["| " + " | ".join(head) + " |", "| " + " | ".join(["---"] * width) + " |"]
     lines += ["| " + " | ".join(r) + " |" for r in body]
+    if more:
+        lines.append(f"\n*{more} more table rows were not read (size limit).*")
     return "\n".join(lines)
 
 

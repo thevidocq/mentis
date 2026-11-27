@@ -51,7 +51,7 @@ def check_role_assignment(db: Session, actor: User, role: str, tenant_ids: list[
     if actor.role == Role.SUPER_ADMIN.value:
         return tenants
     # A tenant admin creates tenant admins and analysts, with only the customers it has itself.
-    if role in CONTENT_ROLES and access.covers(db, actor, {t.id for t in tenants}, all_tenants):
+    if role in CONTENT_ROLES and access.covers_person(db, actor, {t.id for t in tenants}, all_tenants):
         return tenants
     raise RuleError(403, "You can only give customers you have yourself.")
 
@@ -63,7 +63,7 @@ def can_manage(db: Session, actor: User, target: User) -> bool:
         return True
     if actor.role != Role.TENANT_ADMIN.value or target.role not in CONTENT_ROLES:
         return False
-    return access.covers(db, actor, target.tenant_ids, target.all_tenants)
+    return access.covers_person(db, actor, target.tenant_ids, target.all_tenants)
 
 
 def single_tenant(user: User) -> uuid.UUID | None:

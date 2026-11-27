@@ -24,6 +24,7 @@ from app.api.routes import (
     tenants,
     users,
 )
+from app.core import log_filter
 from app.core.config import get_settings
 from app.core.ratelimit import RateLimiter
 
@@ -35,6 +36,7 @@ _UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 def create_app() -> FastAPI:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    log_filter.install()  # invitation, reset and share tokens never reach the access log
     # The interactive API docs reveal every endpoint: off unless MENTIS_API_DOCS=true (development).
     docs = get_settings().api_docs
     app = FastAPI(title="Mentis API", version=__version__, docs_url="/api/docs" if docs else None,

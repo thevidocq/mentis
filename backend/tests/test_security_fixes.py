@@ -114,3 +114,52 @@ def test_service_errors_do_not_reveal_internal_details_to_users(super_admin, fak
         embeddings.set_embedder(fake_embeddings.embed)
     logs = super_admin.get("/api/logs", params={"q": ""}).text
     assert "tei-internal" in logs  # the super-admin still sees the cause
+
+
+def test_deleted_documents_leave_saved_answers(super_admin, fake_llm):  # noqa: F811
+    from app.services.chat_redaction import REMOVED
+
+    _provider(super_admin)
+    alfa = _tenant(super_admin, "Alfa")
+    _upload(super_admin, alfa["id"], "Wrong.docx", _docx("GLOBEXSECRET brute force attacks escalate to Anna Verdi"))
+    _upload(super_admin, alfa["id"], "Right.docx", _docx("Alfa phishing triage: check the mail headers"))
+    run_jobs(super_admin)
+    an = _user(super_admin, "an@example.com", "analyst", tenant_ids=[alfa["id"]])
+    leaked = an.post("/api/chats", json={"tenant_id": alfa["id"], "message": "brute force attacks escalate"}).json()
+    kept = an.post("/api/chats", json={"tenant_id": alfa["id"], "message": "phishing triage mail headers"}).json()
+    assert "GLOBEXSECRET" in str(leaked)
+    docs = super_admin.get(f"/api/tenants/{alfa['id']}/documents").json()
+    wrong = next(d for d in docs if d["name"] == "Wrong.docx")
+    assert super_admin.delete(f"/api/tenants/{alfa['id']}/documents/{wrong['id']}").status_code == 204
+    got = an.get(f"/api/chats/{leaked['chat']['id']}").json()
+    assert "GLOBEXSECRET" not in str(got) and got["messages"][1]["citations"] == []
+    assert got["messages"][1]["content"] in (REMOVED, HIDDEN)
+    assert got["messages"][0]["content"] == "brute force attacks escalate"
+    assert "GLOBEXSECRET" not in str(an.get(f"/api/chats/{kept['chat']['id']}").json())
+    assert an.get(f"/api/chats/{kept['chat']['id']}").json()["messages"][1]["citations"]  # other documents untouched
+
+
+def test_answers_are_hidden_when_any_customer_they_read_is_removed(super_admin, fake_llm):  # noqa: F811
+    _provider(super_admin)
+    alfa, beta = _tenant(super_admin, "Alfa"), _tenant(super_admin, "Beta")
+    _upload(super_admin, alfa["id"], "Alfa.docx", _docx("Alfa brute force attacks: block the IP"))
+    _upload(super_admin, beta["id"], "Beta.docx", _docx("BETASECRET brute force attacks escalate to Anna Verdi"))
+    run_jobs(super_admin)
+    email = "an@example.com"
+    an = _user(super_admin, email, "analyst", tenant_ids=[alfa["id"], beta["id"]])
+    every = an.post("/api/chats", json={"tenant_id": None, "message": "brute force attacks"}).json()
+    from app.core import db as db_module
+    from app.models import ChatMessage
+    db = next(db_module.get_db())
+    m = db.get(ChatMessage, __import__("uuid").UUID(every["answer"]["id"]))
+    assert set(m.searched) >= {alfa["id"], beta["id"]}
+    # Even with only Alfa cited, the answer read Beta's passages: hidden once Beta is removed.
+    m.citations = [c for c in m.citations if c.get("tenant_id") == alfa["id"]] or m.citations[:0]
+    db.commit()
+    db.close()
+    uid = next(u["id"] for u in super_admin.get("/api/users").json() if u["email"] == email)
+    super_admin.patch(f"/api/users/{uid}", json={"tenant_ids": [alfa["id"]]})
+    _relogin(an, email)
+    assert an.get(f"/api/chats/{every['chat']['id']}").json()["messages"][1]["content"] == HIDDEN
+    # The title of an "All customers" chat is the question, never text written from the passages.
+    assert an.get(f"/api/chats/{every['chat']['id']}").json()["title"] == "brute force attacks"

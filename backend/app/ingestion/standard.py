@@ -7,6 +7,7 @@ import io
 
 from PIL import Image
 
+from app.ingestion.images import MAX_IMAGE_PIXELS
 from app.ingestion.ocr import ocr_image
 from app.ingestion.text import markdown_table, normalize_text
 from app.ingestion.types import ExtractedPage, ParseLimits, ParseResult
@@ -175,12 +176,23 @@ def _run_text(el) -> str:
     return "".join(out)
 
 
-def _textboxes(el) -> list[str]:
+MAX_BOX_NESTING = 3  # text boxes inside text boxes: deeper ones are not read
+
+
+def _textboxes(el, budget: "_Budget | None" = None) -> list[str]:
     """Text in text boxes and shapes anchored in a paragraph (each box once: Word stores a copy
-    for older readers)."""
+    for older readers). Each box reads its own paragraphs only (a box inside it is read as its own
+    box), so nested boxes cost no more than their text."""
     seen, out = set(), []
     for box in el.iter(f"{W}txbxContent"):
-        text = "\n".join(t for t in (_run_text(p).strip() for p in box.iter(f"{W}p")) if t)
+        if budget is not None and budget.spent:
+            break
+        if sum(1 for a in box.iterancestors() if _local(a) == "txbxContent") >= MAX_BOX_NESTING:
+            continue
+        own = [p for p in box.iter(f"{W}p") if next(a for a in p.iterancestors() if _local(a) == "txbxContent") is box]
+        text = "\n".join(t for t in (_run_text(p).strip() for p in own) if t)
+        if budget is not None:
+            text = budget.take(text)
         if text and text not in seen:
             seen.add(text)
             out.append(text)
@@ -235,51 +247,110 @@ class _Numbering:
         return f"{indent}{self.counters[key]}."
 
 
-def _cell_text(tc) -> str:
-    """A table cell: its paragraphs, and the rows of a table nested in it."""
+MAX_TABLE_ROWS = 5000      # rows read per table (the rest is reported)
+MAX_NESTING = 5            # tables inside tables read as tables; deeper ones as plain text
+MAX_COPY = 200             # a merged cell's value is repeated in the slots it covers only when short
+MAX_DOC_CHARS = 5_000_000  # text produced from one Word file: a small crafted file cannot make gigabytes
+
+
+class _Budget:
+    """Characters still allowed for one document; `spent` once it ran out."""
+
+    def __init__(self, chars: int = MAX_DOC_CHARS):
+        self.left = chars
+        self.spent = False
+
+    def take(self, text: str) -> str:
+        if self.spent:
+            return ""
+        if len(text) > self.left:
+            self.spent = True
+            text = text[: max(self.left, 0)]
+        self.left -= len(text)
+        return text
+
+
+def _own_rows(tbl) -> list:
+    """A table's own rows (also those wrapped in a content control), never a nested table's."""
+    rows = []
+    for child in tbl:
+        name = _local(child)
+        if name == "tr":
+            rows.append(child)
+        elif name == "sdt":
+            content = child.find(f"{W}sdtContent")
+            if content is not None:
+                rows.extend(c for c in content if _local(c) == "tr")
+    return rows
+
+
+def _span(tc) -> int:
+    span = tc.find(f"{W}tcPr/{W}gridSpan")
+    value = span.get(f"{W}val") if span is not None else None
+    return min(int(value), 50) if value and value.isdigit() and int(value) > 0 else 1
+
+
+def _cell_text(tc, budget: _Budget, depth: int = 0) -> str:
+    """A table cell: its paragraphs, and the rows of a table nested in it (each nested table read
+    once; past MAX_NESTING levels, as plain text)."""
     parts = []
     for child in tc:
+        if budget.spent:
+            break
         name = _local(child)
         if name == "p":
-            t = _run_text(child).strip()
+            t = budget.take(_run_text(child).strip())
             if t:
                 parts.append(t)
         elif name == "tbl":
-            for tr in child.iter(f"{W}tr"):
-                cells = [_cell_text(c) for c in tr if _local(c) == "tc"]
+            if depth >= MAX_NESTING:
+                t = budget.take(" ".join(_run_text(child).split()))
+                if t:
+                    parts.append(t)
+                continue
+            for tr in _own_rows(child)[:MAX_TABLE_ROWS]:
+                cells = [_cell_text(c, budget, depth + 1) for c in tr if _local(c) == "tc"]
                 if any(cells):
                     parts.append(" | ".join(c for c in cells if c))
         elif name == "sdt":
-            parts.append(_cell_text(child.find(f"{W}sdtContent") if child.find(f"{W}sdtContent") is not None else child))
+            content = child.find(f"{W}sdtContent")
+            parts.append(_cell_text(content if content is not None else child, budget, depth))
     return "; ".join(p for p in parts if p)
 
 
-def _docx_table(tbl) -> str:
-    rows = []
-    for tr in tbl.iter(f"{W}tr"):
-        if tr.getparent() is not tbl and _local(tr.getparent()) != "sdtContent":
-            continue  # a nested table's rows are read inside their cell
-        row = []
+def _docx_table(tbl, budget: _Budget) -> str:
+    rows: list[list[str]] = []
+    trs = _own_rows(tbl)
+    above: list[str] = []
+    for tr in trs[:MAX_TABLE_ROWS]:
+        if budget.spent:
+            break
+        row: list[str] = []
         for tc in [c for c in tr if _local(c) in ("tc", "sdt")]:
-            tc = tc.find(f"{W}sdtContent/{W}tc") if _local(tc) == "sdt" and tc.find(f"{W}sdtContent/{W}tc") is not None else tc
-            span = tc.find(f"{W}tcPr/{W}gridSpan")
-            n = int(span.get(f"{W}val")) if span is not None and (span.get(f"{W}val") or "").isdigit() else 1
-            row += [_cell_text(tc)] * min(n, 50)
-        rows.append(row)
-    # A cell merged downwards (vMerge) is empty in the rows it covers: give it the value above.
-    for r in range(1, len(rows)):
-        tcs = [c for c in tbl.findall(f"{W}tr")[r] if _local(c) == "tc"] if r < len(tbl.findall(f"{W}tr")) else []
-        col = 0
-        for tc in tcs:
-            span = tc.find(f"{W}tcPr/{W}gridSpan")
-            n = int(span.get(f"{W}val")) if span is not None and (span.get(f"{W}val") or "").isdigit() else 1
+            if _local(tc) == "sdt":
+                inner = tc.find(f"{W}sdtContent/{W}tc")
+                if inner is None:
+                    continue
+                tc = inner
+            n = _span(tc)
             vm = tc.find(f"{W}tcPr/{W}vMerge")
-            if vm is not None and vm.get(f"{W}val") in (None, "continue") and not rows[r][col] and col < len(rows[r - 1]):
+            col = len(row)
+            if vm is not None and vm.get(f"{W}val") in (None, "continue"):
+                # Merged down from the row above: the value above, when short (a "Tier 2" cell).
                 for k in range(n):
-                    if col + k < len(rows[r]) and col + k < len(rows[r - 1]):
-                        rows[r][col + k] = rows[r - 1][col + k]
-            col += n
-    return markdown_table(rows)
+                    value = above[col + k] if col + k < len(above) else ""
+                    row.append(budget.take(value) if len(value) <= MAX_COPY else "")
+                continue
+            text = _cell_text(tc, budget)
+            row.append(text)
+            for _ in range(n - 1):  # spread across columns: repeated only when short
+                row.append(budget.take(text) if len(text) <= MAX_COPY else "")
+        rows.append(row)
+        above = row
+    md = markdown_table(rows)
+    if len(trs) > MAX_TABLE_ROWS:
+        md += f"\n\n*{len(trs) - MAX_TABLE_ROWS} more table rows were not read.*"
+    return md
 
 
 def parse_docx(data: bytes, limits: ParseLimits) -> ParseResult:
@@ -291,6 +362,7 @@ def parse_docx(data: bytes, limits: ParseLimits) -> ParseResult:
 
     doc = docx.Document(io.BytesIO(data))
     numbering = _Numbering(doc)
+    budget = _Budget()
     sections: list[tuple[str, list[str], int]] = []  # (label, blocks, tables)
     label, blocks, tables = "Beginning", [], 0
 
@@ -306,10 +378,12 @@ def parse_docx(data: bytes, limits: ParseLimits) -> ParseResult:
                 yield child, tag
 
     for child, tag in body_items(doc.element.body):
+        if budget.spent:
+            break
         if tag == "p":
             p = Paragraph(child, doc)
-            text = _run_text(child).strip()
-            boxes = _textboxes(child)
+            text = budget.take(_run_text(child).strip())
+            boxes = _textboxes(child, budget)
             style = (p.style.name if p.style is not None else "") or ""
             if text:
                 level = int(style.split()[-1]) if style.startswith("Heading") and style.split()[-1].isdigit() else 0
@@ -324,9 +398,9 @@ def parse_docx(data: bytes, limits: ParseLimits) -> ParseResult:
                 if not marker:
                     numbering.reset_styles()
                 blocks.append(("#" * min(level, 3) + " " + text) if level else (f"{marker} {text}" if marker else text))
-            blocks += boxes
+            blocks += [b for b in boxes if b]
         elif tag == "tbl":
-            md = _docx_table(child)
+            md = _docx_table(child, budget)
             if md:
                 blocks.append(md)
                 tables += 1
@@ -350,6 +424,7 @@ def parse_docx(data: bytes, limits: ParseLimits) -> ParseResult:
         first = sections[0]
         sections[0] = (first[0], first[1] + extra, first[2])
 
+    warnings = ["The document is longer than the size limit: the rest was not read."] if budget.spent else []
     pages = [
         ExtractedPage(index=i + 1, kind="section", label=lbl, text=normalize_text("\n\n".join(b)), tables=t).finalize()
         for i, (lbl, b, t) in enumerate(sections[: limits.max_pages])
@@ -357,7 +432,7 @@ def parse_docx(data: bytes, limits: ParseLimits) -> ParseResult:
     ]
     for i, p in enumerate(pages):
         p.index = i + 1
-    return ParseResult(pages)
+    return ParseResult(pages, warnings)
 
 
 # --- PPTX --------------------------------------------------------------------
@@ -423,7 +498,9 @@ def parse_pptx(data: bytes, limits: ParseLimits) -> ParseResult:
                 # Free pictures and pictures in a placeholder (PlaceholderPicture) alike.
                 # Screenshots and diagrams often carry procedure text: read it with OCR.
                 try:
-                    img = Image.open(io.BytesIO(shape.image.blob))
+                    img = Image.open(io.BytesIO(shape.image.blob))  # header only: nothing decoded yet
+                    if img.width * img.height > MAX_IMAGE_PIXELS:
+                        continue  # a picture this large is not decoded (a decompression bomb)
                     text, conf = ocr_image(img, limits.ocr_languages)
                 except Exception:  # noqa: BLE001 - unreadable images are skipped
                     continue

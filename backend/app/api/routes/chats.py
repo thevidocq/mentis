@@ -222,10 +222,15 @@ def _ask(db: Session, user: User, chat: Chat, question: str, first: bool, reques
     a = ChatMessage(chat_id=chat.id, role="assistant", content=content, status=result.status,
                     citations=result.citations, followups=result.followups, tenants=result.tenants,
                     provider_name=result.provider_name, model=result.model, latency_ms=result.latency_ms,
-                    input_tokens=result.input_tokens, output_tokens=result.output_tokens, check=check)
+                    input_tokens=result.input_tokens, output_tokens=result.output_tokens, check=check,
+                    searched=result.searched)
     db.add(a)
     if first and not chat.title_locked:
-        chat.title = (result.title or "").strip()[:120] or question.strip()[:60] or chat.title
+        # A title written by the model may repeat a passage. In an "All customers" chat the passages
+        # can come from a customer later removed from the user (or not seen by a reader of a shared
+        # link), and titles are never hidden: there the title is the question itself.
+        model_title = (result.title or "").strip()[:120] if chat.scope_tenant_id is not None else ""
+        chat.title = model_title or question.strip()[:60] or chat.title
     chat.updated_at = utcnow()
     db.commit()
     # Metadata only: never the question or the answer.

@@ -77,6 +77,10 @@ def delete_tenant(db: Session, tenant: Tenant) -> None:
     from app.models import Chat, ChatMessage, Integration
     from app.services.versions import delete_tenant_documents
 
+    from app.services import chat_redaction
+
+    # Answers in other users' "All customers" chats that read this customer's documentation.
+    chat_redaction.redact(db, tenant_id=tenant.id)
     delete_tenant_documents(db, tenant.id)
     db.execute(delete(Integration).where(Integration.tenant_id == tenant.id))
     admins = list(db.scalars(select(User).where(User.id.in_(select(user_tenants.c.user_id).where(user_tenants.c.tenant_id == tenant.id)))))

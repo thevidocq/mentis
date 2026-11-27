@@ -18,7 +18,7 @@ from app.api.routes.chats import MessageOut, _msg, _own_chat, _scope_name
 from app.core.config import get_settings
 from app.core.db import get_db
 from app.core.security import hash_token, new_session_token
-from app.models import Chat, ChatMessage, ChatShare, Role, User
+from app.models import Chat, ChatMessage, ChatShare, Role, Tenant, User
 from app.models.base import utcnow
 from app.services import access, chat_visibility
 from app.services.logs import log_event
@@ -54,8 +54,17 @@ def _active(db: Session, chat_id: uuid.UUID) -> ChatShare | None:
 
 def _may_view(db: Session, viewer: User, owner: User, chat: Chat) -> bool:
     if chat.scope_tenant_id is not None:
+        tenant = db.get(Tenant, chat.scope_tenant_id)
+        if tenant is None or tenant.status == "disabled":
+            return False
         return access.sees(db, viewer, chat.scope_tenant_id)
-    return access.tenant_ids(db, owner) <= access.tenant_ids(db, viewer)
+    # "All customers": the owner's customers now must all be the viewer's; an owner left with none
+    # (customers removed, or made super-admin) proves nothing, so the link closes. Each answer is
+    # then also checked against the customers it actually read (Visibility, per viewer).
+    owner_ids = access.tenant_ids(db, owner)
+    gkb = access.general(db)
+    customers = owner_ids - ({gkb.id} if gkb is not None else set())
+    return bool(customers) and owner_ids <= access.tenant_ids(db, viewer)
 
 
 @router.get("/chats/{chat_id}/share", response_model=ShareOut)

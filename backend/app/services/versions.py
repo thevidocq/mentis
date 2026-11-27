@@ -187,8 +187,12 @@ def _delete_version_rows(db: Session, version_ids: list) -> None:
 def delete_document(db: Session, document: Document) -> None:
     """The rows go first (committed): answers stop using the document at once. Files and vectors
     are removed next; if MinIO or Qdrant fail, the daily storage sweep removes what is left."""
+    from app.services import chat_redaction
+
     tenant_id, document_id = document.tenant_id, document.id
     version_ids = list(db.scalars(select(DocumentVersion.id).where(DocumentVersion.document_id == document_id)))
+    # Its passages leave saved answers too (Sources keep whole passages): in the same commit.
+    chat_redaction.redact(db, tenant_id=tenant_id, document_ids=[document_id], document_names=[document.name])
     _delete_version_rows(db, version_ids)
     db.delete(document)
     db.commit()

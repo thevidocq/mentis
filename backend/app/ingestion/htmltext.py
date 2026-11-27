@@ -137,11 +137,17 @@ def _span(cell, name: str) -> int:
     return min(int(value), 50) if value.isdigit() and int(value) > 0 else 1
 
 
-def _table(el) -> str:
+MAX_SLOTS = 250_000   # cells of one table after spreading row/column spans
+MAX_COPY = 200        # a spanning cell's text is repeated in the slots it covers only when short
+
+
+def _table(el, budget: int = 5_000_000) -> str:
     """The table as a grid: a cell spanning rows or columns fills every slot it covers, so the
     values below a "Tier 2" cell spanning two rows stay in their own columns."""
     grid: list[list[str]] = []
     pending: dict[int, tuple[str, int]] = {}  # column -> (text, rows still covered)
+    slots = chars = 0
+    full = False
     rows = _rows(el)
     for tr in rows[:5000]:
         row: list[str] = []
@@ -162,17 +168,25 @@ def _table(el) -> str:
         for c in cells:
             fill_pending()
             text = _inline(c).strip()
+            copy = text if len(text) <= MAX_COPY else ""
             rows_down, cols = _span(c, "rowspan"), _span(c, "colspan")
-            for _ in range(cols):
-                row.append(text)
+            for k in range(cols):
+                row.append(text if k == 0 else copy)
                 if rows_down > 1:
-                    pending[col] = (text, rows_down - 1)
+                    pending[col] = (copy, rows_down - 1)
                 col += 1
         fill_pending()
+        slots += len(row)
+        chars += sum(len(x) for x in row)
         if any(row):
             grid.append(row)
+        if slots > MAX_SLOTS or chars > budget:  # a crafted table cannot grow the page without limit
+            full = True
+            break
     md = markdown_table(grid) if grid else ""
-    return md + (f"\n\n*{len(rows) - 5000} more table rows were not read.*" if md and len(rows) > 5000 else "")
+    if md and (full or len(rows) > 5000):
+        md += "\n\n*The table is larger than the size limit: the rest was not read.*"
+    return md
 
 
 def _list(el, out: _Out, depth: int, level: int) -> None:
@@ -268,7 +282,7 @@ def _blocks(el, out: _Out, depth: int = 0, content: bool = False) -> None:
                 lang = next((c[9:] for c in classes if c.startswith("language-")), "")
                 out.add(f"{fence}{re.sub(r'[^A-Za-z0-9_+-]', '', lang)}\n{code}\n{fence}")
         elif tag == "table":
-            md = _table(child)
+            md = _table(child, max(out.left, 0))
             if md:
                 out.add(md)
         elif tag == "hr":

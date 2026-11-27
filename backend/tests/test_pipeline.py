@@ -2,6 +2,8 @@
 
 import uuid
 
+import pytest
+
 from app.core import db as db_module
 from app.ingestion.chunking import MAX_CHARS, chunk_pages
 from app.ingestion.types import ExtractedPage
@@ -293,3 +295,59 @@ def test_html_cells_spanning_rows_stay_in_their_columns():
     md, _ = to_markdown(b"<table><tr><th>Tier</th><th>Name</th><th>Phone</th></tr><tr><td rowspan=2>Tier 2</td><td>Luca</td>"
                         b"<td>111</td></tr><tr><td>Sara</td><td>222</td></tr></table>")
     assert "| Tier 2 | Sara | 222 |" in md
+
+
+def _docx_with_body(xml_body: str) -> bytes:
+    import io
+    import zipfile
+
+    import docx
+
+    d = docx.Document()
+    d.add_paragraph("x")
+    buf = io.BytesIO()
+    d.save(buf)
+    zin = zipfile.ZipFile(io.BytesIO(buf.getvalue()))
+    xml = zin.read("word/document.xml").decode().replace("<w:body>", "<w:body>" + xml_body, 1)
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+        for i in zin.infolist():
+            z.writestr(i, xml if i.filename == "word/document.xml" else zin.read(i))
+    return out.getvalue()
+
+
+def test_crafted_word_tables_stay_small_and_fast():
+    import time
+
+    first = ('<w:tr><w:tc><w:tcPr><w:gridSpan w:val="50"/><w:vMerge w:val="restart"/></w:tcPr>'
+             '<w:p><w:r><w:t>' + "A" * 100_000 + '</w:t></w:r></w:p></w:tc></w:tr>')
+    below = '<w:tr><w:tc><w:tcPr><w:gridSpan w:val="50"/><w:vMerge/></w:tcPr><w:p/></w:tc></w:tr>'
+    nested = "<w:p><w:r><w:t>leaf</w:t></w:r></w:p>"
+    for _ in range(30):
+        nested = "<w:tbl><w:tr><w:tc>" + nested + "</w:tc></w:tr></w:tbl><w:p/>"
+    rows = "<w:tbl>" + "<w:tr><w:tc><w:tcPr><w:vMerge/></w:tcPr><w:p/></w:tc></w:tr>" * 20_000 + "</w:tbl>"
+    for body in ("<w:tbl>" + first + below * 2000 + "</w:tbl>", nested, rows):
+        t = time.time()
+        text = "".join(p.text for p in _parse(_docx_with_body(body), "docx").pages)
+        assert time.time() - t < 10 and len(text) < 6_000_000
+
+
+def test_crafted_web_table_spans_stay_small():
+    from app.ingestion.htmltext import to_markdown
+
+    page = b"<table><tr><td colspan=50 rowspan=50>" + b"x" * 200_000 + b"</td></tr>" + b"<tr></tr>" * 49 + b"</table>"
+    md, _ = to_markdown(page)
+    assert len(md) < 6_000_000
+    wide = b"<table><tr>" + b"<td colspan=50></td>" * 4900 + b"</tr>" + b"<tr><td>x</td></tr>" * 5000 + b"</table>"
+    assert len(to_markdown(wide)[0]) < 1_000_000  # empty spanning cells never widen every row
+
+
+def test_a_reader_that_runs_out_of_memory_fails_alone(monkeypatch):
+    from app.ingestion.isolated import ParseLimitExceeded, parse_isolated
+    from app.ingestion.types import ParseLimits
+
+    monkeypatch.setenv("MENTIS_PARSE_MEMORY_MB", "200")
+    with pytest.raises(ParseLimitExceeded):
+        parse_isolated(b"a " * 150_000_000, "md", ParseLimits())
+    monkeypatch.setenv("MENTIS_PARSE_MEMORY_MB", "2048")
+    assert parse_isolated(b"# Title\n\nText", "md", ParseLimits()).pages[0].text.startswith("# Title")

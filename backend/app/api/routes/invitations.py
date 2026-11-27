@@ -73,7 +73,7 @@ def _out(db: Session, inv: Invitation) -> dict:
 
 
 def _manageable(db: Session, actor: User, inv: Invitation) -> bool:
-    return actor.role == Role.SUPER_ADMIN.value or (inv.role in rules.CONTENT_ROLES and access.covers(db, actor, _ids(inv), inv.all_tenants))
+    return actor.role == Role.SUPER_ADMIN.value or (inv.role in rules.CONTENT_ROLES and access.covers_person(db, actor, _ids(inv), inv.all_tenants))
 
 
 @router.post("", response_model=InviteCreated, status_code=status.HTTP_201_CREATED)

@@ -14,7 +14,8 @@ from sqlalchemy.orm import Session
 from app.models import Chat, ChatMessage, Tenant, User
 from app.services import access
 
-HIDDEN = "This answer is hidden: it used the documentation of a customer that is no longer assigned to you."
+HIDDEN = ("This answer is hidden: it used documentation that was deleted, or of a customer that is no longer "
+          "assigned to you.")
 
 
 class Visibility:
@@ -41,4 +42,15 @@ class Visibility:
             return False
         if chat.scope_tenant_id is not None and chat.scope_tenant_id not in self.visible:
             return True
+        if message.searched is not None:  # every customer whose passages the model read, cited or not
+            ids = set()
+            for t in message.searched:
+                try:
+                    ids.add(uuid.UUID(str(t)))
+                except ValueError:
+                    return True
+            if not ids <= self.visible:
+                return True
+        if (message.check or {}).get("redacted"):
+            return True  # a source of this answer was deleted
         return any(self._cited_tenant(c) not in self.visible for c in message.citations or [] if isinstance(c, dict))

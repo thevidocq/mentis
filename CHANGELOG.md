@@ -6,6 +6,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Security
+- **Security review of 0.6.1** (`docs/security/review-v0.6.1.md`).
+  - Documents are read in a child process with memory and CPU limits, and readers cap what they produce: a crafted Word file or web page (merged cells, deeply nested tables, huge spans, many rows) fails on its own instead of exhausting the worker shared by every customer (it could be killed with a 36 KB file).
+  - Users and invitations with no customer are managed only by super-admins and tenant admins of all customers (any tenant admin could manage them).
+  - Deleting a document or a customer removes the saved answers that used it (text, sources, follow-ups); the question stays.
+  - Each answer records the customers whose passages it read, cited or not: it is hidden from anyone who no longer sees one of them, also through a shared link. "All customers" chats are titled with the question. Shared links close on a disabled customer, or when the owner has no customer left.
+  - Invitation, reset and share tokens are masked in the API and web access logs.
+  - Upgrades pull current base images (security fixes of Python, nginx, PostgreSQL, Redis, Qdrant, MinIO); HSTS in the reverse-proxy examples.
+  - Very large pictures in slides are not decoded; tables keep at most 200 non-empty columns and 1 M cells (a row of thousands of empty spanning cells widened every row); nested text boxes are read once each.
+- **Migration 0015**: `chat_messages.searched`.
+
 ## [0.6.1] - 2026-11-27
 
 ### Added
