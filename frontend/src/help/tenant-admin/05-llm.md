@@ -21,6 +21,12 @@ When an answer does not match its sources:
 
 You can change this even when the super-admin chooses the models of your customer.
 
+### Max check tokens
+
+How long the checking model's reply may be, for each group of up to 10 statements (long answers are checked in several groups). Empty: 2500, enough for most models. Raise it (for example to 6000) when answers often show **Check not available** and the logs say the check was *cut at the token limit* or *empty*: reasoning models such as gpt-oss spend part of the limit thinking before they reply. Like the mode, you can change it even when the super-admin chooses the models.
+
+When a check cannot run, Mentis tries once more; the reason is written in the logs (`docker compose logs api | grep -i check`): *cut at the token limit*, *empty answer (stop: refusal)*, *timed out*, and so on.
+
 ## Usage
 
 Below the choice, **Usage, last 30 days** shows the questions about your customers and the tokens used, per model.

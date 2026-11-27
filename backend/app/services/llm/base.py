@@ -24,6 +24,7 @@ class LLMReply:
     text: str
     input_tokens: int | None = None
     output_tokens: int | None = None
+    stop: str | None = None  # why the model stopped, as the provider says it (end_turn, max_tokens, refusal, length...)
 
 
 def redact(text: str, secret: str | None) -> str:

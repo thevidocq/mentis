@@ -1,6 +1,7 @@
 """Answering a chat question: scope → retrieval → LLM → validated answer with citations."""
 
 import json
+import logging
 import re
 from dataclasses import dataclass, field
 
@@ -11,8 +12,11 @@ from app.core.config import get_settings
 from app.models import Chat, ChatMessage, Role, Tenant, User
 from app.services import access, answer_check, chat_visibility, diversity, llm, prompts, retrieval
 from app.services.integrations import live as integrations_live
+from app.services.llm import adapters as llm_adapters
 from app.services.llm_config import providers_for
 from app.services.setup import GENERAL_NAME
+
+_log = logging.getLogger("mentis.answer")
 
 HISTORY_TURNS = 6
 
@@ -220,6 +224,9 @@ def answer(db: Session, chat: Chat, question: str, first: bool, correction: str 
         if isinstance(raw_followups, list) and want_followups else []
     title = data["title"].replace("\x00", "") if data and isinstance(data.get("title"), str) else None
     cut = bool(data and data.get("_cut"))  # the model hit its token limit: the answer ends mid-sentence
+    if cut or reply.stop in llm_adapters.CUT:
+        _log.warning("answer by %s (%s) cut at the token limit: %s output tokens, stop %s; raise Max answer tokens",
+                     used.get("name"), used.get("model"), reply.output_tokens, reply.stop)
 
     names = list(dict.fromkeys(c["tenant"] for c in citations if not c["is_general"]))
     if any(c["is_general"] for c in citations):

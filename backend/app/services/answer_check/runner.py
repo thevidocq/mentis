@@ -23,6 +23,13 @@ def _tenant(db: Session, chat: Chat) -> Tenant | None:
     return db.get(Tenant, chat.scope_tenant_id) if chat.scope_tenant_id else None
 
 
+def _checker(db: Session, tenant: Tenant | None, used: dict | None) -> dict | None:
+    """The checker model for this customer, with the customer's token limit for the check."""
+    cfg = checker_for(db, tenant, used)
+    limit = (tenant.settings or {}).get("check_max_tokens") if tenant else None
+    return {**cfg, "check_max_tokens": limit} if cfg and limit else cfg
+
+
 def _checker_ref(cfg: dict | None) -> dict | None:
     return {"name": cfg["name"], "model": cfg["model"]} if cfg else None
 
@@ -67,7 +74,7 @@ def before_save(db: Session, chat: Chat, question: str, first: bool, result, reg
         return result, None, False
     tenant = _tenant(db, chat)
     mode = answer_check.mode_of(tenant.settings if tenant else None)
-    cfg = checker_for(db, tenant, result.used) if mode != "off" else None
+    cfg = _checker(db, tenant, result.used) if mode != "off" else None
     l1 = _run_level1(result)
     if mode == "off":
         check = {"level2": "off", "issues": l1, "checker": None}
@@ -117,7 +124,7 @@ def after_save(message_id: uuid.UUID, chat_id: uuid.UUID, result) -> None:
         msg, chat = db.get(ChatMessage, message_id), db.get(Chat, chat_id)
         if msg is None or chat is None or not msg.check:
             return
-        cfg = checker_for(db, _tenant(db, chat), result.used)
+        cfg = _checker(db, _tenant(db, chat), result.used)
         l2, state, verdict = _run_level2(cfg, result)
         check = {**msg.check, "level2": state, "issues": answer_check.merge(msg.check.get("issues") or [], l2)}
         msg.check = check

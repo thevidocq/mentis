@@ -6,6 +6,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Fixed
+- **"Check not available" on long answers.** The level-2 check allowed the checker only 800 tokens for all statements of an answer: on long answers it came back empty or cut. Now statements are checked in groups of 10, each call may use up to **Max check tokens** (customer **LLM** page, answer check section; default 2500, 500–16000; `settings.check_max_tokens`, also in config export/import), and an empty or unreadable reply is asked once more.
+
+### Added
+- **Logs that say why.** Every LLM reply carries the provider's stop reason (`end_turn`, `max_tokens`, `refusal`, `length`…). An empty answer is logged with the reason, the tokens used and the limit; an unreadable check says whether it was cut ("raise Max check tokens"); each level-2 check logs statements, groups, tokens and time; an answer cut by Max answer tokens is logged. Help (tenant admin LLM, super-admin AI providers), DESIGN; tests (`test_check_limits.py`).
+
 ## [0.5.2] - 2026-11-27
 
 ### Added
