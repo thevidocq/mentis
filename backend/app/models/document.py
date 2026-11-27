@@ -33,6 +33,14 @@ class Document(IdMixin, CreatedMixin, Base):
     # Case-insensitive key used to match versions.
     name_key: Mapped[str] = mapped_column(String(255), nullable=False)
     created_by: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    # Documentation added from a link: the page is read again on a schedule, a change is a new version.
+    source_url: Mapped[str | None] = mapped_column(String(2000))
+    source_check: Mapped[str | None] = mapped_column(String(8))          # 6h | 1d | 7d | manual
+    source_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    source_status: Mapped[str | None] = mapped_column(String(12))        # new_version | unchanged | error
+    source_error: Mapped[str | None] = mapped_column(String(300))
+    source_etag: Mapped[str | None] = mapped_column(String(200))
+    source_modified: Mapped[str | None] = mapped_column(String(100))
 
 
 class VersionStatus:

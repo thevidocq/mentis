@@ -103,6 +103,10 @@ class Response:
         self._body = body
 
     @property
+    def content(self) -> bytes:
+        return self._body
+
+    @property
     def text(self) -> str:
         return self._body.decode("utf-8", errors="replace")
 

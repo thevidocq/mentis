@@ -89,6 +89,47 @@ def restore(db: Session, version: DocumentVersion) -> None:
     activate(db, version)
 
 
+class VersionConflict(RuntimeError):
+    """Another version of the same document was created at the same moment."""
+
+
+class StorageDown(RuntimeError):
+    """The original could not be stored (MinIO unreachable)."""
+
+
+def store_version(db: Session, tenant_id, doc: Document, *, filename: str, file_type: str, data: bytes, sha256: str,
+                  content_type: str, user_id=None, note: str | None = None) -> DocumentVersion:
+    """A new queued version of `doc` with its original stored; the caller queues the processing.
+
+    Raises VersionConflict or StorageDown; on StorageDown the version (and a document left empty)
+    is removed again.
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    version = DocumentVersion(
+        document_id=doc.id, tenant_id=tenant_id, version=next_version_number(db, doc), original_filename=filename,
+        file_type=file_type, size_bytes=len(data), sha256=sha256, storage_key="", note=note, uploaded_by=user_id,
+    )
+    db.add(version)
+    db.flush()
+    version.storage_key = storage.original_key(tenant_id, version.id, file_type)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise VersionConflict("Another version of this document is being uploaded. Try again.") from None
+    try:
+        storage.get_storage().put(version.storage_key, data, content_type)
+    except Exception:  # noqa: BLE001 - any storage failure: the version cannot be processed without its file
+        db.delete(version)
+        db.flush()
+        if db.scalar(select(DocumentVersion.id).where(DocumentVersion.document_id == doc.id)) is None:
+            db.delete(doc)
+        db.commit()
+        raise StorageDown("Document storage is not reachable. Try again later.") from None
+    return version
+
+
 def next_version_number(db: Session, document: Document) -> int:
     current = db.scalars(select(DocumentVersion.version).where(DocumentVersion.document_id == document.id)).all()
     return max(current, default=0) + 1

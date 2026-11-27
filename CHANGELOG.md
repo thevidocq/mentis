@@ -6,6 +6,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added
+- **Documentation from a link.** **Add from link** in Documents reads a public page or file (web page converted to Markdown, Markdown/text, PDF, JSON, YAML, CSV; GitHub file links read from raw) and checks it for changes every 6 hours, day (default) or week, or only with **Check now**. A change becomes a new version through the usual pipeline and approval; no change only updates the last check; a page that cannot be read keeps the version in use and shows the reason (panel in red, *Link not read* in the list and in Needs attention). Requests use the integrations' guarded HTTP client (HTTPS, public addresses unless private networks are allowed, pinned address, no redirects, size and time limits) with ETag/Last-Modified. New: `services/link_sources.py`, `ingestion/htmltext.py` (lxml, already a dependency), migration 0014 (document source columns), endpoints `POST /documents/link`, `PATCH /documents/{id}/link`, `POST /documents/{id}/link/check`, worker maintenance round every 10 minutes. Audit events `document.link_*`.
+
+### Changed
+- **Document page layout.** One column instead of three: the header shows name, state, a *from link* chip and a facts line (type, size, pages, how it was read, date, note), with Download and ⋯ on the right (**Upload a new version** moved into ⋯); the **Read from a link** panel sits above the tabs; read warnings are banners under the header; the right-hand details column is gone; the page stage uses the page background. List: **Upload files** and **Add from link** side by side, linked documents with a link icon. `DocDetail.tsx` split into `DocPages`, `DocVersions`, `DocTest`, `RenameModal`, `LinkPanel`, `AddLinkDialog`; version creation shared by uploads and links (`versions.store_version`), content types in `uploads.MIME`.
+
 ## [0.5.2] - 2026-11-27
 
 ### Added

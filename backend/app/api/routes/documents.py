@@ -42,30 +42,18 @@ from app.models import (
     VersionStatus,
 )
 from app.models.base import utcnow
-from app.services import access, doc_export, doc_overview, jobs, retrieval, storage, versions
+from app.services import access, doc_export, doc_overview, jobs, link_sources, retrieval, storage, versions
 from app.services.embeddings import EmbeddingError
 from app.services.vector_index import VectorIndexError
 from app.services.logs import log_event
 from app.services.public_errors import public_message
-from app.services.uploads import UploadError, check_upload, file_type_of, safe_filename
+from app.services.uploads import MIME, UploadError, check_upload, file_type_of, safe_filename
 
 _log = logging.getLogger("mentis.documents")
 router = APIRouter(prefix="/tenants/{tenant_id}/documents", tags=["documents"])
 admins = require_roles(Role.TENANT_ADMIN)
 
-_MIME = {
-    "pdf": "application/pdf",
-    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "md": "text/markdown; charset=utf-8",
-    "json": "application/json",
-    "csv": "text/csv; charset=utf-8",
-    "tsv": "text/tab-separated-values; charset=utf-8",
-    "yaml": "application/yaml; charset=utf-8",
-    "png": "image/png",
-    "jpg": "image/jpeg",
-}
+_MIME = MIME  # content types of the originals (services/uploads)
 
 
 # --- Schemas -------------------------------------------------------------------
@@ -86,6 +74,16 @@ class VersionOut(BaseModel):
     processed_at: datetime | None
 
 
+class LinkOut(BaseModel):
+    """Documentation read from a link: where, how often, and the last check."""
+    url: str
+    check: str                       # 6h | 1d | 7d | manual
+    checked_at: datetime | None
+    next_check_at: datetime | None   # None: checked only on "Check now"
+    status: str | None               # new_version | unchanged | error
+    error: str | None
+
+
 class DocumentOut(BaseModel):
     id: uuid.UUID
     name: str
@@ -93,12 +91,24 @@ class DocumentOut(BaseModel):
     active: VersionOut | None
     latest: VersionOut
     versions: int
+    link: LinkOut | None = None
 
 
 class DocumentDetail(BaseModel):
     id: uuid.UUID
     name: str
     versions: list[VersionOut]
+    link: LinkOut | None = None
+
+
+class LinkIn(BaseModel):
+    url: str = Field(min_length=8, max_length=2000)
+    name: str | None = Field(default=None, max_length=200)
+    check: str = Field(default=link_sources.DEFAULT_CHECK, pattern="^(6h|1d|7d|manual)$")
+
+
+class LinkCheckIn(BaseModel):
+    check: str = Field(pattern="^(6h|1d|7d|manual)$")
 
 
 class PageOut(BaseModel):
@@ -179,6 +189,15 @@ def _attachment(name: str) -> str:
     return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(name, safe='')}"
 
 
+def _link(d: Document) -> LinkOut | None:
+    if not d.source_url:
+        return None
+    every = link_sources.CHECKS.get(d.source_check or "")
+    nxt = d.source_checked_at + every if every and d.source_checked_at else None
+    return LinkOut(url=d.source_url, check=d.source_check or "manual", checked_at=d.source_checked_at, next_check_at=nxt,
+                   status=d.source_status, error=d.source_error)
+
+
 def _vout(v: DocumentVersion) -> VersionOut:
     return VersionOut.model_validate(v, from_attributes=True)
 
@@ -196,7 +215,7 @@ def list_documents(tenant_id: uuid.UUID, db: Session = Depends(get_db), user: Us
             continue
         active = next((v for v in vs if v.is_active), None)
         out.append(DocumentOut(id=d.id, name=d.name, created_at=d.created_at, active=_vout(active) if active else None,
-                               latest=_vout(vs[0]), versions=len(vs)))
+                               latest=_vout(vs[0]), versions=len(vs), link=_link(d)))
     return out
 
 
@@ -227,6 +246,8 @@ async def upload(
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found.")
         latest = db.scalar(select(DocumentVersion).where(DocumentVersion.document_id == doc.id)
                            .order_by(DocumentVersion.version.desc()).limit(1))
+        if doc.source_url:
+            raise HTTPException(422, "This document is read from a link: use Check now to read the page again.")
         if latest is not None and latest.file_type != checked.file_type:
             raise HTTPException(422, f"A new version must be a {latest.file_type.upper()} file, like the previous ones.")
     else:
@@ -245,35 +266,73 @@ async def upload(
             db.rollback()
             raise HTTPException(status.HTTP_409_CONFLICT, "This file is identical to the active version.")
 
-    version = DocumentVersion(
-        document_id=doc.id, tenant_id=tenant.id, version=versions.next_version_number(db, doc),
-        original_filename=checked.filename, file_type=checked.file_type, size_bytes=checked.size,
-        sha256=checked.sha256, storage_key="", note=(note or "").strip() or None, uploaded_by=user.id,
-    )
-    db.add(version)
-    db.flush()
-    version.storage_key = storage.original_key(tenant.id, version.id, checked.file_type)
     try:
-        db.commit()
-    except IntegrityError:  # two uploads of the same document at the same moment
-        db.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, "Another version of this document is being uploaded. Try again.") from None
-    try:
-        storage.get_storage().put(version.storage_key, data, _MIME[checked.file_type])
-    except Exception:
-        # Without the stored file the version cannot be processed: remove it (and a document left empty).
-        db.delete(version)
-        db.flush()
-        if db.scalar(select(DocumentVersion.id).where(DocumentVersion.document_id == doc.id)) is None:
-            db.delete(doc)
-        db.commit()
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Document storage is not reachable. Try again later.") from None
+        version = versions.store_version(db, tenant.id, doc, filename=checked.filename, file_type=checked.file_type, data=data,
+                                         sha256=checked.sha256, content_type=_MIME[checked.file_type], user_id=user.id,
+                                         note=(note or "").strip() or None)
+    except versions.VersionConflict as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from None
+    except versions.StorageDown as e:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e)) from None
 
     log_event(db, "document.uploaded", actor=user, tenant_id=tenant.id, target=checked.filename, ip=client_ip(request),
               detail={"version": version.version, "size": checked.size, "sha256": checked.sha256})
     _enqueue(version)
     db.refresh(version)
     return _vout(version)
+
+
+@router.post("/link", response_model=VersionOut, status_code=status.HTTP_201_CREATED)
+async def add_link(tenant_id: uuid.UUID, body: LinkIn, request: Request, db: Session = Depends(get_db),
+                   user: User = Depends(admins)) -> VersionOut:
+    """Documentation from a public link: read now, then checked for changes on its schedule."""
+    tenant = _tenant(db, user, tenant_id)
+    user_rate_limit(request, user.id, "lookup")
+    try:
+        doc, version = await run_in_threadpool(link_sources.add, db, tenant, body.url, body.name, body.check, user.id)
+    except link_sources.LinkError as e:
+        db.rollback()
+        log_event(db, "document.link_refused", level="warning", actor=user, tenant_id=tenant.id, target=body.url[:200],
+                  ip=client_ip(request), detail={"reason": str(e)})
+        raise HTTPException(422, str(e)) from None
+    except versions.VersionConflict as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from None
+    except versions.StorageDown as e:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e)) from None
+    log_event(db, "document.link_added", actor=user, tenant_id=tenant.id, target=doc.name, ip=client_ip(request),
+              detail={"url": doc.source_url, "check": doc.source_check, "version": version.version})
+    db.refresh(version)
+    return _vout(version)
+
+
+@router.patch("/{document_id}/link", response_model=DocumentDetail)
+def set_link_check(tenant_id: uuid.UUID, document_id: uuid.UUID, body: LinkCheckIn, request: Request,
+                   db: Session = Depends(get_db), user: User = Depends(admins)) -> DocumentDetail:
+    """How often the page is checked for changes."""
+    tenant = _tenant(db, user, tenant_id)
+    doc = _document(db, tenant, document_id)
+    if not doc.source_url:
+        raise HTTPException(422, "This document is not read from a link.")
+    old, doc.source_check = doc.source_check, body.check
+    db.commit()
+    log_event(db, "document.link_updated", actor=user, tenant_id=tenant.id, target=doc.name, ip=client_ip(request),
+              detail={"check": [old, body.check]})
+    return get_document(tenant_id, document_id, db, user)
+
+
+@router.post("/{document_id}/link/check", response_model=DocumentDetail)
+async def check_link_now(tenant_id: uuid.UUID, document_id: uuid.UUID, request: Request,
+                         db: Session = Depends(get_db), user: User = Depends(admins)) -> DocumentDetail:
+    """Read the page now; a change becomes a new version."""
+    tenant = _tenant(db, user, tenant_id)
+    doc = _document(db, tenant, document_id)
+    if not doc.source_url:
+        raise HTTPException(422, "This document is not read from a link.")
+    user_rate_limit(request, user.id, "lookup")
+    result = await run_in_threadpool(link_sources.sync, db, doc, user.id)
+    log_event(db, "document.link_checked", actor=user, tenant_id=tenant.id, target=doc.name, ip=client_ip(request),
+              detail={"result": result, "error": doc.source_error})
+    return get_document(tenant_id, document_id, db, user)
 
 
 @router.get("/overview")
@@ -306,7 +365,7 @@ def get_document(tenant_id: uuid.UUID, document_id: uuid.UUID, db: Session = Dep
     tenant = _tenant(db, user, tenant_id)
     doc = _document(db, tenant, document_id)
     vs = db.scalars(select(DocumentVersion).where(DocumentVersion.document_id == doc.id).order_by(DocumentVersion.version.desc())).all()
-    return DocumentDetail(id=doc.id, name=doc.name, versions=[_vout(v) for v in vs])
+    return DocumentDetail(id=doc.id, name=doc.name, versions=[_vout(v) for v in vs], link=_link(doc))
 
 
 @router.patch("/{document_id}", response_model=DocumentDetail)
