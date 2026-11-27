@@ -20,7 +20,7 @@ export function sizeText(bytes: number): string {
 
 export const dateText = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
 
-const UNIT: Record<string, [string, string]> = { pdf: ["page", "pages"], docx: ["section", "sections"], pptx: ["slide", "slides"], xlsx: ["sheet", "sheets"] };
+const UNIT: Record<string, [string, string]> = { pdf: ["page", "pages"], docx: ["section", "sections"], pptx: ["slide", "slides"], xlsx: ["sheet", "sheets"], md: ["section", "sections"], json: ["section", "sections"] };
 
 export function unitText(fileType: string, n: number): string {
   const [one, many] = UNIT[fileType] ?? ["page", "pages"];

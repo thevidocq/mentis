@@ -16,7 +16,10 @@ On a phone the list fills the screen; tap a document to open it, **‹** to go b
 
 Select **Upload** above the list, or drop files on the list. You can upload several files at once; a single new document opens when it is uploaded.
 
-Accepted: **PDF, DOCX, PPTX, XLSX**, up to 50 MB each.
+Accepted: **PDF, DOCX, PPTX, XLSX, Markdown (.md) and JSON**, up to 50 MB each.
+
+- **Markdown** (exports of wikis such as Confluence, Notion, GitHub): one section per top-level heading; must be UTF-8 text.
+- **JSON**: a file downloaded from Mentis as JSON (Documents → download → JSON) is read back with its own pages, so documentation moves between customers or installations as it was. Any other JSON (contact lists, escalation matrices exported from a tool) becomes readable text: one section per top-level key or per item, lists of records as tables. It must be valid UTF-8 JSON.
 
 Refused, with the reason shown:
 

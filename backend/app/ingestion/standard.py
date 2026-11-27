@@ -223,7 +223,13 @@ def parse_xlsx(data: bytes, limits: ParseLimits) -> ParseResult:
     return ParseResult(pages, warnings)
 
 
-PARSERS = {"pdf": parse_pdf, "docx": parse_docx, "pptx": parse_pptx, "xlsx": parse_xlsx}
+def _text_parsers():
+    from app.ingestion.textfiles import parse_json, parse_md
+
+    return {"md": parse_md, "json": parse_json}
+
+
+PARSERS = {"pdf": parse_pdf, "docx": parse_docx, "pptx": parse_pptx, "xlsx": parse_xlsx, **_text_parsers()}
 
 
 def parse(data: bytes, file_type: str, limits: ParseLimits) -> ParseResult:

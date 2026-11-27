@@ -50,6 +50,10 @@ def _tenant_admin(super_admin, tenant_id, email="ta@example.com"):
     ("a.xlsx", samples.docx(), "not a valid .xlsx"),           # a Word file renamed .xlsx
     ("a.docx", samples.macro_docx(), "macros"),
     ("a.docx", b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 100, "Encrypted"),
+    ("a.md", b"\x89PNG\r\n\x1a\n\x00\x00", "not UTF-8"),
+    ("a.md", "caf\u00e9".encode("latin-1"), "not UTF-8"),
+    ("a.json", b"{not json", "not valid JSON"),
+    ("a.json", b"[" * 100_000 + b"]" * 100_000, "nested too deeply|not valid JSON"),
 ])
 def test_upload_refused(name, data, reason):
     with pytest.raises(UploadError, match=reason):
@@ -78,6 +82,8 @@ def test_filename_sanitized():
     ("Runbook.docx", samples.docx, "| Network lead | Anna Verdi |"),
     ("Playbook.pptx", samples.pptx, "Call the customer on-call"),
     ("Escalation_Matrix.xlsx", samples.xlsx, "| L2 | Mario Rossi | 085 123 4567 |"),
+    ("Runbook.md", lambda: "# Escalation\n\nCall **Mario Rossi**, 085 123 4567.\n\n# Phishing\n\nCheck headers.\n".encode(), "Call **Mario Rossi**"),
+    ("Contacts.json", lambda: b'[{"name": "Mario Rossi", "role": "L2", "phone": "085 123 4567"}]', "- **phone**: 085 123 4567"),
 ])
 def test_ingest_each_format(super_admin, filename, builder, expect):
     t = _tenant(super_admin)
@@ -373,3 +379,20 @@ def test_overview(super_admin):
     assert [r["document"] for r in o["recent"]][0] == "Broken.pdf" and o["recent"][0]["uploaded_by"]
     assert o["questions"] == {"answered": 0, "not_found": 0, "errors": 0}
     assert o["last_indexed"] and o["oldest_in_use"]
+
+
+def test_markdown_and_json_uploads_and_mentis_round_trip(super_admin):
+    import json as _json
+
+    assert check_upload("Notes.markdown", b"# A\nx").file_type == "md"
+    t = _tenant(super_admin)
+    r = _upload(super_admin, t["id"], "Wiki.md", "# One\n\nfirst\n\n```\n# not a heading\n```\n\n# Two\n\nsecond\n".encode())
+    run_jobs(super_admin)
+    pages = super_admin.get(f"/api/tenants/{t['id']}/documents/versions/{r.json()['id']}/pages").json()
+    assert [p["label"] for p in pages] == ["One", "Two"] and "# not a heading" in pages[0]["text"]
+    # A Mentis JSON export comes back with its own pages.
+    export = super_admin.get(f"/api/tenants/{t['id']}/documents/versions/{r.json()['id']}/export", params={"format": "json"}).json()
+    r2 = _upload(super_admin, t["id"], "Wiki copy.json", _json.dumps(export).encode())
+    run_jobs(super_admin)
+    copy = super_admin.get(f"/api/tenants/{t['id']}/documents/versions/{r2.json()['id']}/pages").json()
+    assert [(p["label"], p["text"]) for p in copy] == [(p["label"], p["text"]) for p in pages]

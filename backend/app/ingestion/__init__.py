@@ -4,7 +4,7 @@ from app.ingestion.types import ExtractedPage, ParseLimits, ParseResult
 
 
 def parse(data: bytes, file_type: str, limits: ParseLimits, parser: str = "standard") -> ParseResult:
-    if parser == "docling":
+    if parser == "docling" and file_type not in ("md", "json"):  # text formats: read as they are
         from app.ingestion.docling_parser import parse_with_docling
 
         return parse_with_docling(data, file_type, limits)
