@@ -144,6 +144,7 @@ REPROCESS_STATE = "reprocess"
 def _state(db, key: str, **value) -> None:
     from app.models import PlatformSetting
 
+    value["updated_at"] = utcnow().isoformat()  # stale after the job timeout (indexing.job_active)
     row = db.get(PlatformSetting, key)
     if row is None:
         db.add(PlatformSetting(key=key, value=value))
@@ -166,7 +167,10 @@ def reindex_all() -> None:
 
     db = next(get_db())
     state = lambda **v: _state(db, REINDEX_STATE, **v)  # noqa: E731
-    cleared = False
+    from app.models import PlatformSetting
+
+    before = db.get(PlatformSetting, REINDEX_STATE)
+    cleared = bool(before and (before.value or {}).get("blocking"))  # an earlier run left the index incomplete
     try:
         cfg = embeddings.get_config(db)
         # Probe the model first: it fails fast if the service is down (nothing is touched then).

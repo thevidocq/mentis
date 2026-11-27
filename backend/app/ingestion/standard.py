@@ -8,7 +8,7 @@ import io
 from PIL import Image
 
 from app.ingestion.ocr import ocr_image
-from app.ingestion.text import dehyphenate, markdown_table, normalize_text
+from app.ingestion.text import markdown_table, normalize_text
 from app.ingestion.types import ExtractedPage, ParseLimits, ParseResult
 
 MIN_NATIVE_CHARS = 25     # below this a PDF page is treated as scanned and OCR'd
@@ -76,7 +76,7 @@ def _native(pl) -> tuple[str, int]:
         top = max(top, t_bottom)
     if top < pl.height:
         parts.append(rest.crop((0, top, pl.width, pl.height), strict=False).extract_text() or "")
-    return normalize_text(dehyphenate("\n\n".join(x.strip() for x in parts if x and x.strip()))), count
+    return normalize_text(("\n\n".join(x.strip() for x in parts if x and x.strip()))), count
 
 
 def _image_boxes(pl) -> list[tuple[float, float, float, float]]:
@@ -116,7 +116,7 @@ def parse_pdf(data: bytes, limits: ParseLimits) -> ParseResult:
                     # A scan, maybe with a printed footer or a stamp in the text layer: read the
                     # whole page image (the footer is in it too).
                     ocr_text, conf = ocr_image(_render(pdf, i, OCR_DPI), limits.ocr_languages)
-                    page.text, page.method, page.ocr_confidence = normalize_text(dehyphenate(ocr_text)), "ocr", conf
+                    page.text, page.method, page.ocr_confidence = normalize_text((ocr_text)), "ocr", conf
                     if text and len(page.text) < len(text):
                         page.text, page.method, page.ocr_confidence = text, "native", None
                 else:
@@ -130,7 +130,7 @@ def parse_pdf(data: bytes, limits: ParseLimits) -> ParseResult:
                             crop = full.crop((int(x0 * sx), int(top * sy), int(x1 * sx), int(bottom * sy)))
                             ocr_text, conf = ocr_image(crop, limits.ocr_languages)
                             if ocr_text.strip():
-                                found.append("Text in image:\n" + normalize_text(dehyphenate(ocr_text)))
+                                found.append("Text in image:\n" + normalize_text((ocr_text)))
                                 if conf is not None:
                                     confs.append(conf)
                         if found:
@@ -483,8 +483,7 @@ def parse_xlsx(data: bytes, limits: ParseLimits) -> ParseResult:
                 warnings.append(f"Sheet {ws.title}: only the first {limits.max_sheet_rows} rows were read.")
                 break
             rows.append([_cell_value(c) for c in row])
-        origin_row = ws.min_row or 1
-        origin_col = ws.min_column or 1
+        origin_row = origin_col = 1  # iter_rows() starts at A1
         caption = ""
         for rng in merged:
             top = rng.min_row - origin_row

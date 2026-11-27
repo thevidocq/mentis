@@ -3,7 +3,7 @@ import { api, errorText } from "../../api/client";
 import { Icon } from "../../components/Icon";
 import { PageHead } from "../../layouts/AdminShell";
 
-interface Reindex { status: "queued" | "running" | "done" | "failed"; done?: number; total?: number; error?: string | null; finished_at?: string }
+interface Reindex { status: "queued" | "running" | "done" | "failed"; done?: number; total?: number; error?: string | null; finished_at?: string; blocking?: boolean }
 interface EmbeddingState {
   url: string;
   model: string;
@@ -134,7 +134,7 @@ export function EmbeddingSettings() {
 
         <section className="card">
           <div className="card-head"><h2 style={{ flex: 1 }}>Vector index</h2>
-            <button className="btn btn-sm" onClick={() => void start("reprocess")} disabled={running || state.reindex_needed}
+            <button className="btn btn-sm" onClick={() => void start("reprocess")} disabled={running || state.reindex_needed || !!state.reindex?.blocking}
               title="Read every document again from its original file with the current readers"><Icon name="refresh" />Reprocess all documents</button>
             <button className="btn btn-sm" onClick={() => void start("reindex")} disabled={running}><Icon name="refresh" />Reindex everything</button>
           </div>

@@ -227,22 +227,28 @@ def reindex(request: Request, db: Session = Depends(get_db), admin: User = Depen
     from app.services import jobs
     from app.worker.tasks import REINDEX_STATE, REPROCESS_STATE
 
+    from app.models.base import utcnow
+    from app.services.indexing import job_active
+
     row = db.get(PlatformSetting, REINDEX_STATE)
-    if row and row.value.get("status") in ("queued", "running"):
+    if row and job_active("reindex", row.value):
         raise HTTPException(409, "A reindex is already running.")
     again = db.get(PlatformSetting, REPROCESS_STATE)
-    if again and again.value.get("status") in ("queued", "running"):
+    if again and job_active("reprocess", again.value):
         raise HTTPException(409, "Documents are being reprocessed: reindex when it finishes.")
+    # An index cleared by a failed or interrupted run stays "blocking" until a run succeeds.
+    blocking = bool(row and (row.value or {}).get("blocking"))
+    queued = {"status": "queued", "requested_at": utcnow().isoformat(), "blocking": blocking}
     if row is None:
-        db.add(PlatformSetting(key=REINDEX_STATE, value={"status": "queued"}))
+        db.add(PlatformSetting(key=REINDEX_STATE, value=queued))
     else:
-        row.value = {"status": "queued"}
+        row.value = queued
     db.commit()
     try:
         jobs.enqueue_reindex()
     except Exception:  # noqa: BLE001 - Redis down: do not leave the state "queued" forever (it blocks every later reindex)
         row = db.get(PlatformSetting, REINDEX_STATE)
-        row.value = {"status": "failed", "error": "The job queue (Redis) is not reachable. Try again later."}
+        row.value = {"status": "failed", "error": "The job queue (Redis) is not reachable. Try again later.", "blocking": blocking}
         db.commit()
         raise HTTPException(503, "The job queue (Redis) is not reachable. Try again later.") from None
     log_event(db, "index.reindex_requested", actor=admin, ip=client_ip(request))
@@ -257,18 +263,22 @@ def reprocess(request: Request, db: Session = Depends(get_db), admin: User = Dep
     from app.services import embeddings, indexing, jobs
     from app.worker.tasks import REINDEX_STATE, REPROCESS_STATE
 
+    from app.models.base import utcnow
+    from app.services.indexing import job_active
+
     busy = [db.get(PlatformSetting, k) for k in (REINDEX_STATE, REPROCESS_STATE)]
-    if any(r and r.value.get("status") in ("queued", "running") for r in busy):
+    if any(r and job_active(k, r.value) for r, k in zip(busy, ("reindex", "reprocess"), strict=True)):
         raise HTTPException(409, "A reindex or a reprocessing is already running.")
     try:
         indexing.check_ready(db, embeddings.get_config(db))
     except embeddings.EmbeddingError as e:
         raise HTTPException(409, str(e)) from None
     row = busy[1]
+    queued = {"status": "queued", "requested_at": utcnow().isoformat()}
     if row is None:
-        db.add(PlatformSetting(key=REPROCESS_STATE, value={"status": "queued"}))
+        db.add(PlatformSetting(key=REPROCESS_STATE, value=queued))
     else:
-        row.value = {"status": "queued"}
+        row.value = queued
     db.commit()
     try:
         jobs.enqueue_reprocess()

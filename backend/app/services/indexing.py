@@ -20,6 +20,28 @@ def check_model(cfg: dict) -> None:
         )
 
 
+JOB_HOURS = {"reindex": 6, "reprocess": 12}  # the worker's job timeouts: a state older than this is stale
+
+
+def job_active(key: str, state: dict | None) -> bool:
+    """Queued or running, and recent: a worker killed mid-job (restart, deploy, timeout) leaves its
+    state "running" for ever; past the job timeout it no longer counts, so a new run can start."""
+    from datetime import datetime, timedelta
+
+    from app.models.base import utcnow
+
+    if not state or state.get("status") not in ("queued", "running"):
+        return False
+    stamp = state.get("updated_at") or state.get("requested_at")
+    try:
+        when = datetime.fromisoformat(stamp)
+    except (TypeError, ValueError):
+        return False  # a state written before timestamps existed
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=utcnow().tzinfo)
+    return utcnow() - when < timedelta(hours=JOB_HOURS.get(key, 6))
+
+
 def check_ready(db: Session, cfg: dict) -> None:
     """Answers only from a complete index: not while it is rebuilt, nor after a rebuild that failed
     once the index was cleared (some documents would be missing without notice)."""
@@ -28,11 +50,11 @@ def check_ready(db: Session, cfg: dict) -> None:
     check_model(cfg)
     row = db.get(PlatformSetting, "reindex")
     state = (row.value or {}) if row else {}
-    if state.get("status") in ("queued", "running") and state.get("blocking", state.get("status") == "running"):
+    if job_active("reindex", state) and state.get("blocking"):
         done, total = state.get("done") or 0, state.get("total") or 0
         raise embeddings.EmbeddingModelChanged(
             f"The search index is being rebuilt ({done} of {total} documents): answers resume when it finishes.", public=True)
-    if state.get("status") == "failed" and state.get("blocking"):
+    if state.get("blocking"):  # failed, or interrupted, after the index was cleared
         raise embeddings.EmbeddingModelChanged(
             "Rebuilding the search index failed, so some documents are missing from it: a super-admin must run "
             "Reindex again in Embedding and Qdrant.", public=True)

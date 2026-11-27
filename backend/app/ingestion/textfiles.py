@@ -124,7 +124,11 @@ def _exported_page(p: dict, index: int) -> ExtractedPage:
     """A page of a Mentis export with its quality signals (OCR, confidence, tables, flags) kept."""
     kind = p.get("kind") if p.get("kind") in KINDS else "section"
     conf = p.get("ocr_confidence")
-    conf = float(conf) if isinstance(conf, (int, float)) and not isinstance(conf, bool) and 0 <= conf <= 1 else None
+    try:  # numbers are read as written (strings) by parse_json
+        conf = float(conf) if isinstance(conf, (int, float, str)) and not isinstance(conf, bool) else None
+    except ValueError:
+        conf = None
+    conf = conf if conf is not None and 0 <= conf <= 1 else None
     tables = p.get("tables")
     page = ExtractedPage(index=index, kind=kind, label=str(p.get("label") or f"{kind.title()} {index}")[:110],
                          text=normalize_text(str(p.get("text") or "")),

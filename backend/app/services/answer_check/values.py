@@ -90,7 +90,8 @@ def _time_key(m: re.Match) -> str:
     h, mm, half = int(m.group(1)), m.group(2), (m.group(3) or "").lower()
     if half and h <= 12:
         h = h % 12 + (12 if half == "p" else 0)
-    return f"{h}:{mm}"
+    seconds = re.match(r"[:.]\d\d(:\d\d)", m.group(0)[len(m.group(1)):])
+    return f"{h}:{mm}" + (seconds.group(1) if seconds and seconds.group(1) != ":00" else "")
 
 
 def _date_key(raw: str) -> str:
@@ -184,6 +185,7 @@ def _distance(a: str, b: str) -> int:
 
 
 def _same(a: Value, b: Value) -> bool:
+    """Whether `a` (from the answer) states the value `b` (from a passage)."""
     if a.kind != b.kind:
         return False
     if a.kind == "phone":
@@ -195,6 +197,11 @@ def _same(a: Value, b: Value) -> bool:
         prefix = long_[: len(long_) - len(short)]
         international = l.text.startswith(("+", "00"))
         return international and long_.endswith(short) and prefix in _COUNTRY and len(short) >= 8
+    if a.kind == "ip" and a.key != b.key:
+        # "10.0.0.5" written without the port the source gives ("10.0.0.5:8080") is the same host;
+        # a different port is a different value.
+        host = lambda k: k.rsplit(":", 1)[0] if k.count(".") == 3 and ":" in k else k  # noqa: E731
+        return a.key == host(a.key) and host(b.key) == a.key and "." in a.key  # a: the answer's value
     return a.key == b.key
 
 

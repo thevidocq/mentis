@@ -50,14 +50,14 @@ def _is_code(block: str) -> bool:
     return fenced_lines(block.split("\n", 1)[:1])[0]
 
 
-def _split_code(block: str) -> list[str]:
+def _split_code(block: str, limit: int = MAX_CHARS) -> list[str]:
     """A long code block split by lines, each piece wrapped in the same fence."""
     lines = block.split("\n")
     opening = lines[0]
     closing = lines[-1] if len(lines) > 1 and lines[-1].strip() and set(lines[-1].strip()) <= {"`", "~"} else None
     body = lines[1:-1] if closing else lines[1:]
     fence = re.match(r"^ {0,3}(`{3,}|~{3,})", opening).group(1)
-    budget = MAX_CHARS - len(opening) - len(fence) - 2
+    budget = limit - len(opening) - len(fence) - 2
     parts, current = [], []
     for line in body:
         for piece in ([line] if len(line) <= budget else _split_long(line, max(budget, 200))):
@@ -102,11 +102,11 @@ def _split_tables_out(block: str) -> list[str]:
     return [b.strip() for b in out if b.strip()]
 
 
-def _split_table(block: str) -> list[str]:
+def _split_table(block: str, limit: int = MAX_CHARS) -> list[str]:
     lines = block.splitlines()
     head, rows = lines[:2], lines[2:]
     parts, current = [], []
-    budget = MAX_CHARS - len("\n".join(head)) - 1
+    budget = limit - len("\n".join(head)) - 1
     for row in rows:
         if len(row) > budget:  # one huge row (a long Excel cell): split its text, keep the header
             if current:
@@ -114,7 +114,7 @@ def _split_table(block: str) -> list[str]:
                 current = []
             parts.extend("\n".join(head + [piece]) for piece in _split_long(row, max(budget, 200)))
             continue
-        if current and len("\n".join(head + current + [row])) > MAX_CHARS:
+        if current and len("\n".join(head + current + [row])) > limit:
             parts.append("\n".join(head + current))
             current = []
         current.append(row)
@@ -181,19 +181,28 @@ def chunk_pages(pages: list[ExtractedPage]) -> list[ChunkDraft]:
                 chunks.append(ChunkDraft(page.index, buffer_path, "\n\n".join(buffer)))
                 buffer = []
 
+        def size() -> int:
+            return len("\n\n".join(buffer))
+
+        def only_headings() -> bool:
+            return all(re.match(r"^#{1,6}\s+\S", b) and "\n" not in b for b in buffer)
+
         def small() -> bool:
-            # Only headings, maybe ending with a short lead-in ("Call in this order:"): they go with
-            # what follows instead of becoming a chunk of their own.
+            # A few headings, maybe ending with a short lead-in ("Call in this order:"): they go with
+            # what follows instead of becoming a chunk of their own. Kept short (LEAD), so a table
+            # of contents never piles up into one huge chunk.
+            if not buffer or size() > LEAD:
+                return False
             heads = [b for b in buffer if re.match(r"^#{1,6}\s+\S", b) and "\n" not in b]
             rest = buffer[len(heads):] if buffer[:len(heads)] == heads else None
-            return rest is not None and (not rest or (len(rest) == 1 and len(rest[0]) <= LEAD
-                                                      and rest[0].rstrip().endswith(":")))
+            return rest is not None and (not rest or (len(rest) == 1 and rest[0].rstrip().endswith(":")))
 
         blocks = [b for block in _blocks(page.text) for b in ([block] if _is_code(block) else _split_tables_out(block))]
         for block in blocks:
             code = _is_code(block)
             if not code and re.match(r"^#{1,6}\s+\S", block):
-                if not small():
+                # A lead-in belongs to its own section: only bare headings wait for this one.
+                if not (only_headings() and small()):
                     flush()
                 level = _level(block)
                 while stack and stack[-1][0] >= level:
@@ -201,16 +210,22 @@ def chunk_pages(pages: list[ExtractedPage]) -> list[ChunkDraft]:
                 stack.append((level, block.split("\n", 1)[0].lstrip("#").strip()[:200]))
                 if not buffer or small():
                     buffer_path = path()
-            elif not buffer:
+                buffer.append(block.strip())
+                continue
+            if not buffer:
                 buffer_path = path()
-            if len(block) <= MAX_CHARS:
+            # Room left next to the headings or lead-in that wait for this block: no chunk is ever
+            # larger than MAX_CHARS.
+            limit = MAX_CHARS - (size() + 2 if small() else 0)
+            if len(block) <= limit:
                 pieces = [block]
             elif code:
-                pieces = _split_code(block)
+                pieces = _split_code(block, limit)
             else:
-                pieces = _split_table(block) if _is_table(block) else _split_long(block)
+                pieces = _split_table(block, limit) if _is_table(block) else _split_long(block, limit)
             for piece in pieces:
-                if buffer and len("\n\n".join(buffer)) + len(piece) > TARGET_CHARS and not small():
+                if buffer and (size() + 2 + len(piece) > MAX_CHARS
+                               or (size() + len(piece) > TARGET_CHARS and not small())):
                     flush()
                     buffer_path = path()
                 buffer.append(piece)

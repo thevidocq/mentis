@@ -274,14 +274,26 @@ def test_answers_pause_while_the_index_is_rebuilt(super_admin):
     _upload(super_admin, t["id"], "A.docx", _docx("Alfa procedure about phishing"))
     run_jobs(super_admin)
     db = _db()
-    db.add(PlatformSetting(key="reindex", value={"status": "running", "done": 3, "total": 9, "blocking": True}))
+    from app.models.base import utcnow
+
+    db.add(PlatformSetting(key="reindex", value={"status": "running", "done": 3, "total": 9, "blocking": True,
+                                                 "updated_at": utcnow().isoformat()}))
     db.commit()
     with pytest.raises(embeddings.EmbeddingError, match="being rebuilt"):
         _ask([t["id"]], "phishing procedure")
+    db.get(PlatformSetting, "reindex").value = {"status": "running", "blocking": True, "updated_at": "2020-01-01T00:00:00+00:00"}
+    db.commit()  # a worker killed mid-run: no longer "being rebuilt", but the index is still incomplete
+    with pytest.raises(embeddings.EmbeddingError, match="Reindex again"):
+        _ask([t["id"]], "phishing procedure")
+    assert super_admin.post("/api/platform/embedding/reindex").status_code == 202  # a stale run does not block a new one
+    super_admin.queued.clear()
+    assert _db().get(PlatformSetting, "reindex").value["blocking"] is True  # still incomplete until a run succeeds
+    db = _db()
     db.get(PlatformSetting, "reindex").value = {"status": "failed", "error": "x", "blocking": True}
     db.commit()
     with pytest.raises(embeddings.EmbeddingError, match="Reindex again"):
         _ask([t["id"]], "phishing procedure")
+    db = _db()
     db.get(PlatformSetting, "reindex").value = {"status": "failed", "error": "Redis down"}  # nothing was cleared
     db.commit()
     assert _ask([t["id"]], "phishing procedure")

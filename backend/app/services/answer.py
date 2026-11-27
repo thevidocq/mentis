@@ -108,7 +108,7 @@ def _retrieval_query(question: str, history: list[ChatMessage]) -> list[str]:
 def _partial_answer(text: str) -> tuple[str, bool] | None:
     """The "answer" string of a JSON reply cut short, and whether that string itself was cut (the
     model may have hit its token limit later, in the follow-ups or the title)."""
-    m = re.search(r'\{\s*"answer"\s*:\s*"((?:[^"\\]|\\.)*)("?)', text, re.S)
+    m = re.search(r'\{\s*"answer"\s*:\s*"((?:[^"\\]|\\.)*)("\s*[,}])?', text, re.S)
     if m is None:
         return None
     raw = re.sub(r"\\(u[0-9a-fA-F]{0,3})?$", "", m.group(1))  # drop an escape cut in half

@@ -142,7 +142,8 @@ def _table(el) -> str:
     values below a "Tier 2" cell spanning two rows stay in their own columns."""
     grid: list[list[str]] = []
     pending: dict[int, tuple[str, int]] = {}  # column -> (text, rows still covered)
-    for tr in _rows(el)[:5000]:
+    rows = _rows(el)
+    for tr in rows[:5000]:
         row: list[str] = []
         cells = [c for c in tr if _tag(c) in ("td", "th")]
         col = 0
@@ -170,7 +171,8 @@ def _table(el) -> str:
         fill_pending()
         if any(row):
             grid.append(row)
-    return markdown_table(grid) if grid else ""
+    md = markdown_table(grid) if grid else ""
+    return md + (f"\n\n*{len(rows) - 5000} more table rows were not read.*" if md and len(rows) > 5000 else "")
 
 
 def _list(el, out: _Out, depth: int, level: int) -> None:

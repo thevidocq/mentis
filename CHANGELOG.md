@@ -12,12 +12,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 ### Fixed
 - **Accuracy review: index and search.**
   - Searches are limited to the versions in use as the database lists them: a stale flag in the index (a commit that failed after it was switched) could hide the document in use or show another version.
-  - Reindex: answers pause with a message while it runs, instead of coming from a half-built index; the new model is recorded only at the end; a document that fails is retried, and failures are named and keep answers paused until a new reindex succeeds; documents that become ready meanwhile are included.
+  - Reindex: a run interrupted by a worker restart no longer blocks new runs (or answers) for ever, and an index left incomplete stays reported until a run succeeds;
+    answers pause with a message while it runs, instead of coming from a half-built index; the new model is recorded only at the end; a document that fails is retried, and failures are named and keep answers paused until a new reindex succeeds; documents that become ready meanwhile are included.
   - A processed version whose audit line cannot be written is no longer marked failed after it went in use.
   - A short question is searched alone and with the previous one (it was always merged with it, pulling unrelated questions towards the previous topic).
   - "All customers" chats use the General Knowledge Base only if every customer in them uses it.
 - **Accuracy review: reading documents.** Existing documents keep their old reading until they are processed again (**Reprocess all documents**, below).
-  - PDF: a scanned page with a printed footer is read with OCR (only the footer was read); pictures on text pages are OCR'd; tables appear once, in their place (they came twice, the text copy with mixed rows); words broken at line ends are joined.
+  - PDF: a scanned page with a printed footer is read with OCR (only the footer was read); pictures on text pages are OCR'd; tables appear once, in their place (they came twice, the text copy with mixed rows).
   - Word: text boxes, tracked insertions, content controls, fields, nested tables, merged cells, list numbers and page headers/footers are read (they were lost).
   - PowerPoint: pictures in placeholders are OCR'd; numbered steps keep their numbers.
   - Excel: merged cells fill every row they cover; percentages, dates and whole numbers as shown; a title above a table is a caption only when it is one.
@@ -32,7 +33,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
   - Sources: the passage opened from [n] is the whole passage the model read (was cut at 600 characters, often before the cited value); clicking [n] again reopens it; [n] inside bold or italics is a link.
   - Check level 1: phones next to a time or date, two phones joined by " - ", a phone missing a digit or with an invented prefix, AM/PM, "9.30", IPs with port, IPv6, lowercase CVE, INC0012345-style tickets, MITRE ids, hashes, months and years, "percent", dates in either order, no-break spaces and Unicode dashes; "(24/7)" after a phone is not part of it.
   - Check level 2: verdicts written "S2" are read (they were dropped, so the statement passed); statements beyond the 24 checked show "N statements were not checked" instead of "Matches the sources".
-  - Marks: a value is marked in the statement it was found in, on word edges ("5 minutes" never inside "15 minutes"), and its ⚠ opens that statement's passage.
+  - Marks: a value is marked in the statement it was found in, on word edges ("5 minutes" never inside "15 minutes", "5 hours" never inside "1.5 hours"), also when a citation stands in the middle of the statement, and its ⚠ opens that statement's passage.
   - Hide mode: the rewrite gets each problem with its reason; an answer cut by the token limit is not blamed on the sources.
   - Responses API providers (vLLM preset) answer at temperature 0 like the others.
 

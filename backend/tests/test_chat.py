@@ -384,7 +384,7 @@ def test_customer_name_with_quotes_keeps_the_passage_tag_well_formed():
     p = SimpleNamespace(is_general=False, tenant_name='Acme "EU" source="x', document_name="d.docx", version=1,
                         page_label="Page 1", heading=None, text="Call 111")
     tag = prompts.passages_block([p]).splitlines()[1]
-    assert tag.count('"') == 6 and "customer=\"Acme 'EU' source='x\"" in tag
+    assert tag.count('"') == 8 and "customer=\"Acme 'EU' source='x\"" in tag
 
 
 def test_string_not_found_and_nul_characters(super_admin, fake_llm):

@@ -61,7 +61,9 @@ function onEdges(s: string, at: number, len: number): boolean {
   const m = s.slice(at, at + len);
   const before = at > 0 ? s[at - 1] : "";
   const after = s[at + len] ?? "";
-  return !(WORD.test(m[0]) && before && WORD.test(before)) && !(WORD.test(m[m.length - 1]) && after && WORD.test(after));
+  // "5 hours" is not inside "1.5 hours" or "2,5 ore": a digit, a point or comma, then the mark's digit.
+  const decimal = /\d/.test(m[0]) && /[.,]/.test(before) && at > 1 && /\d/.test(s[at - 2]);
+  return !decimal && !(WORD.test(m[0]) && before && WORD.test(before)) && !(WORD.test(m[m.length - 1]) && after && WORD.test(after));
 }
 
 /** The first occurrence of `m` outside protected spans and on word edges, from `from` to `to`, or -1. */
