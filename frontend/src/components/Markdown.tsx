@@ -2,7 +2,8 @@
 // Supports: # ## ### headings, paragraphs, - and 1. lists (one nested level, 4 spaces),
 // > notes, ``` code blocks, | tables |, **bold**, *italic* and `code` inline.
 // With `cite`, [n] markers in chat answers become citation links. With `marks`, those exact
-// passages of the source are highlighted (answer check findings). With `links`, [text](url) becomes
+// passages of the source are underlined (answer check findings) and, with `flag`, followed by a
+// small marker after their citations (flag(k, cites): k = index in `marks`). With `links`, [text](url) becomes
 // a link only when url is one of them (the pages of live records); any other address stays text.
 
 import { ReactNode } from "react";
@@ -11,9 +12,19 @@ type Cite = (n: number, key: string) => ReactNode;
 
 const OPEN = "\uE000";
 const CLOSE = "\uE001";
+const FLAG = /(\uE002[\d,:]+\uE003)/;  // \uE002<k>:<cites>\uE003, placed after a mark and its citations
+
+export type Flag = (k: number, cites: number[], key: string) => ReactNode;
 
 /** Text with highlight markers -> nodes; `state.open` carries a highlight across bold or code. */
-function marked(text: string, key: string, state: { open: boolean }): ReactNode[] {
+function marked(text: string, key: string, state: { open: boolean; flag?: Flag }): ReactNode[] {
+  if (FLAG.test(text)) {
+    return text.split(FLAG).flatMap((part, i) => {
+      if (!FLAG.test(part)) return part ? marked(part, `${key}f${i}`, state) : [];
+      const [k, cites] = part.slice(1, -1).split(":");
+      return state.flag ? [state.flag(Number(k), cites ? cites.split(",").map(Number) : [], `${key}g${i}`)] : [];
+    });
+  }
   if (!text.includes(OPEN) && !text.includes(CLOSE)) return [state.open ? <mark key={key} className="check-mark">{text}</mark> : text];
   const out: ReactNode[] = [];
   text.split(/([\uE000\uE001])/).forEach((part, i) => {
@@ -24,22 +35,38 @@ function marked(text: string, key: string, state: { open: boolean }): ReactNode[
   return out;
 }
 
-/** Insert highlight markers around the first occurrence of each mark (longest first). */
+/** Insert highlight markers around the first occurrence of each mark (longest first), then a flag
+ * token after the citations that follow it ("text [2]" -> "OPEN text CLOSE [2] FLAG"). */
 function withMarks(source: string, marks: string[]): string {
   let s = source;
-  for (const m of [...new Set(marks.filter((x) => x && x.trim().length > 1))].sort((a, b) => b.length - a.length)) {
+  const order = marks.map((text, k) => ({ text, k })).filter((m) => m.text && m.text.trim().length > 1)
+    .sort((a, b) => b.text.length - a.text.length);
+  const seen = new Set<string>();
+  for (const { text: m, k } of order) {
+    if (seen.has(m)) continue;
+    seen.add(m);
     const at = s.indexOf(m);
     if (at < 0 || s.slice(0, at).split(OPEN).length !== s.slice(0, at).split(CLOSE).length) continue; // not found, or inside another
     if (s.slice(at, at + m.length).includes(OPEN) || s.slice(at, at + m.length).includes(CLOSE)) continue;
-    s = s.slice(0, at) + OPEN + m + CLOSE + s.slice(at + m.length);
+    const end = at + m.length;
+    const tail = /^(?:\*\*)?((?:\s*\[\d{1,3}\])*)/.exec(s.slice(end))!;
+    const cites = [...tail[1].matchAll(/\d{1,3}/g)].map((x) => x[0]).join(",");
+    const flagAt = end + tail[0].length;
+    s = s.slice(0, at) + OPEN + m + CLOSE + s.slice(end, flagAt) + `\uE002${k}:${cites}\uE003` + s.slice(flagAt);
   }
   return s;
 }
 
+/** Where each mark was placed (true) or not found in the text (false). */
+export function placedMarks(source: string, marks: string[]): boolean[] {
+  const s = withMarks(source, marks);
+  return marks.map((_, k) => s.includes(`\uE002${k}:`));
+}
+
 const LINK = /^\[([^\]\n]{1,300})\]\((https?:\/\/[^\s)]{1,1000})\)$/;
 
-function inline(text: string, cite?: Cite, links?: Set<string>): ReactNode[] {
-  const state = { open: false };
+function inline(text: string, cite?: Cite, links?: Set<string>, flag?: Flag): ReactNode[] {
+  const state: { open: boolean; flag?: Flag } = { open: false, flag };
   const out: ReactNode[] = [];
   const link = "\\[[^\\]\\n]{1,300}\\]\\(https?:\\/\\/[^\\s)]{1,1000}\\)|";
   const re = new RegExp(`(${links ? link : ""}\\*\\*[^*]+\\*\\*|\`[^\`]+\`|\\*[^*\\s][^*]*\\*${cite ? "|\\[\\d{1,3}\\]" : ""})`, "g");
@@ -68,7 +95,7 @@ const isListItem = (l: string) => /^\s*(-|\d+\.)\s+/.test(l);
 const isTableRow = (l: string) => /^\s*\|.*\|\s*$/.test(l);
 const cells = (l: string) => l.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
 
-function list(lines: string[], key: number, cite?: Cite, links?: Set<string>): ReactNode {
+function list(lines: string[], key: number, cite?: Cite, links?: Set<string>, flag?: Flag): ReactNode {
   const ordered = /^\d+\./.test(lines[0].trim());
   const items: { text: string; children: string[] }[] = [];
   for (const l of lines) {
@@ -76,13 +103,13 @@ function list(lines: string[], key: number, cite?: Cite, links?: Set<string>): R
     else items.push({ text: l.replace(/^\s*(-|\d+\.)\s+/, ""), children: [] });
   }
   const body = items.map((it, i) => (
-    <li key={i}>{inline(it.text, cite, links)}{it.children.length > 0 && list(it.children, i, cite, links)}</li>
+    <li key={i}>{inline(it.text, cite, links, flag)}{it.children.length > 0 && list(it.children, i, cite, links, flag)}</li>
   ));
   return ordered ? <ol key={key}>{body}</ol> : <ul key={key}>{body}</ul>;
 }
 
 // `breaks`: keep single line breaks inside paragraphs (extracted document text, OCR lines).
-export function Markdown({ source, breaks = false, cite, marks, links }: { source: string; breaks?: boolean; cite?: Cite; marks?: string[]; links?: Set<string> }) {
+export function Markdown({ source, breaks = false, cite, marks, links, flag }: { source: string; breaks?: boolean; cite?: Cite; marks?: string[]; links?: Set<string>; flag?: Flag }) {
   const lines = (marks?.length ? withMarks(source, marks) : source).replace(/\r/g, "").split("\n");
   const blocks: ReactNode[] = [];
   let i = 0;
@@ -101,14 +128,14 @@ export function Markdown({ source, breaks = false, cite, marks, links }: { sourc
     const h = /^(#{1,3})\s+(.*)$/.exec(line);
     if (h) {
       const Tag = (["h1", "h2", "h3"] as const)[h[1].length - 1];
-      blocks.push(<Tag key={i}>{inline(h[2], cite, links)}</Tag>);
+      blocks.push(<Tag key={i}>{inline(h[2], cite, links, flag)}</Tag>);
       i++;
       continue;
     }
     if (line.startsWith(">")) {
       const note: string[] = [];
       while (i < lines.length && lines[i].startsWith(">")) note.push(lines[i++].replace(/^>\s?/, ""));
-      blocks.push(<div className="notice" key={i}>{inline(note.join(" "), cite, links)}</div>);
+      blocks.push(<div className="notice" key={i}>{inline(note.join(" "), cite, links, flag)}</div>);
       continue;
     }
     if (isTableRow(line)) {
@@ -122,8 +149,8 @@ export function Markdown({ source, breaks = false, cite, marks, links }: { sourc
       blocks.push(
         <div className="table-wrap" key={i}>
           <table style={{ minWidth: 0 }}>
-            <thead><tr>{head.map((c, j) => <th key={j}>{inline(c, cite, links)}</th>)}</tr></thead>
-            <tbody>{body.map((r, k) => <tr key={k}>{r.map((c, j) => <td key={j} style={{ height: "auto" }}>{inline(c, cite, links)}</td>)}</tr>)}</tbody>
+            <thead><tr>{head.map((c, j) => <th key={j}>{inline(c, cite, links, flag)}</th>)}</tr></thead>
+            <tbody>{body.map((r, k) => <tr key={k}>{r.map((c, j) => <td key={j} style={{ height: "auto" }}>{inline(c, cite, links, flag)}</td>)}</tr>)}</tbody>
           </table>
         </div>,
       );
@@ -132,7 +159,7 @@ export function Markdown({ source, breaks = false, cite, marks, links }: { sourc
     if (isListItem(line)) {
       const items: string[] = [];
       while (i < lines.length && (isListItem(lines[i]) || /^ {4}\S/.test(lines[i]))) items.push(lines[i++]);
-      blocks.push(list(items, i, cite, links));
+      blocks.push(list(items, i, cite, links, flag));
       continue;
     }
     // The first line always belongs to the paragraph: "#tag" or "| a" match no block above and
@@ -141,7 +168,7 @@ export function Markdown({ source, breaks = false, cite, marks, links }: { sourc
     while (i < lines.length && lines[i].trim() && !/^(#|>|```|\s*\||\s*(-|\d+\.)\s)/.test(lines[i])) para.push(lines[i++]);
     blocks.push(
       <p key={i}>
-        {breaks ? para.flatMap((l, j) => (j ? [<br key={`b${j}`} />, ...inline(l, cite, links)] : inline(l, cite, links))) : inline(para.join(" "), cite, links)}
+        {breaks ? para.flatMap((l, j) => (j ? [<br key={`b${j}`} />, ...inline(l, cite, links, flag)] : inline(l, cite, links, flag))) : inline(para.join(" "), cite, links, flag)}
       </p>,
     );
   }

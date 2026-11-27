@@ -8,12 +8,13 @@
 from app.services.llm.base import LLMError, LLMReply, Turn
 
 ANTHROPIC_VERSION = "2023-06-01"
+DEFAULT_MAX_TOKENS = 4000  # a long procedure in Italian with citations needs ~2,000; reasoning models count their thinking too
 
 
 def build(kind: str, base_url: str, model: str, api_key: str | None, options: dict, system: str, turns: list[Turn]) -> tuple[str, dict, dict]:
     """Returns (url, headers, json body)."""
     base = base_url.rstrip("/")
-    max_tokens = int(options.get("max_tokens", 1500))
+    max_tokens = int(options.get("max_tokens") or DEFAULT_MAX_TOKENS)
     msgs = [{"role": t.role, "content": t.content} for t in turns]
     # Grounded answers and checks want determinism: temperature 0 unless the provider sets another
     # value; None = not sent (models that refuse the parameter, see call_provider).

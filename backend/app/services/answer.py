@@ -39,6 +39,7 @@ class Answer:
     live_calls: int = 0
     # Cited live records the answer does not link yet: (label, URL), added under the answer.
     live_links: list[tuple[str, str]] = field(default_factory=list)
+    cut: bool = False        # cut at the provider's token limit (Max answer tokens)
     live: object | None = None  # the integration data used (not stored): a rewrite reuses it, no second lookup
 
 
@@ -117,7 +118,7 @@ def _parse_json(text: str) -> dict | None:
         except (ValueError, TypeError):
             continue
     partial = _partial_answer(cleaned)
-    return {"answer": partial} if partial is not None else None
+    return {"answer": partial, "_cut": True} if partial is not None else None
 
 
 def _cited(answer_text: str, passages) -> tuple[str, list[dict]]:
@@ -214,6 +215,7 @@ def answer(db: Session, chat: Chat, question: str, first: bool, correction: str 
     followups = [f.replace("\x00", "").strip() for f in raw_followups if isinstance(f, str) and f.strip()][:3] \
         if isinstance(raw_followups, list) and want_followups else []
     title = data["title"].replace("\x00", "") if data and isinstance(data.get("title"), str) else None
+    cut = bool(data and data.get("_cut"))  # the model hit its token limit: the answer ends mid-sentence
 
     names = list(dict.fromkeys(c["tenant"] for c in citations if not c["is_general"]))
     if any(c["is_general"] for c in citations):
@@ -230,6 +232,7 @@ def answer(db: Session, chat: Chat, question: str, first: bool, correction: str 
         input_tokens=reply.input_tokens, output_tokens=reply.output_tokens,
         passages=len(passages), live_notes=live.notes, live_calls=live.calls, live=live,
         live_links=[] if is_not_found else _missing_links(text, citations),
+        cut=cut and not is_not_found,
     )
 
 

@@ -215,6 +215,8 @@ def _ask(db: Session, user: User, chat: Chat, question: str, first: bool, reques
     if result.live_links and result.status == "ok" and result.citations:  # not under a hidden answer
         content += "\n\nOpen: " + " · ".join(f"[{label.replace('[', '(').replace(']', ')')}]({url})"
                                            for label, url in result.live_links)
+    if result.cut and result.status == "ok":  # after the check: a note, not a statement to verify
+        content += "\n\n*The answer was cut at the length limit of the AI provider. Ask for the rest, or ask a super-admin to raise Max answer tokens.*"
     if result.live_notes:
         content += "\n\n" + "\n".join(f"*{n}*" for n in result.live_notes)
     a = ChatMessage(chat_id=chat.id, role="assistant", content=content, status=result.status,
