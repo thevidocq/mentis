@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import client_ip, current_user, require_roles
+from app.core.config import get_settings
 from app.core.db import get_db
 from app.models import Role, Tenant, User
 from app.models.tenant import PLATFORM_SETTINGS
@@ -27,6 +28,7 @@ class TenantOut(BaseModel):
     status: str
     settings: dict
     users: int = 0
+    chat_passages_default: int = 8  # platform default (MENTIS_CHAT_PASSAGES), used when settings.chat_passages is empty
 
 
 class TenantCreate(BaseModel):
@@ -48,6 +50,7 @@ def _out(db: Session, t: Tenant) -> TenantOut:
     return TenantOut(
         id=t.id, name=t.name, slug=t.slug, is_global=t.is_global, status=t.status,
         settings=svc.merge_settings(t.settings or {}, {}), users=svc.user_count(db, t),
+        chat_passages_default=get_settings().chat_passages,
     )
 
 

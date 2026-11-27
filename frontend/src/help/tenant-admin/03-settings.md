@@ -14,6 +14,15 @@ Off by default. When on, a newly uploaded version stays inactive until you appro
 
 On by default. Shows 2–3 clickable questions under each answer, based only on what your documentation can answer.
 
+## Passages read per answer
+
+Empty by default: the platform value (8, set by the operator) applies. For each question Mentis gives the AI the passages of your documentation (and of the General Knowledge Base) closest to the question; this number says how many, from 3 to 20.
+
+- **Raise it** (e.g. 12–15) when analysts ask several things in one question or your procedures are long and split across many sections: with too few passages part of the question may find nothing.
+- **Lower it** when answers mix in unrelated procedures.
+
+More passages mean slightly slower and more expensive answers. Use **Test a question** on a document to see which passages a question finds.
+
 ## Integration lookups
 
 Decides how Mentis chooses what to read in your customer's tools (ticketing, EDR, identity) when an analyst uses integrations with `#`. Both modes are read only, use only this customer's integrations, check every argument (ticket number, host, user) against its expected format, and record every lookup in the audit log. The answer is written in the same way in both modes, with citations, links to the records and the answer check.

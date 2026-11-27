@@ -145,7 +145,7 @@ LLM is configurable per tenant; the platform default is whichever provider the s
 - Every provider: test connection, failover to the tenant's fallback provider. One platform default; each tenant can choose its own provider and fallback. API keys encrypted at rest. Models are discovered from the provider (`GET /models`) and picked from a list; presets carry no model names.
 - **Embeddings:** local by default (bge-m3, multilingual). Other providers configurable (Ollama, OpenAI-compatible endpoints).
 - **Vector DB:** Qdrant only, one collection per tenant.
-- **Retrieval:** customer chunks + General Knowledge Base chunks (unless turned off for the customer or the chat), active versions only, score threshold; customer wins on conflict.
+- **Retrieval:** customer chunks + General Knowledge Base chunks (unless turned off for the customer or the chat), active versions only, score threshold; customer wins on conflict. Passages per answer: the customer's setting `chat_passages` (3–20, tenant admin, **Settings**), else `MENTIS_CHAT_PASSAGES` (8); "All customers" chats use the platform value.
 - **System prompt:** anti-hallucination rules first; answer only from retrieved sources and integration data; cite everything; per-vertical prompt (SOC default), replaceable. All prompts in English.
 
 ## Integrations

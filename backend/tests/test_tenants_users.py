@@ -87,6 +87,12 @@ def test_tenant_admin_scope(super_admin):
     assert ta.get(f"/api/tenants/{beta['id']}").status_code == 404
     # Can change its own settings but not rename or touch other tenants.
     assert ta.patch(f"/api/tenants/{alfa['id']}", json={"settings": {"include_general": False}}).status_code == 200
+    # Passages per answer: 3-20 or empty (platform default).
+    r = ta.patch(f"/api/tenants/{alfa['id']}", json={"settings": {"chat_passages": 12}})
+    assert r.status_code == 200 and r.json()["settings"]["chat_passages"] == 12 and r.json()["chat_passages_default"] == 8
+    for bad in (50, 2, "12", True, 7.5):
+        assert ta.patch(f"/api/tenants/{alfa['id']}", json={"settings": {"chat_passages": bad}}).status_code == 422
+    assert ta.patch(f"/api/tenants/{alfa['id']}", json={"settings": {"chat_passages": None}}).json()["settings"]["chat_passages"] is None
     assert ta.patch(f"/api/tenants/{alfa['id']}", json={"name": "Hacked"}).status_code == 403
     assert ta.patch(f"/api/tenants/{beta['id']}", json={"settings": {"include_general": False}}).status_code == 403
     assert ta.post("/api/tenants", json={"name": "Gamma"}).status_code == 403

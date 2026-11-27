@@ -137,7 +137,7 @@ def _check(data: dict) -> None:
         if t.get("status", "active") not in tenant_svc.STATUSES:
             raise ImportError_(f"Tenant {t['name']}: unknown status.")
         for k, v in (t.get("settings") or {}).items():
-            if k not in DEFAULT_TENANT_SETTINGS or not isinstance(v, bool):
+            if k not in DEFAULT_TENANT_SETTINGS or tenant_svc.check_setting(k, v):
                 raise ImportError_(f"Tenant {t['name']}: unknown or invalid setting {k}.")
     from app.services.llm import KINDS
 

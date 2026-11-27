@@ -6,6 +6,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added
+- **Passages read per answer, per customer.** Tenant admins set it in **Settings** (3–20; empty = the platform value `MENTIS_CHAT_PASSAGES`, 8). Stored as `settings.chat_passages`, validated in the API and on config import; the tenant API returns `chat_passages_default`. "All customers" chats keep the platform value. Help (tenant admin settings), DESIGN, INSTALL; tests.
+
 ## [0.5.1] - 2026-11-27
 
 ### Fixed
