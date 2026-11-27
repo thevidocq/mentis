@@ -134,3 +134,18 @@ def zip_bomb_xlsx(unzipped_mb: int) -> bytes:
         z.writestr("xl/workbook.xml", "<workbook/>")
         z.writestr("xl/worksheets/big.xml", b"0" * (unzipped_mb * 1024 * 1024))
     return out.getvalue()
+
+
+def png() -> bytes:
+    """A screenshot-like picture with text, transparent background (read on white)."""
+    img = text_image(["Escalation: call Mario Rossi", "085 123 4567"]).convert("RGBA")
+    img.putdata([(0, 0, 0, 0) if px[:3] == (255, 255, 255) else px for px in img.getdata()])
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def jpg() -> bytes:
+    buf = io.BytesIO()
+    text_image(["Escalation: call Mario Rossi", "085 123 4567"]).convert("RGB").save(buf, format="JPEG", quality=90)
+    return buf.getvalue()

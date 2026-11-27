@@ -6,7 +6,7 @@ _Last updated: 2026-11-26. Living version: the shared design doc; this file is t
 
 Mentis is a standalone, multi-tenant web app: an AI assistant that answers SOC analysts from each customer's own documentation, with sources cited on every answer.
 
-- **Problem:** a SOC serving many customers has procedures, escalation matrices and runbooks spread across PDF, Word, Excel and PowerPoint (and Markdown or JSON from wikis and tools), different for every customer.
+- **Problem:** a SOC serving many customers has procedures, escalation matrices and runbooks spread across PDF, Word, Excel and PowerPoint (and Markdown, JSON, CSV, YAML or screenshots from wikis and tools), different for every customer.
 - **Answer:** one RAG index per customer tenant, plus a shared General Knowledge Base, queried through a chat interface.
 - **Principle:** analysts consult only. Mentis never writes to customer systems.
 - **Positioning:** the core is domain-agnostic; SOC is the first vertical pack (labels, integration catalog, system prompt). Anything SOC-specific lives in configuration or plugins, not in the core.
@@ -92,12 +92,17 @@ Uploads run as background jobs; a new version reaches answers only once indexed 
 
 **Pipeline**
 
-1. Upload (PDF, DOCX, PPTX, XLSX, Markdown `.md`/`.markdown`, JSON; up to 50 MB) → validated (extension matches content; Markdown and JSON must be UTF-8, JSON must parse; no macros, no encrypted Office files, zip-bomb guard; a PDF that needs a password to open fails in the worker, one that only restricts printing or copying is read) → original stored in MinIO under a generated key.
+1. Upload (PDF, DOCX, PPTX, XLSX, Markdown `.md`/`.markdown`, JSON, CSV, TSV, YAML `.yaml`/`.yml`, PNG, JPEG `.jpg`/`.jpeg`; up to 50 MB) → validated (extension matches content; text formats must be UTF-8 and parse (YAML composed only, never constructed, at most 200,000 values); pictures by header, at most 50 million pixels; no macros, no encrypted Office files, zip-bomb guard; a PDF that needs a password to open fails in the worker, one that only restricts printing or copying is read) → original stored in MinIO under a generated key.
 2. The ingestion worker (separate container, RQ on Redis, CPU/RAM limits, 30-minute timeout) parses the file into pages:
     - PDF: one page per page; native text and tables via pdfplumber; pages with almost no text are rendered (pypdfium2) and read with Tesseract OCR (English + Italian) with a confidence score; every page is rendered as an image for the preview.
     - DOCX: split into sections at top-level headings; headings and tables preserved.
     - PPTX: one page per slide; title, text, tables, speaker notes, and OCR of pictures (screenshots, diagrams).
     - XLSX: one page per sheet as a Markdown table (values, not formulas); merged title rows become captions.
+    - Markdown: one section per top-level heading. JSON: a Mentis export keeps its pages; other JSON is rendered as Markdown.
+    - CSV / TSV: one table (delimiter detected: comma, semicolon, pipe, tab), same row limit as a sheet.
+    - YAML: one section per YAML document, labelled by `title`/`name`/`id` (Sigma rules, playbooks), text kept as written in a code block; anchors are never expanded.
+    - PNG / JPEG: one page read with OCR (upright by EXIF, transparency on white), confidence score, the picture kept as preview.
+    - The Docling parser, when on, handles PDF and Office files only; the other formats always use these readers.
 3. Quality flags per page: OCR + confidence, low confidence (< 60%), empty, merged cells, truncated.
 4. Chunks are built per page (never across pages, so citations stay exact), around 1,500 characters, tables kept whole or split by rows with the header repeated, each with its nearest heading.
 5. Embedding (OpenAI-compatible endpoint; default local TEI container with bge-m3) and upsert into the tenant's Qdrant collection (`mentis_<tenant>`), payload: tenant, document, version, chunk, active. Indexing is the last step: if it fails, the version fails and the active one stays.

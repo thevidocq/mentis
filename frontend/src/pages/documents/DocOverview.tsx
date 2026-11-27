@@ -14,7 +14,7 @@ interface Overview {
   questions: { answered: number; not_found: number; errors: number } | null;
 }
 
-const TYPES: [string, string, string][] = [["pdf", "PDF", "#5eead4"], ["docx", "Word", "#60a5fa"], ["pptx", "PowerPoint", "#fbbf24"], ["xlsx", "Excel", "#a78bfa"], ["md", "Markdown", "#f472b6"], ["json", "JSON", "#fb923c"]];
+const TYPES: [string, string, string][] = [["pdf", "PDF", "#5eead4"], ["docx", "Word", "#60a5fa"], ["pptx", "PowerPoint", "#fbbf24"], ["xlsx", "Excel", "#a78bfa"], ["md", "Markdown", "#f472b6"], ["json", "JSON", "#fb923c"], ["csv", "CSV", "#4ade80"], ["tsv", "TSV", "#a3e635"], ["yaml", "YAML", "#f87171"], ["png", "PNG", "#38bdf8"], ["jpg", "JPEG", "#818cf8"]];
 const n = (x: number) => x.toLocaleString();
 
 function stateText(v: Ver): { text: string; tone: string } {

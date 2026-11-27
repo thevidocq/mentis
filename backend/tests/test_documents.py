@@ -54,6 +54,13 @@ def _tenant_admin(super_admin, tenant_id, email="ta@example.com"):
     ("a.md", "caf\u00e9".encode("latin-1"), "not UTF-8"),
     ("a.json", b"{not json", "not valid JSON"),
     ("a.json", b"[" * 100_000 + b"]" * 100_000, "nested too deeply|not valid JSON"),
+    ("a.csv", "caf\u00e9;x".encode("latin-1"), "not UTF-8"),
+    ("a.yml", b"a: [1,\n", "not valid YAML"),
+    ("a.yaml", b"[" * 5000 + b"]" * 5000, "nested too deeply"),
+    ("a.png", b"GIF89a....", "not a valid PNG"),
+    ("a.jpg", b"\x89PNG\r\n\x1a\n", "not a valid JPEG"),
+    ("a.png", b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00#(\x00\x00#(", "million"),  # 9000 x 9000
+    ("a.gif", b"GIF89a", "Only PDF"),
 ])
 def test_upload_refused(name, data, reason):
     with pytest.raises(UploadError, match=reason):
@@ -84,6 +91,11 @@ def test_filename_sanitized():
     ("Escalation_Matrix.xlsx", samples.xlsx, "| L2 | Mario Rossi | 085 123 4567 |"),
     ("Runbook.md", lambda: "# Escalation\n\nCall **Mario Rossi**, 085 123 4567.\n\n# Phishing\n\nCheck headers.\n".encode(), "Call **Mario Rossi**"),
     ("Contacts.json", lambda: b'[{"name": "Mario Rossi", "role": "L2", "phone": "085 123 4567"}]', "- **phone**: 085 123 4567"),
+    ("Escalation.csv", lambda: b"Level;Name;Phone\nL2;Mario Rossi;085 123 4567\n", "| L2 | Mario Rossi | 085 123 4567 |"),
+    ("Contacts.tsv", lambda: b"Level\tName\nL2\tMario Rossi\n", "| L2 | Mario Rossi |"),
+    ("rule.yml", lambda: b"title: Suspicious PowerShell\nlevel: high\ndetection:\n  condition: sel\n", "## Suspicious PowerShell"),
+    ("Matrix.png", samples.png, "Mario Rossi"),
+    ("Matrix.jpeg", samples.jpg, "Mario Rossi"),
 ])
 def test_ingest_each_format(super_admin, filename, builder, expect):
     t = _tenant(super_admin)
@@ -97,6 +109,32 @@ def test_ingest_each_format(super_admin, filename, builder, expect):
     pages = super_admin.get(f"/api/tenants/{t['id']}/documents/versions/{v['id']}/pages").json()
     assert expect in "\n".join(p["text"] for p in pages)
     assert _db().scalars(select(Chunk).where(Chunk.version_id == uuid.UUID(v["id"]))).first() is not None
+
+
+def test_yaml_kept_as_written_without_expanding_aliases():
+    from app.ingestion.datafiles import parse_yaml
+    from app.ingestion.types import ParseLimits
+
+    bomb = b"a: &a [x, x, x, x, x, x, x, x, x]\nb: &b [*a, *a, *a, *a, *a, *a, *a, *a, *a]\nc: [*b, *b, *b, *b, *b, *b, *b, *b, *b]\n---\nname: Second\n"
+    pages = parse_yaml(bomb, ParseLimits()).pages
+    assert [p.label for p in pages] == ["Document 1", "Second"]
+    assert "c: [*b, *b" in pages[0].text and len(pages[0].text) < 300
+
+
+def test_csv_semicolon_and_row_limit():
+    from app.ingestion.datafiles import parse_csv
+    from app.ingestion.types import ParseLimits
+
+    r = parse_csv(b"a;b\n" + b"1;2\n" * 20, ParseLimits(max_sheet_rows=10))
+    assert r.pages[0].text.startswith("| a | b |") and "truncated" in r.pages[0].flags
+
+
+def test_picture_marked_as_ocr_with_image(super_admin):
+    t = _tenant(super_admin)
+    vid = _upload(super_admin, t["id"], "Matrix.png", samples.png()).json()["id"]
+    run_jobs(super_admin)
+    pages = super_admin.get(f"/api/tenants/{t['id']}/documents/versions/{vid}/pages").json()
+    assert pages[0]["method"] == "ocr" and pages[0]["has_image"] and pages[0]["label"] == "Image"
 
 
 def test_scanned_pdf_marked_as_ocr_with_image(super_admin):

@@ -8,7 +8,7 @@ If you administer more than one customer, the **customer selector** at the top o
 
 ## What you can do today
 
-- **Documents**: upload procedures, escalation matrices and runbooks (PDF, Word, Excel, PowerPoint, Markdown, JSON), manage versions and check what Mentis read in the preview, and test questions against it.
+- **Documents**: upload procedures, escalation matrices and runbooks (PDF, Word, Excel, PowerPoint, Markdown, JSON, CSV, YAML, pictures), manage versions and check what Mentis read in the preview, and test questions against it.
 - **Users**: invite and manage tenant admins and analysts of your customers.
 - **Settings**: decide how answers use your documentation.
 - **LLM**: choose which AI model answers for your customer, and a fallback (when the super-admin allows it).

@@ -224,9 +224,12 @@ def parse_xlsx(data: bytes, limits: ParseLimits) -> ParseResult:
 
 
 def _text_parsers():
+    from app.ingestion.datafiles import parse_csv, parse_tsv, parse_yaml
+    from app.ingestion.images import parse_image
     from app.ingestion.textfiles import parse_json, parse_md
 
-    return {"md": parse_md, "json": parse_json}
+    return {"md": parse_md, "json": parse_json, "csv": parse_csv, "tsv": parse_tsv, "yaml": parse_yaml,
+            "png": parse_image, "jpg": parse_image}
 
 
 PARSERS = {"pdf": parse_pdf, "docx": parse_docx, "pptx": parse_pptx, "xlsx": parse_xlsx, **_text_parsers()}

@@ -1,8 +1,9 @@
 """Validation of uploaded documents, before anything is stored or parsed.
 
-Accepted: PDF, DOCX, PPTX, XLSX, Markdown (.md) and JSON (.json). A file must match its extension by
-content (magic bytes; internal structure for Office files; UTF-8 text for Markdown; valid JSON).
-Macro-enabled and encrypted files are refused.
+Accepted: PDF, DOCX, PPTX, XLSX, Markdown (.md), JSON, CSV, TSV, YAML and pictures (PNG, JPEG). A file
+must match its extension by content (magic bytes; internal structure for Office files; UTF-8 text
+for the text formats, which must also parse; a picture header within the pixel limit). Macro-enabled
+and encrypted files are refused.
 """
 
 import hashlib
@@ -14,8 +15,10 @@ from dataclasses import dataclass
 
 from app.core.config import get_settings
 
-ALLOWED = {"pdf", "docx", "pptx", "xlsx", "md", "json"}
-ALIASES = {"markdown": "md"}  # stored and shown as .md
+ALLOWED = {"pdf", "docx", "pptx", "xlsx", "md", "json", "csv", "tsv", "yaml", "png", "jpg"}
+TEXT_TYPES = {"md", "json", "csv", "tsv", "yaml"}
+IMAGE_TYPES = {"png", "jpg"}
+ALIASES = {"markdown": "md", "yml": "yaml", "jpeg": "jpg"}  # stored and shown with the first name
 REFUSED_HINT = {
     "docm": "macro-enabled Word files are not accepted; save as .docx",
     "xlsm": "macro-enabled Excel files are not accepted; save as .xlsx",
@@ -110,6 +113,32 @@ def _check_text(data: bytes, file_type: str) -> None:
             raise UploadError("The JSON file is nested too deeply.") from None
         except ValueError as e:
             raise UploadError(f"The file is not valid JSON ({str(e)[:80]}).") from None
+    elif file_type in ("csv", "tsv"):
+        from app.ingestion.datafiles import read_rows
+        from app.ingestion.types import ParseLimits
+
+        try:
+            read_rows(data, file_type, ParseLimits().max_sheet_rows)
+        except ValueError as e:
+            raise UploadError(f"The file is not a valid .{file_type} table ({str(e)[:80]}).") from None
+    elif file_type == "yaml":
+        from app.ingestion.datafiles import yaml_documents
+
+        try:
+            yaml_documents(text)
+        except ValueError as e:
+            raise UploadError(f"The file is not valid YAML ({str(e)[:80]}).") from None
+
+
+def _check_image(data: bytes, file_type: str) -> None:
+    from app.ingestion.images import MAX_IMAGE_PIXELS, image_size
+
+    try:
+        width, height = image_size(data, file_type)
+    except ValueError:
+        raise UploadError(f"The file is not a valid {'PNG' if file_type == 'png' else 'JPEG'} image.") from None
+    if width * height > MAX_IMAGE_PIXELS or not width or not height:
+        raise UploadError(f"The image is {width} x {height} pixels: at most {MAX_IMAGE_PIXELS // 1_000_000} million are accepted.")
 
 
 def check_upload(filename: str, data: bytes) -> CheckedFile:
@@ -118,7 +147,7 @@ def check_upload(filename: str, data: bytes) -> CheckedFile:
     if ext in REFUSED_HINT:
         raise UploadError(f".{ext}: {REFUSED_HINT[ext]}.")
     if ext not in ALLOWED:
-        raise UploadError("Only PDF, DOCX, PPTX, XLSX, Markdown (.md) and JSON files are accepted.")
+        raise UploadError("Only PDF, DOCX, PPTX, XLSX, Markdown (.md), JSON, CSV, TSV, YAML, PNG and JPEG files are accepted.")
     size = len(data)
     if size == 0:
         raise UploadError("The file is empty.")
@@ -126,8 +155,10 @@ def check_upload(filename: str, data: bytes) -> CheckedFile:
         raise UploadError(f"The file is larger than {get_settings().max_upload_mb} MB.")
     if ext == "pdf":
         _check_pdf(data)
-    elif ext in ("md", "json"):
+    elif ext in TEXT_TYPES:
         _check_text(data, ext)
+    elif ext in IMAGE_TYPES:
+        _check_image(data, ext)
     else:
         _check_ooxml(data, ext)
     return CheckedFile(filename=name, file_type=ext, size=size, sha256=hashlib.sha256(data).hexdigest())
