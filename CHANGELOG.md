@@ -6,6 +6,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added
+- **Passages read per answer, per customer.** Tenant admins set it in **Settings** (3–20; empty = the platform value `MENTIS_CHAT_PASSAGES`, 8). Stored as `settings.chat_passages`, validated in the API and on config import; the tenant API returns `chat_passages_default`. "All customers" chats keep the platform value. Help (tenant admin settings), DESIGN, INSTALL; tests.
+- **Questions that ask several things.** Passages are chosen to be relevant and different from each other (Maximal Marginal Relevance, `services/diversity.py`): a question about a CVE and a hotel no longer spends every place on the CVE. Per customer in **Settings** (`passage_variety`: Normal by default, High, Off = the previous top-k). More candidates are read from Qdrant with their vectors; deterministic, no model call, no re-indexing. Help, DESIGN; tests (`test_diversity.py`).
+
+### Fixed
+- **Answer check**: a short line introducing a list ("Checks to run on the server [1][2]:", up to 12 words) is no longer sent to level 2, where it was rejected as unsupported; its items are checked with the inherited citations, and level 1 still checks its values.
+
 ## [0.5.1] - 2026-11-27
 
 ### Fixed

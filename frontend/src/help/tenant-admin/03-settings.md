@@ -14,6 +14,29 @@ Off by default. When on, a newly uploaded version stays inactive until you appro
 
 On by default. Shows 2–3 clickable questions under each answer, based only on what your documentation can answer.
 
+## Passages read per answer
+
+Empty by default: the platform value (8, set by the operator) applies. For each question Mentis gives the AI the passages of your documentation (and of the General Knowledge Base) closest to the question; this number says how many, from 3 to 20.
+
+- **Raise it** (e.g. 12–15) when analysts ask several things in one question or your procedures are long and split across many sections: with too few passages part of the question may find nothing.
+- **Lower it** when answers mix in unrelated procedures.
+
+More passages mean slightly slower and more expensive answers. Use **Test a question** on a document to see which passages a question finds.
+
+## Questions that ask several things
+
+**Normal** by default. Decides how Mentis chooses the passages above.
+
+Without it, Mentis takes the passages closest to the whole question. When a question asks two things at once ("how do I handle this CVE, and who is the on-call contact?"), the stronger topic can take every place and the other finds nothing, so the answer says it does not know.
+
+With it, Mentis reads more candidates and picks them one at a time: each passage must be relevant to the question **and** add something the passages already picked do not say. Near-duplicates give way, and the second request gets its passages.
+
+- **Normal**: the right balance for most customers. Questions about one thing get the same answers as before.
+- **High**: more room for the second topic; use it if analysts often combine requests. On a long procedure a step similar to another may give way to a different passage.
+- **Off**: only the passages closest to the whole question, as in earlier versions.
+
+It is an established search technique (*Maximal Marginal Relevance*): deterministic, no extra AI call, nothing to re-index. Splitting a question by its punctuation would be guesswork; this looks only at how similar the passages are. If a second request still finds nothing, ask it on its own or raise **Passages read per answer**.
+
 ## Integration lookups
 
 Decides how Mentis chooses what to read in your customer's tools (ticketing, EDR, identity) when an analyst uses integrations with `#`. Both modes are read only, use only this customer's integrations, check every argument (ticket number, host, user) against its expected format, and record every lookup in the audit log. The answer is written in the same way in both modes, with citations, links to the records and the answer check.

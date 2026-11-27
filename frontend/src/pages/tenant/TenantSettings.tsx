@@ -5,7 +5,9 @@ import { useCurrentTenant } from "../../auth/currentTenant";
 import { PageHead } from "../../layouts/AdminShell";
 import { IntegrationModeForm } from "../integrations/IntegrationModeForm";
 
-const OPTIONS: { key: keyof Settings; label: string; help: string }[] = [
+type Flag = "include_general" | "require_approval" | "suggested_followups";
+
+const OPTIONS: { key: Flag; label: string; help: string }[] = [
   { key: "include_general", label: "Include the General Knowledge Base", help: "Answers also use the general knowledge shared by all customers. Your own procedures win on conflict." },
   { key: "require_approval", label: "Approve new document versions before publishing", help: "A new version stays inactive until an admin approves it in the preview." },
   { key: "suggested_followups", label: "Suggested follow-up questions", help: "Show 2–3 clickable questions under each answer." },
@@ -20,7 +22,7 @@ export function TenantSettings() {
     if (current) api<Tenant>(`/tenants/${current.id}`).then(setTenant).catch((e) => setError(errorText(e)));
   }, [current]);
 
-  async function toggle(key: keyof Settings, value: boolean) {
+  async function toggle(key: keyof Settings, value: boolean | number | string | null) {
     if (!tenant) return;
     const before = tenant;
     setTenant({ ...tenant, settings: { ...tenant.settings, [key]: value } }); // optimistic
@@ -48,6 +50,20 @@ export function TenantSettings() {
                   <div className="muted small" style={{ marginLeft: 28 }}>{o.help}</div>
                 </div>
               ))}
+              <PassagesField value={tenant.settings.chat_passages ?? null} fallback={tenant.chat_passages_default ?? 8}
+                onSave={(v) => toggle("chat_passages", v)} />
+              <div>
+                <label className="field" style={{ maxWidth: 260 }}>Questions that ask several things
+                  <select className="input" value={tenant.settings.passage_variety ?? "normal"} onChange={(e) => toggle("passage_variety", e.target.value)}>
+                    <option value="normal">Normal (default)</option>
+                    <option value="high">High</option>
+                    <option value="off">Off</option>
+                  </select>
+                </label>
+                <div className="muted small">
+                  Mentis picks passages that are relevant <em>and</em> different from each other, so a question asking two things (a procedure and a contact, say) finds passages for both. <strong>High</strong> gives more room to the second topic; <strong>Off</strong> keeps only the passages closest to the whole question.
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -59,5 +75,26 @@ export function TenantSettings() {
         )}
       </div>
     </>
+  );
+}
+
+/** Passages read per answer: empty = platform default. Saved when the field loses focus. */
+function PassagesField({ value, fallback, onSave }: { value: number | null; fallback: number; onSave: (v: number | null) => void }) {
+  const [text, setText] = useState(value == null ? "" : String(value));
+  useEffect(() => setText(value == null ? "" : String(value)), [value]);
+  const n = text.trim() === "" ? null : Number(text);
+  const invalid = n !== null && (!Number.isInteger(n) || n < 3 || n > 20);
+  return (
+    <div>
+      <label className="field" style={{ maxWidth: 260 }}>Passages read per answer
+        <input className="input" type="number" min={3} max={20} value={text} placeholder={`${fallback} (platform default)`}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={() => { if (!invalid && n !== value) onSave(n); }} />
+      </label>
+      <div className="muted small">
+        How many document passages the AI reads to answer (3–20). More helps questions that ask several things at once or need long procedures; fewer keeps answers focused and cheaper. Empty: platform default ({fallback}).
+      </div>
+      {invalid && <div className="error small">Enter a number from 3 to 20, or leave it empty.</div>}
+    </div>
   );
 }

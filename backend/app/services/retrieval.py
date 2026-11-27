@@ -19,7 +19,7 @@ from app.models import (
     VersionPage,
     VersionStatus,
 )
-from app.services import embeddings, indexing, vector_index
+from app.services import diversity, embeddings, indexing, vector_index
 
 
 @dataclass
@@ -36,6 +36,7 @@ class Passage:
     page_label: str
     heading: str | None
     text: str
+    chunk_id: uuid.UUID | None = None
 
 
 def _passages(db: Session, hits, *, active_only: bool, version_id=None) -> list[Passage]:
@@ -60,20 +61,40 @@ def _passages(db: Session, hits, *, active_only: bool, version_id=None) -> list[
         out.append(Passage(score=round(scores[chunk.id], 4), tenant_id=tenant.id, tenant_name=tenant.name, is_general=tenant.is_global,
                            document_id=doc.id, document_name=doc.name, version_id=ver.id, version=ver.version,
                            page_index=chunk.page_index, page_label=label or f"Page {chunk.page_index}",
-                           heading=chunk.heading, text=chunk.text))
+                           heading=chunk.heading, text=chunk.text, chunk_id=chunk.id))
     return sorted(out, key=lambda p: p.score, reverse=True)
 
 
-def search_tenants(db: Session, tenant_ids: list[uuid.UUID], question: str, limit: int = 8, min_score: float = 0.0) -> list[Passage]:
-    """Active documents of the given tenants (the caller decides which tenants, e.g. customer + General)."""
+def _vector(hit) -> list[float] | None:
+    v = getattr(hit, "vector", None)
+    if isinstance(v, dict):  # named vectors: the collection has one
+        v = next(iter(v.values()), None)
+    return list(v) if isinstance(v, list | tuple) and v else None
+
+
+def search_tenants(db: Session, tenant_ids: list[uuid.UUID], question: str, limit: int = 8, min_score: float = 0.0,
+                   variety: str = "off") -> list[Passage]:
+    """Active documents of the given tenants (the caller decides which tenants, e.g. customer + General).
+
+    `variety` ("off" | "normal" | "high"): with "normal" or "high", more candidates are read and the
+    `limit` passages are chosen to be relevant and different from each other (services/diversity),
+    so a question asking two things finds passages for both.
+    """
     cfg = embeddings.get_config(db)
     indexing.check_model(cfg)  # a question embedded with another model would match nothing sensible
     [vector] = embeddings.embed(cfg, [question])
-    hits = []
+    pool = diversity.pool_size(limit, variety)
+    hits, vectors = [], {}
     for tid in tenant_ids:
-        hits.extend(vector_index.search(tid, vector, limit=limit, active_only=True))
+        for h in vector_index.search(tid, vector, limit=pool, active_only=True, with_vectors=pool > limit):
+            hits.append(h)
+            if h.payload and h.payload.get("chunk_id"):
+                vectors[str(uuid.UUID(h.payload["chunk_id"]))] = _vector(h)
     passages = [p for p in _passages(db, hits, active_only=True) if p.tenant_id in set(tenant_ids) and p.score >= min_score]
-    return passages[:limit]
+    if pool <= limit:
+        return passages[:limit]
+    keep = diversity.select([p.score for p in passages], [vectors.get(str(p.chunk_id)) for p in passages], limit, variety)
+    return [passages[i] for i in keep]
 
 
 def search_version(db: Session, version: DocumentVersion, question: str, limit: int = 5) -> list[Passage]:

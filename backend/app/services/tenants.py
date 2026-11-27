@@ -6,7 +6,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.models import Invitation, Tenant, User, user_tenants
-from app.models.tenant import DEFAULT_TENANT_SETTINGS
+from app.models.tenant import CHOICE_SETTINGS, DEFAULT_TENANT_SETTINGS, NUMBER_SETTINGS
 
 ALLOWED_SETTINGS = set(DEFAULT_TENANT_SETTINGS)
 STATUSES = {"active", "onboarding", "disabled"}
@@ -32,13 +32,30 @@ def name_taken(db: Session, name: str, exclude_id=None) -> bool:
     return db.scalar(q) is not None
 
 
+def check_setting(key: str, value) -> str | None:
+    """Why a setting value is invalid, or None."""
+    if key in NUMBER_SETTINGS:
+        lo, hi = NUMBER_SETTINGS[key]
+        if value is not None and (not isinstance(value, int) or isinstance(value, bool) or not lo <= value <= hi):
+            return f"Setting {key} must be a number from {lo} to {hi}, or empty for the platform default."
+        return None
+    if key in CHOICE_SETTINGS:
+        if value not in CHOICE_SETTINGS[key]:
+            return f"Setting {key} must be one of: {', '.join(CHOICE_SETTINGS[key])}."
+        return None
+    if not isinstance(value, bool):
+        return f"Setting {key} must be true or false."
+    return None
+
+
 def merge_settings(current: dict, changes: dict) -> dict:
     unknown = set(changes) - ALLOWED_SETTINGS
     if unknown:
         raise ValueError(f"Unknown settings: {', '.join(sorted(unknown))}")
     for key, value in changes.items():
-        if not isinstance(value, bool):
-            raise ValueError(f"Setting {key} must be true or false.")
+        setting_error = check_setting(key, value)
+        if setting_error:
+            raise ValueError(setting_error)
     return {**DEFAULT_TENANT_SETTINGS, **current, **changes}
 
 

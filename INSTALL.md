@@ -143,7 +143,7 @@ Tenant admins can download one document, or every document in use of a customer 
 
 The `api` container calls the LLM providers configured in **AI providers**. It needs outbound HTTPS to cloud providers (`api.anthropic.com`, `api.openai.com`). For a model server on the same host (Ollama, vLLM), use `http://host.docker.internal:<port>/v1` as Base URL; for one in another compose project, put it on a shared Docker network and use its service name.
 
-Retrieval tuning in `.env`: `MENTIS_CHAT_PASSAGES` (default 8) and `MENTIS_CHAT_MIN_SCORE` (default 0.3), then `docker compose up -d api`.
+Retrieval tuning in `.env`: `MENTIS_CHAT_PASSAGES` (default 8; each customer can override it in **Settings → Passages read per answer**) and `MENTIS_CHAT_MIN_SCORE` (default 0.3), then `docker compose up -d api`.
 
 ## Integrations
 

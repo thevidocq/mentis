@@ -158,7 +158,8 @@ def sync_active(tenant_id, document_id, active_version_id) -> None:
         raise VectorIndexError(f"The vector index (Qdrant) could not be updated: {e.__class__.__name__}") from e
 
 
-def search(tenant_id, vector: list[float], limit: int, version_id=None, active_only: bool = True) -> list[models.ScoredPoint]:
+def search(tenant_id, vector: list[float], limit: int, version_id=None, active_only: bool = True,
+           with_vectors: bool = False) -> list[models.ScoredPoint]:
     """Raises VectorIndexError when Qdrant is unreachable or refuses the query (e.g. wrong vector size)."""
     must = [_match("tenant_id", tenant_id)]
     if version_id is not None:
@@ -169,7 +170,7 @@ def search(tenant_id, vector: list[float], limit: int, version_id=None, active_o
         if not _exists(tenant_id):
             return []
         return client().query_points(collection_name(tenant_id), query=vector, query_filter=models.Filter(must=must),
-                                     limit=limit, with_payload=True).points
+                                     limit=limit, with_payload=True, with_vectors=with_vectors).points
     except Exception as e:  # noqa: BLE001 - connection errors and Qdrant rejections alike
         raise VectorIndexError(f"The vector index (Qdrant) could not be searched: {e.__class__.__name__}") from None
 
