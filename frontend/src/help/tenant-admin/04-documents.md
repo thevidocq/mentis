@@ -59,7 +59,9 @@ Uploading a file with the **same name** as an existing document (or with **New v
 | Rejected | You rejected it |
 | Failed | Could not be read or indexed; the error is shown. Use **Retry** after fixing the cause |
 
-A failed or rejected version never replaces the one in use. Uploading a file identical to the active version is refused.
+A failed or rejected version never replaces the one in use.
+
+**Identical files are refused**, whatever their name and type: Mentis compares the content (SHA-256 of the file) with every document and version of the customer and says which one it matches: *identical to Escalation.pdf v2* (already uploaded under another name), *identical to the active version*, *waiting for approval* (approve or reject that one), or an older version (restore it from **Versions** instead of uploading it again). Versions that could not be read or were rejected do not count: you can upload the same file again. Another customer may hold the same file. A file saved again by its program (for example a Word document reopened and saved) usually has a different fingerprint even with the same text, so it is accepted as a new version.
 
 If the worker stops in the middle of a document (restart, crash, timeout), the version becomes **Failed** with "Processing was interrupted" within about half an hour: use **Retry**. A version left **Queued** because its job was lost is queued again automatically.
 

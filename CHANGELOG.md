@@ -6,6 +6,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Changed
+- **Duplicate uploads.** An upload is compared (SHA-256) with every document and version of the customer, not only the active version of the same name: the same file under another name, a version waiting for approval or an older version is refused with the one it matches ("identical to Escalation.pdf v2"; "restore it from Versions"). All file types; failed and rejected versions do not count; other customers are not compared. Logged as `document.upload_refused`. Help (tenant admin documents), DESIGN; tests.
+
 ## [0.5.2] - 2026-11-27
 
 ### Added

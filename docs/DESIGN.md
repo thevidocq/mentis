@@ -123,7 +123,7 @@ Uploads run as background jobs; a new version reaches answers only once indexed 
 **Versioning**
 
 - Same file name (case-insensitive) = new version; renaming keeps the extension. Only the active version is searchable; older ones stay viewable and can be made active again.
-- A failed or rejected version never replaces the active one. An upload identical (SHA-256) to the active version is refused.
+- A failed or rejected version never replaces the active one. An upload whose SHA-256 matches any version of any document of the same customer (all file types; failed and rejected versions excepted) is refused (409) with the document and version it matches (`versions.duplicate_message`) and logged as `document.upload_refused`; other customers are not compared.
 - Each version records date, uploader and an optional note.
 - Documents can be renamed and deleted (with confirmation). Deletion removes the rows first (answers stop at once), then files and vectors; anything left by an unreachable MinIO or Qdrant is removed by the daily storage sweep (no row = leftover; rows are always written before files and vectors).
 - Retention of old versions (super-admin, default all): per document the version in use, the latest and pending ones are always kept; older ones beyond N are deleted with files, pages, passages and vectors.
