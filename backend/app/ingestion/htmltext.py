@@ -132,13 +132,45 @@ def _rows(table) -> list:
     return out
 
 
+def _span(cell, name: str) -> int:
+    value = (cell.get(name) or "1").strip()
+    return min(int(value), 50) if value.isdigit() and int(value) > 0 else 1
+
+
 def _table(el) -> str:
-    rows = []
-    for tr in _rows(el):
-        cells = [_inline(c).strip() for c in tr if _tag(c) in ("td", "th")]
-        if any(cells):
-            rows.append(cells)
-    return markdown_table(rows) if rows else ""
+    """The table as a grid: a cell spanning rows or columns fills every slot it covers, so the
+    values below a "Tier 2" cell spanning two rows stay in their own columns."""
+    grid: list[list[str]] = []
+    pending: dict[int, tuple[str, int]] = {}  # column -> (text, rows still covered)
+    for tr in _rows(el)[:5000]:
+        row: list[str] = []
+        cells = [c for c in tr if _tag(c) in ("td", "th")]
+        col = 0
+
+        def fill_pending():
+            nonlocal col
+            while col in pending:
+                text, left = pending[col]
+                row.append(text)
+                if left <= 1:
+                    del pending[col]
+                else:
+                    pending[col] = (text, left - 1)
+                col += 1
+
+        for c in cells:
+            fill_pending()
+            text = _inline(c).strip()
+            rows_down, cols = _span(c, "rowspan"), _span(c, "colspan")
+            for _ in range(cols):
+                row.append(text)
+                if rows_down > 1:
+                    pending[col] = (text, rows_down - 1)
+                col += 1
+        fill_pending()
+        if any(row):
+            grid.append(row)
+    return markdown_table(grid) if grid else ""
 
 
 def _list(el, out: _Out, depth: int, level: int) -> None:

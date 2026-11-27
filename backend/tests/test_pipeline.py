@@ -219,3 +219,77 @@ def test_service_errors_while_processing_do_not_reach_tenant_admins(super_admin,
     run_jobs(super_admin)
     v = super_admin.get(f"/api/tenants/{t['id']}/documents/versions/{v['id']}").json()
     assert v["status"] == "failed" and "storage" in v["error"] and "minio.internal" not in v["error"]
+
+
+def test_chunks_keep_their_section_path_and_tables_their_rows():
+    from app.ingestion.chunking import chunk_pages as chunks_of
+    from app.ingestion.types import ExtractedPage as Page
+
+    text = ("# Ransomware runbook\n\n## Tier 1\n\n### Contacts\n\nCall Mario 0851112233.\n\n## Tier 2\n\n### Contacts\n\n"
+            "Call Anna 0852223344.\n\n## Escalation contacts\n\nCall in this order:\n|Name|Phone|\n|:---|---|\n"
+            + "\n".join(f"|Analyst {i} with a long role description|+39 333 {i:07d}|" for i in range(60)))
+    chunks = chunks_of([Page(index=1, kind="section", label="x", text=text)])
+    assert [c.heading for c in chunks[:2]] == ["Ransomware runbook > Tier 1 > Contacts", "Ransomware runbook > Tier 2 > Contacts"]
+    assert chunks[2].text.startswith("## Escalation contacts\n\nCall in this order:\n\n|Name|Phone|")  # lead-in with its table
+    assert all(c.text.startswith("|Name|Phone|\n|:---|---|") for c in chunks[3:])
+    pdf = "\n".join(f"Shift Lead {i} Giovanni Bianchi mobile +39 347 765 {4300 + i}" for i in range(80))
+    for c in chunks_of([Page(index=1, kind="page", label="Page 1", text=pdf)]):
+        assert all(line.startswith("Shift Lead") and line.split()[-1].isdigit() for line in c.text.split("\n"))
+
+
+def test_word_reads_text_boxes_insertions_lists_nested_tables_headers():
+    import io
+
+    import docx
+    from docx.oxml import parse_xml
+
+    w = ('xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
+         'xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" '
+         'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '
+         'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"')
+    d = docx.Document()
+    d.sections[0].header.paragraphs[0].text = "SOC Hotline +39 02 9999 0000"
+    p = d.add_paragraph("Before box.")
+    p._p.append(parse_xml(f'<w:r {w}><w:drawing><wp:anchor><a:graphic><a:graphicData><wps:wsp><wps:txbx><w:txbxContent>'
+                          '<w:p><w:r><w:t>never reboot the DC 10.1.2.3</w:t></w:r></w:p></w:txbxContent></wps:txbx></wps:wsp>'
+                          '</a:graphicData></a:graphic></wp:anchor></w:drawing></w:r>'))
+    d.element.body.insert(len(d.element.body) - 1, parse_xml(
+        f'<w:p {w}><w:r><w:t xml:space="preserve">Call </w:t></w:r><w:ins w:id="1" w:author="x"><w:r><w:t>+39 06 1111</w:t></w:r></w:ins></w:p>'))
+    for step in ("Block the sender", "Purge the message", "Reset the password"):
+        d.add_paragraph(step, style="List Number")
+    t = d.add_table(rows=1, cols=2)
+    t.cell(0, 0).text = "Luca Neri"
+    t.cell(0, 1).add_table(rows=1, cols=1).cell(0, 0).text = "Backup +39 333 555 6666"
+    buf = io.BytesIO()
+    d.save(buf)
+    text = "\n".join(pg.text for pg in _parse(buf.getvalue(), "docx").pages)
+    for expected in ("never reboot the DC 10.1.2.3", "Call +39 06 1111", "1. Block the sender", "3. Reset the password",
+                     "Backup +39 333 555 6666", "Page header: SOC Hotline +39 02 9999 0000"):
+        assert expected in text, expected
+
+
+def test_spreadsheet_merged_cells_and_formats():
+    import datetime
+    import io
+
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["Tier", "Name", "Since", "Share"])
+    ws.append(["Tier 2", "Luca", datetime.datetime(2024, 3, 1), 0.25])
+    ws.append([None, "Sara", None, None])
+    ws.merge_cells("A2:A3")
+    ws["D2"].number_format = "0%"
+    buf = io.BytesIO()
+    wb.save(buf)
+    text = _parse(buf.getvalue(), "xlsx").pages[0].text
+    assert "| Tier 2 | Luca | 2024-03-01 | 25% |" in text and "| Tier 2 | Sara |" in text
+
+
+def test_html_cells_spanning_rows_stay_in_their_columns():
+    from app.ingestion.htmltext import to_markdown
+
+    md, _ = to_markdown(b"<table><tr><th>Tier</th><th>Name</th><th>Phone</th></tr><tr><td rowspan=2>Tier 2</td><td>Luca</td>"
+                        b"<td>111</td></tr><tr><td>Sara</td><td>222</td></tr></table>")
+    assert "| Tier 2 | Sara | 222 |" in md

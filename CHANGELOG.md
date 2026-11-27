@@ -7,6 +7,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 ## [Unreleased]
 
 ### Fixed
+- **Accuracy review: reading documents.** Existing documents keep their old reading until they are processed again (**Reprocess all documents**, below).
+  - PDF: a scanned page with a printed footer is read with OCR (only the footer was read); pictures on text pages are OCR'd; tables appear once, in their place (they came twice, the text copy with mixed rows); words broken at line ends are joined.
+  - Word: text boxes, tracked insertions, content controls, fields, nested tables, merged cells, list numbers and page headers/footers are read (they were lost).
+  - PowerPoint: pictures in placeholders are OCR'd; numbered steps keep their numbers.
+  - Excel: merged cells fill every row they cover; percentages, dates and whole numbers as shown; a title above a table is a caption only when it is one.
+  - Web pages: cells spanning rows or columns stay in their columns.
+  - JSON: numbers as written; lists over 2,000 rows say so.
+  - Chunks: tables split only between rows with their header (any separator, also under a caption); long text split at line ends, never inside a word; headings and lead-ins stay with their content; each chunk carries its section path ("Ransomware > Tier 2 > Contacts").
 - **Accuracy review: answers, check and sources.**
   - Answer rules: earlier answers are not sources; partial answers answer the part found and say what is missing ("not found" only when nothing answers, in one sentence without values); conflicting passages of a customer are both given; live lists are never counted unless a total is stated; names, commands and codes stay as written in any language; one number per citation bracket.
   - History: old answers go back to the model without their [n] markers, so a new answer cannot copy a citation that now points elsewhere.

@@ -29,8 +29,18 @@ def markdown_table(rows: list[list]) -> str:
     return "\n".join(lines)
 
 
+_INVISIBLE = re.compile(r"[\u00ad\u200b-\u200d\u2060\ufeff]")  # soft hyphen, zero-width characters
+_HYPHENATED = re.compile(r"(?<=[a-zà-ÿ])-\n(?=[a-zà-ÿ])")
+
+
+def dehyphenate(text: str) -> str:
+    """A word broken at a line end in a PDF or a scan ("EDR con-\nsole") made whole again. Only
+    between lowercase letters, so "Tier-\n2", "CVE-\n2024" and list dashes stay as they are."""
+    return _HYPHENATED.sub("", text)
+
+
 def normalize_text(text: str) -> str:
-    text = text.replace("\r", "")
+    text = _INVISIBLE.sub("", text.replace("\r", ""))
     text = "\n".join(line.rstrip(" \t") for line in text.split("\n"))  # linear: no regex backtracking
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()

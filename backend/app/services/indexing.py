@@ -8,8 +8,8 @@ from app.services import embeddings, vector_index
 
 
 def chunk_text_for_embedding(chunk: Chunk) -> str:
-    # The heading gives short chunks their context ("Contacts" table under "Escalation").
-    return f"{chunk.heading}\n\n{chunk.text}" if chunk.heading and not chunk.text.startswith("#") else chunk.text
+    # The section path gives every chunk its context ("Ransomware > Tier 2 > Contacts").
+    return f"{chunk.heading}\n\n{chunk.text}" if chunk.heading else chunk.text
 
 
 def check_model(cfg: dict) -> None:
