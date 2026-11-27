@@ -25,6 +25,7 @@ class Unit:
     cites: list[int] = field(default_factory=list)
     intro: bool = False      # ends with ":" ("For Acme:", "The procedure is:") or heads nested items
     inherited: bool = False  # cites are its parent's (a list item under a cited item or heading)
+    scope: list[int] = field(default_factory=list)  # an uncited intro: the passages its items cite
 
     @property
     def plain(self) -> str:
@@ -92,6 +93,10 @@ def split(answer: str) -> list[Unit]:
     for i, line in enumerate(lines):
         p = parents[i]
         effective.append(line.cites or (effective[p] if p is not None else []))
+    below: dict[int, set[int]] = {}  # a head line: the passages its items cite (checked in its place)
+    for i, p in enumerate(parents):
+        if p is not None:
+            below.setdefault(p, set()).update(effective[i])
     units: list[Unit] = []
     for i, line in enumerate(lines):
         if line.kind == "skip" or line.text.startswith("#") and not line.cites:
@@ -102,11 +107,13 @@ def split(answer: str) -> list[Unit]:
             # Up to the first citation or the end, without closing punctuation: the exact text to find
             # again in the answer for highlighting ("informed by SMS [1]." -> "informed by SMS").
             raw = _CITE.split(part)[0] if _CITE.search(part) and not _CITE.sub("", part.split("[", 1)[-1]).strip(" .;:!?") else _CITE.sub("", part)
-            intro = _CITE.sub("", part).rstrip().endswith(":") or (i in heads and not cites)
+            intro = (_CITE.sub("", part).rstrip().endswith(":") or (i in heads and not cites)
+                     or line.kind == "heading")
             raw = re.sub(r"[\s.;:!?]+$", "", raw.strip())
             inherited = False
             if not cites and not own_line and effective[i] and line.kind in ("numbered", "bullet", "para"):
                 cites, inherited = list(effective[i]), True  # the whole line hangs from a cited parent
             if len(plain(raw)) >= 3:
-                units.append(Unit(raw=raw, cites=cites, intro=intro, inherited=inherited))
+                scope = sorted(below.get(i, ())) if intro and not cites else []
+                units.append(Unit(raw=raw, cites=cites, intro=intro, inherited=inherited, scope=scope))
     return units

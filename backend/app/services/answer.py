@@ -223,8 +223,9 @@ def answer(db: Session, chat: Chat, question: str, first: bool, correction: str 
     followups = [f.replace("\x00", "").strip() for f in raw_followups if isinstance(f, str) and f.strip()][:3] \
         if isinstance(raw_followups, list) and want_followups else []
     title = data["title"].replace("\x00", "") if data and isinstance(data.get("title"), str) else None
-    cut = bool(data and data.get("_cut"))  # the model hit its token limit: the answer ends mid-sentence
-    if cut or reply.stop in llm_adapters.CUT:
+    # The model hit its token limit: the answer ends mid-sentence (whatever shape the reply had).
+    cut = bool(data and data.get("_cut")) or reply.stop in llm_adapters.CUT
+    if cut:
         _log.warning("answer by %s (%s) cut at the token limit: %s output tokens, stop %s; raise Max answer tokens",
                      used.get("name"), used.get("model"), reply.output_tokens, reply.stop)
 

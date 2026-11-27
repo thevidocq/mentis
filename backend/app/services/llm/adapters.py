@@ -5,6 +5,8 @@
 - openai_responses: POST {base}/responses              (OpenAI Responses API: OpenAI, gpt-oss on vLLM)
 """
 
+import re
+
 from app.services.llm.base import LLMError, LLMReply, Turn
 
 ANTHROPIC_VERSION = "2023-06-01"
@@ -62,7 +64,9 @@ def _text(value) -> str:
 
 def _stop(value) -> str | None:
     """The provider's stop reason, short and printable (it ends up in logs and error messages)."""
-    return str(value)[:40] if isinstance(value, str) and value else None
+    if not isinstance(value, str) or not value:
+        return None
+    return value[:40] if re.fullmatch(r"[A-Za-z_]{1,40}", value) else "other"  # never echo arbitrary text
 
 
 # Stop reasons that mean the answer was cut by the token limit, per API family.
