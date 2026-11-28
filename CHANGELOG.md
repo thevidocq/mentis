@@ -6,6 +6,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-11-28
+
 ### Security
 - **Security and accuracy review of 0.6.2** (`docs/security/review-v0.6.2.md`): five parallel reviews with reproduced proofs.
   - **Answer check covers everything shown.** Code blocks, table rows, `#` headings, bold lines and short or uncited sentences reached the analyst with "Matches the sources" without being checked. Now every line is a unit, recognised exactly as the chat renders it (a "~~~" or indented fence, or "| a" without a closing pipe, is prose, as on screen): code is checked at both levels against its lead line's passages (else the answer's), an uncited row against the other rows' (else the lead line's, else the answer's); uncited statements go to level 2 marked "(no citation)" and pass only if they state no fact or only facts of the passages; "Matches the sources" needs the checker to have read at least one statement. The checker reads the text as shown (paired Markdown removed, "svc_backup" kept), as data.
