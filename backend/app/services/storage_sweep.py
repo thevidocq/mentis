@@ -88,7 +88,7 @@ def sweep(db: Session) -> dict:
                 DocumentVersion.tenant_id == tid, DocumentVersion.status == VersionStatus.READY))}
             chunks = {str(c) for c in db.scalars(_select(Chunk.id).where(Chunk.tenant_id == tid))}
             dead = [p for p, v in points.items() if v in ready and p not in chunks]
-            if dead:
+            if dead and not _rebuilding(db):  # again: a reprocess may have started during the scroll
                 vector_index.delete_points(tid, dead)
                 result["vectors"] += len(dead)
     return result

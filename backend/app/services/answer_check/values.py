@@ -38,7 +38,7 @@ _CODE_PREFIXES = r"INC|RITM|REQ|CHG|PRB|TASK|SCTASK|SIR|KB|CS|SR|TKT|WO"
 
 PATTERNS = [
     ("url", re.compile(r"\b(?:https?|ftp)://[^\s<>()\[\]\"'`|]+")),
-    ("email", re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")),
+    ("email", re.compile(r"(?<![\w.+-])[\w.+-]+@[\w-]+(?:\.[\w-]+)+")),  # starts at a word edge: linear
     ("path", re.compile(r"\b(?:HKLM|HKCU|HKCR|HKU|HKCC|HKEY_[A-Z_]+):?\\[^\s\"'<>|]+|\b[A-Za-z]:\\[^\s\"'<>|*?]+"
                         r"|\\\\[\w.$-]+(?:\\[^\s\"'<>|*?]+)+")),
     ("mac", re.compile(r"\b[0-9A-Fa-f]{2}([:-])[0-9A-Fa-f]{2}(?:\1[0-9A-Fa-f]{2}){4}\b")),
@@ -53,7 +53,7 @@ PATTERNS = [
     ("trange", re.compile(r"(?<![\d.:])(1[0-2]|0?[1-9])\s*[-–]\s*(1[0-2]|0?[1-9])\s*([AaPp])\.?\s?[Mm]\.?(?![a-z])")),
     ("time", re.compile(r"(?<![\d.:])(1[0-2]|0?[1-9])()\s*([AaPp])\.?\s?[Mm]\.?(?![a-z])")),
     ("date", re.compile(r"\b(?:\d{1,2}[./-]\d{1,2}[./-](?:\d{4}|\d{2})|\d{4}-\d{2}-\d{2})\b")),
-    ("range", re.compile(rf"(?<![\d.,])(\d+(?:[.,]\d+)?)\s*(?:-|to|a|fino a)\s*(\d+(?:[.,]\d+)?)\s*({_UNIT_RE})\b", re.I)),
+    ("range", re.compile(rf"(?:\b(?:between|tra|fra)\s+)?(?<![\d.,])(\d+(?:[.,]\d+)?)\s*(?:-|to|and|a|e|fino a)\s*(\d+(?:[.,]\d+)?)\s*({_UNIT_RE})\b", re.I)),
     ("hm", re.compile(r"(?<![\d.,])(\d{1,3})\s*h\s*(\d{1,2})(?:\s*(?:m|min|minutes?|minuti))?\b", re.I)),
     ("duration", re.compile(rf"(?<![\d.,])(\d+(?:[.,]\d+)?|\b(?:{_WORD_RE}))(?:\s*|-)({_UNIT_RE})\b", re.I)),
     ("percent", re.compile(r"(?<![\d.,])(\d+(?:[.,]\d+)?)(?:\s?%|\s+(?:percent|per\s?cent[oi]?)\b)", re.I)),
@@ -62,7 +62,7 @@ PATTERNS = [
     ("extension", re.compile(r"\b(?:ext\.?|extension|interno|int\.)\s*[:#]?\s*(\d{2,6})\b", re.I)),
     ("phone", re.compile(r"(?<![\w.])(?:\+|00)?\d[\d ()\-.]{5,}\d(?![\w])")),
     # Any other number (a count, a threshold, a step): it must be in the passages too.
-    ("number", re.compile(r"(?<![\w.,:/\\-])\d+(?:[.,]\d+)?(?![\w:/\\]|[.,]\d)")),
+    ("number", re.compile(r"(?<![\w.,:\\-])\d{1,3}(?:,\d{3})+(?![\w:\\]|[.,]\d)|(?<![\w.,:\\-])\d+(?:[.,]\d+)?(?![\w:\\]|[.,]\d)")),
 ]
 
 # Calling codes that can stand before a national number ("+39 085…" = "085…"); anything else in
@@ -155,7 +155,28 @@ def _phones(text: str, a: int, b: int) -> list[tuple[int, int]]:
 
 
 def _num(raw: str) -> str:
+    if re.fullmatch(r"\d{1,3}(?:,\d{3})+", raw):  # "1,000" = 1000
+        raw = raw.replace(",", "")
     return f"{float(raw.replace(',', '.')):g}"
+
+
+# Numbers that name the answer's own structure ("Step 1", "Option 2", "the 2 steps below").
+_LABEL_BEFORE = re.compile(r"(?i)\b(?:step|option|phase|stage|tier|level|round|passo|fase|opzione|livello|punto)\s*#?\s*$")
+_LABEL_AFTER = re.compile(r"(?i)^\s*(?:steps?|options?|phases?|stages?|passi|fasi|opzioni|punti)\b")
+_ALWAYS = re.compile(r"(?<!\d)24\s*[/x]\s*7(?!\d)", re.I)
+# Every number of a passage, wherever it is written (a date, a time, an address, a range, a phone):
+# a plain number of the answer matches any of them. Not digits inside a word or a hash.
+_TOKEN = re.compile(r"(?<![\w.,])\d{1,3}(?:,\d{3})+(?!\w)|(?<![^\W\d_])\d+(?:[.,]\d+)?(?![^\W\d_])")
+
+
+def _tokens(text: str) -> set[str]:
+    out = set()
+    for m in _TOKEN.finditer(normalize(text)):
+        try:
+            out.add(_num(m.group()))
+        except ValueError:
+            continue
+    return out
 
 
 _JOIN = re.compile(r"\s*(?:,|and|e|ed)?\s*$", re.I)
@@ -225,6 +246,10 @@ def extract(text: str, passage: bool = False) -> list[Value]:
             elif kind in ("event", "port", "extension"):
                 key = str(int(m.group(1)))
             elif kind == "number":
+                if _LABEL_BEFORE.search(text[max(0, a - 12):a]) or _LABEL_AFTER.match(text[b:b + 12]):
+                    continue
+                if _ALWAYS.search(text[max(0, a - 3):b + 3]):  # "24/7", "24x7": an availability, not numbers
+                    continue
                 key = _num(raw)
             elif kind == "range":
                 unit = m.group(3)
@@ -313,6 +338,15 @@ def _same(a: Value, b: Value) -> bool:
     return a.key == b.key
 
 
+def _host(v: Value) -> str | None:
+    if v.kind == "url":
+        m = re.match(r"[a-z]+://([^/:?#]+)", v.key)
+        return m.group(1).lower() if m else None
+    if v.kind == "email":
+        return v.key.rsplit("@", 1)[-1]
+    return None
+
+
 def check(answer: str, cited: dict[int, str], all_passages: list[str]) -> list[dict]:
     """Issues for values of `answer` that are in none of the passages given to the model.
 
@@ -320,11 +354,18 @@ def check(answer: str, cited: dict[int, str], all_passages: list[str]) -> list[d
     sources leave one candidate of the same kind.
     """
     known = [v for p in all_passages for v in extract(p, passage=True)]
+    numbers = set().union(*(_tokens(p) for p in all_passages)) if all_passages else set()
+    hosts = {k.key for k in known if k.kind == "domain"} | {
+        h for k in known for h in [_host(k)] if h}
     answer_values = extract(answer)
     issues = []
     for v in answer_values:
         if any(_same(v, k) for k in known):
             continue
+        if v.kind in ("number", "event", "port", "extension") and v.key in numbers:
+            continue  # the same number, written another way in the passage (a date, "10.0.0.5:3389")
+        if v.kind == "domain" and v.key in hosts:
+            continue  # the host of an address or e-mail of the passage
         source_values = [k for t in cited.values() for k in extract(t) if k.kind == v.kind and not k.key.startswith("R")]
         unused = [k for k in source_values if not any(_same(k, a) for a in answer_values)]
         keys = {k.key for k in unused}

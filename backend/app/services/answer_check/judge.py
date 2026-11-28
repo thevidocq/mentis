@@ -155,23 +155,37 @@ def _statement(u: Unit) -> str:
 
 
 _KEYS = ("s", "statement", "id", "n", "number", "index")
-_RANGE = re.compile(r"(\d+)\s*(?:-|–|to)\s*S?(\d+)", re.I)
+_LABEL = re.compile(r"\s*S?(\d{1,3})(?:\s*(?:-|–|to)\s*S?(\d{1,3}))?\s*", re.I)
 
 
-def _numbers(item) -> list[int] | None:
-    """Statement numbers named by one verdict: "S2", "2", 2, [1, 3], "S1-S3"; None when unreadable."""
+def _numbers(item, texts: list[str] | None = None) -> list[int] | None:
+    """Statement numbers named by one verdict: 2, "2", "S2", "S1-S3", or a list of those; a
+    statement's own text is matched against the statements. None when it names none clearly
+    (digits inside quoted text are never read as numbers)."""
     value = item
     if isinstance(item, dict):
         value = next((item[k] for k in _KEYS if k in item), None)
-    if value is None or isinstance(value, bool):
-        return None
-    text = " ".join(map(str, value)) if isinstance(value, list) else str(value)
+    values = value if isinstance(value, list) else [value]
     out: list[int] = []
-    for a, b in _RANGE.findall(text):
-        a, b = int(a), int(b)
-        if a <= b <= a + 100:
+    for v in values:
+        if isinstance(v, bool) or v is None:
+            return None
+        if isinstance(v, int):
+            out.append(v)
+            continue
+        m = _LABEL.fullmatch(str(v))
+        if m:
+            a = int(m.group(1))
+            b = int(m.group(2)) if m.group(2) else a
+            if not a <= b <= a + 100:
+                return None
             out += range(a, b + 1)
-    out += [int(n) for n in re.findall(r"\d+", _RANGE.sub(" ", text))]
+            continue
+        text = " ".join(str(v).split()).strip().rstrip(".").lower()
+        hits = [k for k, t in enumerate(texts or [], 1) if text and " ".join(t.split()).lower() == text]
+        if len(hits) != 1:
+            return None
+        out.append(hits[0])
     return list(dict.fromkeys(out)) or None
 
 
@@ -209,7 +223,7 @@ def _judge_group(cfg: dict, group: list, units: list[Unit], passages: dict[int, 
     out = []
     for item in data["unsupported"]:
         # "S2", "2", 2, {"statement": 2}, [1, 3], "S1-S3": models name statements in many ways.
-        nums = _numbers(item)
+        nums = _numbers(item, [_statement(u) for _, u in group])
         if not nums or not any(1 <= k <= len(group) for k in nums):
             # A rejection we cannot place must never read as "supported".
             _log.warning("level 2 check, group %s: verdict without a readable statement number", label)

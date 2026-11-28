@@ -151,7 +151,14 @@ def _parent(lines: list[_Line], i: int) -> int | None:
         j = i - 1
         while j >= 0 and cur.table >= 0 and lines[j].table == cur.table:
             j -= 1
-        return j if j >= 0 and lines[j].kind not in BLOCKS else None
+        if j < 0 or lines[j].kind in BLOCKS:
+            return None
+        lead = lines[j]
+        # A lead line introduces the block ("Run [1]:", a heading, a cited line); an uncited
+        # statement that only happens to stand above it stays a statement of its own.
+        if lead.kind == "heading" or lead.cites or _CITE.sub("", lead.text).rstrip().endswith(":"):
+            return j
+        return None
     for j in range(i - 1, -1, -1):
         r = lines[j]
         if cur.kind == "heading":
@@ -189,6 +196,23 @@ def _row_text(line: str, header: list[str] | None = None) -> str:
     if header and len(header) == len(cells):
         return " | ".join(f"{_CITE.sub('', h).strip()}: {c}" if _CITE.sub("", h).strip() else c for h, c in zip(header, cells))
     return " | ".join(cells)
+
+
+_END = " \t\n\r\f\v.;:!?"
+
+
+def _trim(text: str) -> str:
+    """Without closing punctuation and spaces (str.rstrip: linear, a regex here was quadratic)."""
+    return text.strip().rstrip(_END)
+
+
+def _drop_closing_cites(text: str) -> str:
+    """Without the citations that close it ("informed by SMS [1][2]" -> "informed by SMS")."""
+    while True:
+        m = re.search(r"\[\d{1,3}\]$", text)
+        if not m:
+            return text
+        text = _trim(text[:m.start()])
 
 
 def split(answer: str) -> list[Unit]:
@@ -240,7 +264,7 @@ def split(answer: str) -> list[Unit]:
             raw = _CITE.split(part)[0] if _CITE.search(part) and not _CITE.sub("", part.split("[", 1)[-1]).strip(" .;:!?") else _CITE.sub("", part)
             # A heading, or the last sentence of a line with items, code or a table under it.
             intro = line.kind == "heading" or (i in heads and k == len(parts) - 1)
-            raw = re.sub(r"[\s.;:!?]+$", "", raw.strip())
+            raw = _trim(raw)
             inherited = False
             if not cites and not line.cites and effective[i]:
                 # The whole line hangs from a cited parent. A sentence of a cited line without its own
@@ -250,8 +274,7 @@ def split(answer: str) -> list[Unit]:
                 scope = sorted(below.get(i, ())) if intro and not cites else []
                 # As written (a citation in the middle kept), up to its closing citations: found
                 # verbatim in the answer, so the chat can mark a value inside this statement.
-                text = re.sub(r"(?:\s*\[\d{1,3}\](?!\())+[\s.;:!?]*$", "", part.strip())
-                text = re.sub(r"[\s.;:!?]+$", "", text)
+                text = _trim(_drop_closing_cites(_trim(part)))
                 units.append(Unit(raw=raw, cites=cites, intro=intro,
                                   inherited=inherited, scope=scope, text=text))
     return units

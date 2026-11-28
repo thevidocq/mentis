@@ -25,8 +25,7 @@ class Visibility:
         self._by_name = {t.name: t.id for t in rows}
         self._general = next((t.id for t in rows if t.is_global), None)
         self._db = db
-        self._docs: set[str] | None = None
-        self._versions: set[str] | None = None
+        self._exists: dict[tuple[str, str], bool] = {}  # ("doc" | "version", id) -> still there
 
     def _gone(self, message: ChatMessage) -> bool:
         """A document or version the answer cited or read no longer exists (deleted, or purged by
@@ -35,12 +34,23 @@ class Visibility:
         cites = [c for c in message.citations or [] if isinstance(c, dict)]
         docs = {str(c["document_id"]) for c in cites if c.get("document_id")} | {str(d) for d in message.read_documents or []}
         versions = {str(c["version_id"]) for c in cites if c.get("version_id")}
-        if not docs and not versions:
-            return False
-        if self._docs is None:
-            self._docs = {str(i) for i in self._db.scalars(select(Document.id))}
-            self._versions = {str(i) for i in self._db.scalars(select(DocumentVersion.id))}
-        return not docs <= self._docs or not versions <= self._versions
+        return not (self._all_exist("doc", docs) and self._all_exist("version", versions))
+
+    def _all_exist(self, kind: str, ids: set[str]) -> bool:
+        """Only the ids this answer uses are looked up (once per request each)."""
+        todo = {i for i in ids if (kind, i) not in self._exists}
+        if todo:
+            model = Document if kind == "doc" else DocumentVersion
+            parsed = set()
+            for i in todo:
+                try:
+                    parsed.add(uuid.UUID(i))
+                except ValueError:
+                    self._exists[(kind, i)] = False
+            found = {str(x) for x in self._db.scalars(select(model.id).where(model.id.in_(parsed)))} if parsed else set()
+            for i in todo:
+                self._exists.setdefault((kind, i), i in found)
+        return all(self._exists[(kind, i)] for i in ids)
 
     def _cited_tenant(self, citation: dict) -> uuid.UUID | None:
         tid = citation.get("tenant_id")

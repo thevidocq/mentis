@@ -199,8 +199,9 @@ def import_config(db: Session, data: dict, apply: bool) -> list[str]:
                     if not same_origin(incoming["url"], current.get("url") or embeddings.get_config(db)["url"]) and merged.get("api_key_enc"):
                         merged["api_key_enc"] = None
                         plan.append("Embedding: the address changed, enter the API key again")
-                if key == "smtp" and "host" in incoming and (incoming["host"] or "").lower() != (current.get("host") or "").lower() \
-                        and merged.get("password_enc"):
+                from app.services.mail import _moved
+
+                if key == "smtp" and _moved(current, incoming) and merged.get("password_enc"):
                     merged["password_enc"] = None
                     plan.append("Email (SMTP): the server changed, enter the password again")
                 if apply:

@@ -296,9 +296,13 @@ def answer(db: Session, chat: Chat, question: str, first: bool, correction: str 
 
 _MD_LINK = re.compile(r"\[([^\]\n]{1,300})\]\((\S{1,1000}?)\)")
 # Any address written as text: http(s):// (also with one or three slashes), scheme-relative //host,
-# www.host, or a host name with a path ("evil.example/login"), inside brackets too.
+# www.host, or a lowercase host name with a known top-level domain and a path ("evil.example/login";
+# not "ASP.NET/IIS"), inside brackets too.
+from app.services.answer_check.values import _TLD as _values_tld  # noqa: E402 - host names with a path
+
 _BARE_URL = re.compile(r"\bhttps?:/{1,3}[^\s)\]>\"']+|(?<![\w/:])//[\w-][^\s)\]>\"']*|\bwww\.[\w-]+\.[^\s)\]>\"']+"
-                       r"|(?<![\w@./-])(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}/[^\s)\]>\"']*", re.IGNORECASE)
+                       rf"|(?<![\w@./-])(?-i:(?:[a-z0-9](?:[a-z0-9-]{{0,61}}[a-z0-9])?\.)+(?:{_values_tld}|example|test|invalid))/[^\s)\]>\"']*",
+                       re.IGNORECASE)
 # Fullwidth forms of ASCII ("ｈｔｔｐｓ：／／") read as ASCII before links are checked.
 _FULLWIDTH = {c: c - 0xFEE0 for c in range(0xFF01, 0xFF5F)}
 _SURROGATE = re.compile(r"[\ud800-\udfff]")
