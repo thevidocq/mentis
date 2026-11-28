@@ -97,7 +97,8 @@ def test_stored_embedding_key_never_follows_a_new_address(super_admin, monkeypat
     assert super_admin.put("/api/platform/embedding", json={"url": "https://emb.example/v1", "model": "m",
                                                              "api_key": "sk-EMBED"}).status_code == 200
     r = super_admin.put("/api/platform/embedding", json={"url": "https://other.example/v1"})
-    assert r.status_code == 422 and "enter the API key again" in r.json()["detail"]
+    assert r.status_code == 200 and r.json()["api_key_set"] is False  # the key stays with its address
+    super_admin.put("/api/platform/embedding", json={"url": "https://emb.example/v1", "api_key": "sk-EMBED"})
     data = {"format": "mentis-config/1", "tenants": [], "llm_providers": [],
             "platform": {"embedding": {"url": "https://import.example/v1", "model": "m"}}}
     r = super_admin.post("/api/platform/config/import?apply=true", files={"file": ("c.json", json.dumps(data).encode())})

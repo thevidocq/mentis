@@ -12,7 +12,7 @@ Off by default. When on, a newly uploaded version stays inactive until you appro
 
 ## Approval by another person
 
-Off by default. When on, a version waiting for approval must be approved by someone other than the person who uploaded it (that person can still reject it). Approving your own upload while it is off is allowed and recorded in the logs.
+Off by default. When on, a version waiting for approval must be approved by someone other than the person who uploaded it (that person can still reject it). It applies only when versions wait for approval: with **Approve new document versions before publishing** on, or always for the General Knowledge Base. Approving your own upload while it is off is allowed and recorded in the logs.
 
 ## Suggested follow-up questions
 

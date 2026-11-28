@@ -55,6 +55,6 @@ If the vector index archive is lost or damaged, restore anyway and use **Embeddi
 
 It **never** contains passwords, API keys, integration credentials, users, documents, chats or logs. Imported integrations are added turned off, until the tenant admin enters their credentials.
 
-**Import…** reads such a file and first shows the changes it would make. Click **Apply** to make them. Import only adds and updates: tenants and providers that are not in the file are left alone. Afterwards, enter the API keys of any new AI provider.
+**Import…** reads such a file and first shows the changes it would make. Click **Apply** to make them. Import only adds and updates: tenants and providers that are not in the file are left alone. Afterwards, enter the API keys of any new AI provider. An import that changes the embedding address or the email server removes the stored embedding key or email password (they are only sent where they were saved): enter them again.
 
 Use it to copy a setup from the lab to production, or to keep the configuration under version control. It is not a backup.

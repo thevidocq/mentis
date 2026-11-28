@@ -19,7 +19,7 @@ Any OpenAI-compatible endpoint works instead:
 
 Select **Test connection** after saving: it reports the model and the vector size.
 
-A saved API key is only sent to the address it was saved for: when you change the address, enter the key again (leave it empty for a service without one). The same applies to a configuration import that changes the address: the key is dropped. If the server's `.env` sets `MENTIS_EMBEDDING_ALLOWED_URLS`, only those addresses are accepted. A change of address is recorded in **Logs** as a warning, since every document and question goes to the embedding service.
+A saved API key is only sent to the address it was saved for: when you change the address, the stored key is removed, so enter it in the same save if the new service needs one. A configuration import that changes the address removes it too. If the server's `.env` sets `MENTIS_EMBEDDING_ALLOWED_URLS`, only those addresses are accepted. A change of address is recorded in **Logs** as a warning, since every document and question goes to the embedding service.
 
 ## Changing model: reindex
 

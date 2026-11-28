@@ -109,7 +109,7 @@ In **Test a question**, type a question an analyst would ask (for example "who i
 
 ## Approval before publishing
 
-If **Approve new document versions before publishing** is on in **Settings**, new versions wait in **Waiting approval** and the document shows under *Needs attention*. Check it in **Preview** and **Test a question**, then choose **Approve** or **Reject** at the top.
+If **Approve new document versions before publishing** is on in **Settings**, new versions wait in **Waiting approval** and the document shows under *Needs attention*. Check it in **Preview** and **Test a question**, then choose **Approve** or **Reject** at the top. With **Approval by another person** on, the person who uploaded the version can reject it but not approve it.
 
 ## Rename and delete
 

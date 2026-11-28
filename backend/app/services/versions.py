@@ -67,8 +67,8 @@ def on_ready(db: Session, version: DocumentVersion) -> None:
             version.is_active = False
 
 
-SELF_APPROVAL = ("This version must be approved by someone other than the person who uploaded it. "
-                 "A tenant admin or super-admin can change this in Settings (Approval by another person).")
+SELF_APPROVAL = ("This version must be approved by someone other than the person who uploaded it "
+                 "(setting Approval by another person, in Settings).")
 
 
 def approve(db: Session, version: DocumentVersion, reviewer_id) -> None:

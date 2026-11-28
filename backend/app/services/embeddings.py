@@ -89,8 +89,8 @@ def allowed_url(url: str) -> bool:
 
 
 def save_config(db: Session, url: str | None, model: str | None, api_key: str | None) -> dict:
-    """Raises EmbeddingSettingRefused for an address that is not allowed, or a new address with a
-    stored key and no key given: a stored key is only ever sent to the origin it was saved for."""
+    """Raises EmbeddingSettingRefused for an address that is not allowed. A new origin without a new
+    key drops the stored key: a key is only ever sent to the origin it was saved for."""
     from app.services.llm_config import same_origin
 
     row = db.get(PlatformSetting, EMBED_KEY)
@@ -101,12 +101,8 @@ def save_config(db: Session, url: str | None, model: str | None, api_key: str | 
             raise EmbeddingSettingRefused("This address is not in MENTIS_EMBEDDING_ALLOWED_URLS: every document and "
                                           "question is sent to the embedding service, so its address is set in .env.")
         current = get_config(db)
-        if not same_origin(url, current["url"]):
-            if api_key is None and current["api_key"]:
-                raise EmbeddingSettingRefused("The address changed: enter the API key again (leave it empty for a "
-                                              "service without a key). A saved key is only sent to the address it was saved for.")
-            if api_key is None:
-                value["api_key_enc"] = None
+        if not same_origin(url, current["url"]) and api_key is None:
+            value["api_key_enc"] = None  # enter it again if the new service needs one
         value["url"] = url
     if model is not None:
         value["model"] = model.strip()

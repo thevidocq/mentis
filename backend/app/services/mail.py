@@ -31,16 +31,11 @@ def public_smtp(cfg: dict) -> dict:
     }
 
 
-class SmtpRefused(ValueError):
-    """A change that would send the stored password to another server."""
-
-
 def save_smtp(db: Session, data: dict) -> dict:
     cfg = get_smtp(db)
     host = data.get("host")
-    if host is not None and host.strip().lower() != (cfg.get("host") or "").strip().lower() and cfg.get("password_enc"):
-        if data.get("password") is None:
-            raise SmtpRefused("The server changed: enter the password again. A saved password is only sent to the server it was saved for.")
+    if host is not None and host.strip().lower() != (cfg.get("host") or "").strip().lower() and data.get("password") is None:
+        cfg["password_enc"] = None  # a saved password is only sent to the server it was saved for
     for key in ("host", "port", "security", "username", "from_address"):
         if data.get(key) is not None:
             cfg[key] = data[key]

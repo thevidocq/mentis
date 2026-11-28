@@ -44,10 +44,7 @@ def get_smtp(db: Session = Depends(get_db), _: User = Depends(super_admin)) -> d
 def put_smtp(body: SmtpIn, request: Request, db: Session = Depends(get_db), admin: User = Depends(super_admin)) -> dict:
     if body.security is not None and body.security not in mail.SECURITY_MODES:
         raise HTTPException(422, f"Security must be one of: {', '.join(sorted(mail.SECURITY_MODES))}.")
-    try:
-        cfg = mail.save_smtp(db, body.model_dump())
-    except mail.SmtpRefused as e:
-        raise HTTPException(422, str(e)) from None
+    cfg = mail.save_smtp(db, body.model_dump())
     changed = [k for k, v in body.model_dump().items() if v is not None]
     log_event(db, "platform.smtp_updated", actor=admin, ip=client_ip(request), detail={"fields": changed})
     return mail.public_smtp(cfg)
