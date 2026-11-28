@@ -57,6 +57,10 @@ def _unchecked(verdict) -> dict:
     return {"unchecked": n} if n else {}
 
 
+def _too_long(verdict) -> list[dict]:
+    return [{"level": [2], "kind": "unchecked", "text": ""}] if getattr(verdict, "unchecked", 0) else []
+
+
 def _problem(issue: dict) -> str:
     """One issue as the model should read it, with the reason, so the second answer fixes it. The
     quoted text comes from the draft and the checker: neutralised like passages (prompts.data_text)."""
@@ -70,6 +74,8 @@ def _problem(issue: dict) -> str:
         return f'"{text}" has no citation'
     if kind == "no_citations":
         return "the answer cites no passage"
+    if kind == "unchecked":
+        return "the answer has more statements than can be checked: answer more briefly"
     return f'"{text}" is not supported by its cited passages' + (f" ({issue['reason']})" if issue.get("reason") else "")
 
 
@@ -114,9 +120,10 @@ def before_save(db: Session, chat: Chat, question: str, first: bool, result, reg
     if mode == "warn":
         return result, {"level2": "pending", "issues": l1, "checker": _checker_ref(cfg)}, True
 
-    # "hide": check now; a failing answer is written again once, then hidden.
+    # "hide": check now; a failing answer is written again once, then hidden. Statements the checker
+    # could not read (a very long answer) count as a failure: hide mode shows only checked answers.
     l2, state, verdict = _run_level2(cfg, result)
-    issues = answer_check.merge(l1, l2)
+    issues = answer_check.merge(l1, l2) + _too_long(verdict)
     if issues:
         problems = "; ".join(_problem(i) for i in issues)[:900]
         try:
@@ -127,7 +134,7 @@ def before_save(db: Session, chat: Chat, question: str, first: bool, result, reg
         if second is not None and second.status == "ok":
             l1b = _run_level1(second)
             l2b, state, verdict = _run_level2(cfg, second)
-            issues_b = answer_check.merge(l1b, l2b)
+            issues_b = answer_check.merge(l1b, l2b) + _too_long(verdict)
             if not issues_b:
                 check = {"level2": state, "issues": [], "checker": _checker_ref(cfg), "rewritten": True, **_unchecked(verdict)}
                 _log_check(db, chat, check, cfg, verdict, mode, commit=False)

@@ -20,7 +20,7 @@ def _sent(answer: str) -> list[str]:
     ("Isolate the host [1]:\n```\nInvoke-Isolation -Host DC01 -Force\n```", "(code block) Invoke-Isolation -Host DC01"),
     ("Escalate to Mario Rossi [1].\n~~~\nCall Anna Verdi on +39 333 0000000 [1].\n~~~", "Call Anna Verdi on +39 333 0000000"),
     ("Escalate [1].\n```\nls\n```bash\nThen call +39 333 0000000 [1].", "Then call +39 333 0000000"),
-    ("| Role | Contact |\n|---|---|\n| Primary | Laura Bianchi [1] |", "(table row) Primary | Laura Bianchi"),
+    ("| Role | Contact |\n|---|---|\n| Primary | Laura Bianchi [1] |", "(table row) Role: Primary | Contact: Laura Bianchi"),
     ("## Call +39 333 9999888 first\n- Call Mario Rossi [1].", "(introduces the next lines) Call +39 333 9999888 first"),
     ("Escalate to Mario Rossi [1].\nWipe the domain controllers.", "(no citation) Wipe the domain controllers"),
     ("Call Mario Rossi [1]. Then wipe DC01.", "(no citation) Then wipe DC01"),
@@ -92,3 +92,45 @@ def test_soc_values_are_compared(answer, wrong):
 ])
 def test_same_values_in_other_words_match(answer):
     assert values.check(units.plain(answer), P, list(P.values())) == []
+
+
+# --- Second round (re-test of the rewritten check) -----------------------------------------------
+
+@pytest.mark.parametrize("answer,needle", [
+    ("Do not\nisolate workstations within 15 minutes [1].", "Do not isolate workstations within 15 minutes"),
+    ("> Do not\n> isolate workstations [1].", "Do not isolate workstations"),
+    ("**Never**\nisolate workstations [1].", "Never isolate workstations"),
+    ("Failed logins before the alert [1]:\n- 3", "3"),
+    ("| Count [1] |\n|---|\n| 3 |", "Count: 3"),
+    ("Disable the account _svcbackup_ [1].", "_svcbackup_"),
+])
+def test_statements_are_what_the_chat_shows(answer, needle):
+    assert any(s.endswith(needle) or needle in s for s in _sent(answer)), _sent(answer)
+
+
+def test_an_introduction_is_never_the_last_of_a_checker_call():
+    us = units.split("\n".join(f"- Step {k}: call Mario Rossi [1]." for k in range(9)) + "\n\n| Backup | Primary |\n|---|---|\n| Mario Rossi [1] | Laura Bianchi [1] |")
+    groups = judge._groups([(i, u) for i, u in enumerate(us)])
+    assert all(not g[-1][1].intro for g in groups[:-1])
+    assert any("Backup: Mario Rossi | Primary: Laura Bianchi" in u.plain for u in us)
+
+
+def test_invisible_format_characters_are_removed_from_the_answer():
+    from app.services.answer import clean_text
+
+    assert clean_text("Call +39 085 111 ‮2233‬ [1] ⁦x⁩") == "Call +39 085 111 2233 [1] x"
+
+
+def test_hide_mode_treats_unchecked_statements_as_a_failure():
+    from app.services.answer_check.runner import _problem, _too_long
+
+    issues = _too_long(judge.Verdict([], unchecked=1))
+    assert issues and "more briefly" in _problem(issues[0])
+
+
+@pytest.mark.parametrize("answer", [
+    "Escalate after 1½ hours [2].", "Alert on 4625 [1].", "Opens at 21h [2].", "Window 9-11 PM [2].",
+])
+def test_more_forms_of_the_same_value_match(answer):
+    p = {1: "Event ID 4625.", 2: "Escalate after 1 hour 30 minutes. Opens 21:00. Window 21:00-23:00."}
+    assert values.check(units.plain(answer), p, list(p.values())) == []

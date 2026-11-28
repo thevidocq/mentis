@@ -304,9 +304,17 @@ _FULLWIDTH = {c: c - 0xFEE0 for c in range(0xFF01, 0xFF5F)}
 _SURROGATE = re.compile(r"[\ud800-\udfff]")
 
 
+_FORMAT = re.compile(r"[\u00ad\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u206f\ufeff\ufff9-\ufffb]"
+                     r"|[\U000e0000-\U000e007f]")
+
+
 def clean_text(s: str) -> str:
-    """Model output as it can be stored: no NUL, no lone surrogate (an emoji cut in half)."""
-    return _SURROGATE.sub("\ufffd", (s or "").replace("\x00", ""))
+    """Model output as it can be stored and checked: no NUL, no lone surrogate (an emoji cut in
+    half), no invisible format character (bidi overrides and isolates, zero-width characters, tags):
+    the browser would show "2233" with an override as "3322" while both checks read "2233", so what
+    is shown is exactly what is checked. Joiners inside emoji (U+200D) are kept."""
+    s = _SURROGATE.sub("\ufffd", (s or "").replace("\x00", ""))
+    return _FORMAT.sub(lambda m: m.group() if m.group() == "\u200d" else "", s)
 
 
 def _allowed_links(live_passages) -> set[str]:

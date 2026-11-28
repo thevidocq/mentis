@@ -33,8 +33,9 @@ Statements that only introduce or connect ("The procedure is as follows:") are s
 A statement marked (introduces the next lines) is a heading or the lead line of a list, a code block
 or a table: it is supported unless it states a fact of its own (a name, number, contact, time, action
 or condition) that its passages do not support.
-A statement marked (no citation) cites nothing: it is supported only if it states no fact, action or
-condition at all (it only connects, or says what the passages do not cover); otherwise it is not.
+A statement marked (no citation) cites nothing itself: it is supported only if it states no fact,
+action or condition (it only connects, or says what the passages do not cover), or if every fact it
+states is in the passages listed for it; otherwise it is not.
 A statement marked (code block) is a command or code shown to the analyst: every command, argument,
 host, path, address and value in it must be in the passages exactly. A statement marked (table row)
 is one row of a table, cells separated by "|": every cell must agree with the passages, including who
@@ -103,7 +104,7 @@ def judge(cfg: dict, units: list[Unit], passages: dict[int, str], timeout: float
 
     # Long answers in groups: each call stays small, fast and well inside the token limit.
     out, tin, tout = [], 0, 0
-    groups = [todo[k:k + BATCH] for k in range(0, len(todo), BATCH)]
+    groups = _groups(todo)
     for g, group in enumerate(groups, 1):
         found, used_in, used_out = _judge_group(cfg, group, units, passages, timeout, f"{g}/{len(groups)}", t0 + TOTAL_SECONDS)
         out += found
@@ -112,6 +113,23 @@ def judge(cfg: dict, units: list[Unit], passages: dict[int, str], timeout: float
     _log.info("level 2 check by %s (%s): %d statements in %d group(s), %d unsupported, tokens in/out %d/%d, limit %s, %d ms",
               cfg.get("name"), cfg.get("model"), len(todo), len(groups), len(out), tin, tout, limit, ms)
     return Verdict(out, tin, tout, ms, unchecked, len(todo))
+
+
+def _groups(todo: list) -> list[list]:
+    """Groups of up to BATCH statements; an introduction (a lead line, a table header) is never the
+    last of a group, so it is judged with at least the first lines it introduces."""
+    groups, cur = [], []
+    for item in todo:
+        cur.append(item)
+        if len(cur) >= BATCH:
+            carry = []
+            while len(cur) > 1 and cur[-1][1].intro:
+                carry.insert(0, cur.pop())
+            groups.append(cur)
+            cur = carry
+    if cur:
+        groups.append(cur)
+    return groups
 
 
 def _nums(u: Unit, units: list[Unit]) -> list[int]:

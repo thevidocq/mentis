@@ -50,6 +50,7 @@ PATTERNS = [
                         r"|T\d{4}(?:\.\d{3})?)\b")),
     ("domain", re.compile(rf"(?<![@\w.-])(?:[A-Za-z0-9](?:[A-Za-z0-9-]{{0,61}}[A-Za-z0-9])?\.)+(?i:{_TLD})\b(?![.-]?\w)")),
     ("time", re.compile(r"(?<![\d.:])([01]?\d|2[0-3])[:.]([0-5]\d)(?::[0-5]\d)?(?:\s*([AaPp])\.?\s?[Mm]\.?(?![a-z]))?(?![.:]?\d)")),
+    ("trange", re.compile(r"(?<![\d.:])(1[0-2]|0?[1-9])\s*[-–]\s*(1[0-2]|0?[1-9])\s*([AaPp])\.?\s?[Mm]\.?(?![a-z])")),
     ("time", re.compile(r"(?<![\d.:])(1[0-2]|0?[1-9])()\s*([AaPp])\.?\s?[Mm]\.?(?![a-z])")),
     ("date", re.compile(r"\b(?:\d{1,2}[./-]\d{1,2}[./-](?:\d{4}|\d{2})|\d{4}-\d{2}-\d{2})\b")),
     ("range", re.compile(rf"(?<![\d.,])(\d+(?:[.,]\d+)?)\s*(?:-|to|a|fino a)\s*(\d+(?:[.,]\d+)?)\s*({_UNIT_RE})\b", re.I)),
@@ -77,6 +78,8 @@ _AMOUNT = re.compile(r"\d{1,3}(?:([.,  ])\d{3})(?:\1\d{3})*")
 _SPACES = re.compile(r"[   -   　]")
 _DASHES = re.compile(r"[‐-―−﹘﹣－]")
 _INVISIBLE = re.compile(r"[\u00ad\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]")
+_FRACTIONS = {"½": ".5", "¼": ".25", "¾": ".75"}
+_FRACTION = re.compile(r"(\d+)?\s?([½¼¾])")
 _DEFANG = [(re.compile(r"\[\.\]|\(\.\)|\{\.\}|\[dot\]", re.I), "."), (re.compile(r"\[:\]"), ":"),
            (re.compile(r"\bhxxp", re.I), "http"), (re.compile(r"\[@\]|\[at\]", re.I), "@")]
 
@@ -84,7 +87,9 @@ _DEFANG = [(re.compile(r"\[\.\]|\(\.\)|\{\.\}|\[dot\]", re.I), "."), (re.compile
 def normalize(text: str) -> str:
     """The text as the model read it (NFKC), with Unicode spaces and dashes made plain and soft
     hyphens or zero-width characters removed, so "085 111 2233" with no-break spaces is a phone."""
-    text = unicodedata.normalize("NFKC", text or "")
+    # Vulgar fractions first: NFKC would turn "1½" into "11⁄2".
+    text = _FRACTION.sub(lambda m: (m.group(1) or "0") + _FRACTIONS[m.group(2)], text or "")
+    text = unicodedata.normalize("NFKC", text)
     text = _INVISIBLE.sub("", _DASHES.sub("-", _SPACES.sub(" ", text)))
     for rx, plain in _DEFANG:  # defanged indicators ("10[.]0[.]0[.]1", "hxxps://") are the same value
         text = rx.sub(plain, text)
@@ -231,6 +236,12 @@ def extract(text: str, passage: bool = False) -> list[Value]:
                     bounds += [Value("duration", f"{lo:g}", raw, a), Value("duration", f"{hi:g}", raw, a)]
                 taken.append((a, b))
                 continue
+            elif kind == "trange":  # "9-11 PM": two times, both with the half of the day
+                half = m.group(3).lower()
+                for h in (int(m.group(1)), int(m.group(2))):
+                    out.append(Value("time", f"{h % 12 + (12 if half == 'p' else 0)}:00", raw.strip(), a))
+                taken.append((a, b))
+                continue
             elif kind == "hm":
                 kind, key = "duration", f"{int(m.group(1)) * 3600 + int(m.group(2)) * 60:g}"
             elif kind == "ip":
@@ -272,6 +283,16 @@ def _distance(a: str, b: str) -> int:
 
 def _same(a: Value, b: Value) -> bool:
     """Whether `a` (from the answer) states the value `b` (from a passage)."""
+    if a.kind == "number":
+        # A plain number in the answer matches the same number written as a number, an event ID, a
+        # port or an extension in the passage ("4625" for "Event ID 4625"); never digits taken from
+        # inside a phone, an address or a hash.
+        return b.kind in ("number", "event", "port", "extension") and b.key == a.key
+    if {a.kind, b.kind} == {"duration", "time"}:
+        # "21h" is a clock time too: it matches 21:00.
+        d, t = (a, b) if a.kind == "duration" else (b, a)
+        m = re.fullmatch(r"(\d{1,2})\s*h", d.text.strip(), re.I)
+        return bool(m) and int(m.group(1)) < 24 and t.key == f"{int(m.group(1))}:00"
     if a.kind != b.kind:
         return False
     if a.kind == "phone":

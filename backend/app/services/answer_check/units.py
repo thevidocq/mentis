@@ -1,7 +1,8 @@
 """Statements of an answer: the units both checks work on.
 
 Every line the analyst sees becomes a unit, so nothing shown escapes the check:
-- a list item or a paragraph line, split at sentence ends; a heading (`#` or a bold line);
+- a paragraph (its lines joined, as the chat shows them) or a list item, split at sentence ends; a
+  heading (`#` to `###`, or a bold line standing alone);
 - a code block (fenced with three backticks), as one unit: commands are what analysts copy;
 - a table row, as one unit (the header row is an introduction).
 Blocks are recognised exactly as the chat renders them (components/Markdown.tsx): a code block opens
@@ -20,7 +21,6 @@ import re
 from dataclasses import dataclass, field
 
 _CITE = re.compile(r"\[(\d{1,3})\]")
-_LIST = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
 _NUMBERED = re.compile(r"^\s*\d+[.)]\s+")
 _BOLD_LINE = re.compile(r"^\*\*[^*]+\*\*\s*(?:\[\d{1,3}\]\s*)*:?\s*$")
 _SENT = re.compile(r"(?<=[.!?])\s+(?=[A-ZÀ-ÖØ-Þ*\"“(])")
@@ -46,16 +46,14 @@ class Unit:
 
 _BOLD = re.compile(r"\*\*(?=\S)(.+?)(?<=\S)\*\*")
 _EM_STAR = re.compile(r"(?<![\w*])\*(?=[^\s*])(.+?)(?<=[^\s*])\*(?![\w*])")
-_EM_UNDER = re.compile(r"(?<![\w_])_(?=[^\s_])(.+?)(?<=[^\s_])_(?![\w_])")
 
 
 def plain(md: str) -> str:
-    """The text as the analyst reads it: citations and paired Markdown markers removed, nothing else
-    ("svc_backup", "*.exe" and paths keep their characters)."""
+    """The text as the analyst reads it: citations and the Markdown markers the chat renders removed
+    (bold, *italic*, inline code), nothing else ("_x_", "svc_backup", "*.exe" and paths keep theirs)."""
     text = re.sub(r"^\s*#{1,6}\s+", "", _CITE.sub("", md))
     text = _BOLD.sub(r"\1", text)
     text = _EM_STAR.sub(r"\1", text)
-    text = _EM_UNDER.sub(r"\1", text)
     text = text.replace("`", "")
     return re.sub(r"\s+", " ", text).strip()
 
@@ -69,12 +67,24 @@ class _Line:
     table: int = -1  # the table a row belongs to
 
 
+_HEADING = re.compile(r"^(#{1,3})\s+\S")                 # the chat's headings: # to ###
+_ITEM = re.compile(r"^\s*(?:-|\d+\.)\s+")                 # the chat's list items: "-" and "1."
+_PARA_STOP = re.compile(r"^(?:#|>|```|\s*\||\s*(?:-|\d+\.)\s)")  # a line that ends a paragraph
+
+
 def _lines(answer: str) -> list[_Line]:
+    """The answer's blocks as the chat builds them (components/Markdown.tsx): a paragraph joins its
+    lines with a space, and so does a ">" note, so "Do not\nisolate the host" is one statement, as
+    the analyst reads it; list items, headings, code blocks and table rows are lines of their own."""
     out: list[_Line] = []
     rows = answer.replace("\r", "").split("\n")
     i, table, in_table, head = 0, -1, False, False
     while i < len(rows):
         line = rows[i]
+        if not line.strip():
+            i += 1
+            in_table = False
+            continue
         if line.startswith("```"):  # the chat's code block: up to the next line starting with ```
             code = []
             i += 1
@@ -87,14 +97,10 @@ def _lines(answer: str) -> list[_Line]:
                 out.append(_Line(body, 0, "code", []))
             in_table = False
             continue
-        i += 1
-        if not line.strip():
-            in_table = False
-            continue
         if _ROW.match(line):
             if not in_table:
-                table, in_table = table + 1, True
-                head = True
+                table, in_table, head = table + 1, True, True
+            i += 1
             if _SEPARATOR.match(line):
                 out.append(_Line(line.strip(), 0, "skip", [], table))
                 continue
@@ -103,15 +109,36 @@ def _lines(answer: str) -> list[_Line]:
             head = False
             continue
         in_table = False
-        indent = len(line) - len(line.lstrip())
-        text = _LIST.sub("", line).strip()
-        if _LIST.match(line):
+        if _HEADING.match(line):
+            text = line.strip()
+            out.append(_Line(text, 0, "heading", [int(n) for n in _CITE.findall(text)]))
+            i += 1
+            continue
+        if line.startswith(">"):
+            note = []
+            while i < len(rows) and rows[i].startswith(">"):
+                note.append(re.sub(r"^>\s?", "", rows[i]))
+                i += 1
+            text = " ".join(note).strip()
+            if text:
+                out.append(_Line(text, 0, "para", [int(n) for n in _CITE.findall(text)]))
+            continue
+        if _ITEM.match(line) or (re.match(r"^ {4}\S", line) and out and out[-1].kind in ("numbered", "bullet")):
+            indent = len(line) - len(line.lstrip())
+            text = _ITEM.sub("", line).strip()
             kind = "numbered" if _NUMBERED.match(line) else "bullet"
-        elif text.startswith("#") or _BOLD_LINE.match(text):
-            kind = "heading"
-        else:
-            kind = "para"
-        out.append(_Line(text, indent, kind, [int(n) for n in _CITE.findall(text)]))
+            out.append(_Line(text, indent, kind, [int(n) for n in _CITE.findall(text)]))
+            i += 1
+            continue
+        # A paragraph: this line and the next ones up to a blank line or another block, joined.
+        para = [line.strip()]
+        i += 1
+        while i < len(rows) and rows[i].strip() and not _PARA_STOP.match(rows[i]):
+            para.append(rows[i].strip())
+            i += 1
+        text = " ".join(para)
+        kind = "heading" if len(para) == 1 and _BOLD_LINE.match(text) else "para"
+        out.append(_Line(text, len(line) - len(line.lstrip()), kind, [int(n) for n in _CITE.findall(text)]))
     return out
 
 
@@ -151,9 +178,17 @@ def _level(text: str) -> int:
     return len(text) - len(text.lstrip("#"))
 
 
-def _row_text(line: str) -> str:
-    """A table row as one statement: "Primary | Laura Bianchi | +39 085 444 5566"."""
-    return " | ".join(c.strip() for c in line.strip().strip("|").split("|"))
+def _cells(line: str) -> list[str]:
+    return [c.strip() for c in line.strip().strip("|").split("|")]
+
+
+def _row_text(line: str, header: list[str] | None = None) -> str:
+    """A table row as one statement, each cell with its column name when the header has as many
+    cells ("Role: Primary | Contact: Laura Bianchi"): checked in any group, it keeps its meaning."""
+    cells = _cells(line)
+    if header and len(header) == len(cells):
+        return " | ".join(f"{_CITE.sub('', h).strip()}: {c}" if _CITE.sub("", h).strip() else c for h, c in zip(header, cells))
+    return " | ".join(cells)
 
 
 def split(answer: str) -> list[Unit]:
@@ -178,6 +213,7 @@ def split(answer: str) -> list[Unit]:
     # Code and table rows citing nothing (not even through their lead line): checked against every
     # passage the answer cites, as their values must come from somewhere the analyst can open.
     answer_cites = sorted({n for line in lines for n in line.cites})
+    headers = {line.table: _cells(line.text) for line in lines if line.kind == "rowhead"}
     units: list[Unit] = []
     for i, line in enumerate(lines):
         if line.kind == "skip":
@@ -186,8 +222,8 @@ def split(answer: str) -> list[Unit]:
             units.append(Unit(raw=line.text, cites=list(effective[i] or answer_cites), inherited=True, text=line.text, block="code"))
             continue
         if line.kind in ("row", "rowhead"):
-            raw = _CITE.sub("", _row_text(line.text)).strip()
-            if len(plain(raw).replace("|", "").strip()) < 2:
+            raw = _CITE.sub("", _row_text(line.text, headers.get(line.table) if line.kind == "row" else None)).strip()
+            if not re.search(r"[^\W_]", plain(raw)):
                 continue
             if line.kind == "rowhead":
                 scope = sorted(tables.get(line.table, ()) | set(effective[i])) or answer_cites
@@ -210,7 +246,7 @@ def split(answer: str) -> list[Unit]:
                 # The whole line hangs from a cited parent. A sentence of a cited line without its own
                 # citation does not borrow the others': it is uncited (level 2 still reads it).
                 cites, inherited = list(effective[i]), True
-            if len(plain(raw)) >= 2:
+            if re.search(r"[^\W_]", plain(raw)):  # anything with a letter or digit ("3", "Y")
                 scope = sorted(below.get(i, ())) if intro and not cites else []
                 # As written (a citation in the middle kept), up to its closing citations: found
                 # verbatim in the answer, so the chat can mark a value inside this statement.
