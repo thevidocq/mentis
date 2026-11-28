@@ -10,7 +10,7 @@ from app.models import Chat, Tenant, User
 from app.services import llm
 from app.services.integrations import planner, tool_loop
 from app.services.integrations.instances import IntegrationFailed, for_chat, run
-from app.services.integrations.passages import IntegrationPassage, to_passages
+from app.services.integrations.passages import IntegrationPassage, nothing_found, to_passages
 from app.services.logs import log_event
 
 _log = logging.getLogger("mentis.integrations")
@@ -120,8 +120,7 @@ def _standard(db, chat, tenant, actor, question, context, items, primary, fallba
             out.notes.append(e.public)
             continue
         if not records:
-            what = ", ".join(call.args.values())
-            out.notes.append(f"{call.connector.manifest.label} ({call.integration.name}): nothing found for {what}"[:200])
+            out.notes.append(nothing_found(call.connector.manifest.label, call.integration.name, call.operation, call.args))
         out.passages += to_passages(tenant, call.integration, call.connector, records)
     _cap(out)
     out.notes = list(dict.fromkeys(out.notes))

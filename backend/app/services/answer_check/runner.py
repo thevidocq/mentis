@@ -58,8 +58,12 @@ def _unchecked(verdict) -> dict:
 
 
 def _problem(issue: dict) -> str:
-    """One issue as the model should read it, with the reason, so the second answer fixes it."""
-    kind, text = issue.get("kind"), issue.get("text") or ""
+    """One issue as the model should read it, with the reason, so the second answer fixes it. The
+    quoted text comes from the draft and the checker: neutralised like passages (prompts.data_text)."""
+    from app.services.prompts import data_text
+
+    kind, text = issue.get("kind"), data_text(issue.get("text") or "")
+    issue = {**issue, "reason": data_text(issue["reason"]) if issue.get("reason") else issue.get("reason")}
     if kind == "value":
         return f'the value "{text}" is not in the passages it cites'
     if kind == "uncited":
