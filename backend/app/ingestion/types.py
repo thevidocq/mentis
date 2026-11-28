@@ -34,6 +34,7 @@ class ExtractedPage:
 class ParseResult:
     pages: list[ExtractedPage]
     warnings: list[str] = field(default_factory=list)
+    chunks: list | None = None  # set by parse_isolated: chunked in the child too, under its limits
 
     def stats(self) -> dict:
         return {

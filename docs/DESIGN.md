@@ -123,7 +123,7 @@ Uploads run as background jobs; a new version reaches answers only once indexed 
 - Tabs **Preview** (the original page: PDF page image or the PNG/JPEG picture; for the other formats the text read) and **Text read** (the extracted text, with how it was read), one page at a time.
 - Per-page quality flags: native text vs OCR, OCR confidence, tables found, empty or unreadable pages.
 - "Test a question" box scoped to that version (works on pending versions too), showing the passages Mentis would use and their match score.
-- Optional per-tenant approval: the new version stays inactive until the admin approves it.
+- Optional per-tenant approval: the new version stays inactive until the admin approves it. Setting `approval_by_another` (off by default, tenant admins and super-admins, also on the General Knowledge Base): the person who uploaded a version cannot approve it (409), only reject it; a self-approval allowed by the setting is logged as a warning (`document.version_approved`, `self_approved`).
 
 **Versioning**
 

@@ -5,11 +5,12 @@ import { useCurrentTenant } from "../../auth/currentTenant";
 import { PageHead } from "../../layouts/AdminShell";
 import { IntegrationModeForm } from "../integrations/IntegrationModeForm";
 
-type Flag = "include_general" | "require_approval" | "suggested_followups";
+type Flag = "include_general" | "require_approval" | "approval_by_another" | "suggested_followups";
 
 const OPTIONS: { key: Flag; label: string; help: string }[] = [
   { key: "include_general", label: "Include the General Knowledge Base", help: "Answers also use the general knowledge shared by all customers. Your own procedures win on conflict." },
   { key: "require_approval", label: "Approve new document versions before publishing", help: "A new version stays inactive until an admin approves it in the preview." },
+  { key: "approval_by_another", label: "Approval by another person", help: "A version waiting for approval is approved by someone other than the person who uploaded it (they can still reject it)." },
   { key: "suggested_followups", label: "Suggested follow-up questions", help: "Show 2–3 clickable questions under each answer." },
 ];
 
@@ -40,6 +41,17 @@ export function TenantSettings() {
       <div className="page-body narrow">
         {error && <div className="error">{error}</div>}
         {current?.is_general && <div className="notice">The General Knowledge Base is shared by all customers: its documents always need approval, and the other settings apply to customers.</div>}
+        {tenant && current?.is_general && (
+          <div className="card">
+            <div className="card-head"><h2>{tenant.name}</h2></div>
+            <div className="card-body stack">
+              <div>
+                <label className="check"><input type="checkbox" checked={!!tenant.settings.approval_by_another} onChange={(e) => toggle("approval_by_another", e.target.checked)} /> Approval by another person</label>
+                <div className="muted small" style={{ marginLeft: 28 }}>A new version is approved by someone other than the person who uploaded it (they can still reject it). Recommended when more than one person manages the General Knowledge Base: its documents reach every customer's answers.</div>
+              </div>
+            </div>
+          </div>
+        )}
         {tenant && !current?.is_general && (
           <div className="card">
             <div className="card-head"><h2>{tenant.name}</h2></div>

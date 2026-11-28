@@ -135,7 +135,7 @@ Embeddings: the `embeddings` container runs BAAI/bge-m3 (Hugging Face TEI, CPU).
 
 More workers in parallel: `MENTIS_WORKER_REPLICAS=3` in `.env`, then `docker compose up -d`.
 
-Each document is read in a child process limited to `MENTIS_PARSE_MEMORY_MB` (default 2048; 0 = no limit, standard readers only) and `MENTIS_PARSE_CPU_SECONDS` (default 1500): a damaged or crafted file fails on its own with a clear message instead of exhausting the worker shared by every customer. Readers also cap the text they produce (5 M characters per Word file or web page, 5,000 rows per table, tables nested 5 deep).
+Each document is read, and cut into passages, in a child process limited to `MENTIS_PARSE_MEMORY_MB` (default 2048; 0 = no limit, standard readers only) and `MENTIS_PARSE_CPU_SECONDS` (default 1500): a damaged or crafted file fails on its own with a clear message instead of exhausting the worker shared by every customer. The child runs in a process group of its own, killed whole when it ends or the job times out, so OCR programs never outlive it; `MENTIS_OCR_TIMEOUT_SECONDS` (default 600) limits the OCR of one picture. Readers also cap the text they produce (5 M characters per Word file or web page, 5,000 rows per table, tables nested 5 deep).
 
 Parser: `MENTIS_PARSER=standard` (default). Docling reads PDF and Office files only; Markdown, JSON, CSV, YAML and pictures always use the standard readers. To try Docling in the lab, set `MENTIS_PARSER=docling` and `MENTIS_PARSER_EXTRAS=worker,docling` in `.env`, then `docker compose up -d --build worker` (large download: PyTorch and models).
 

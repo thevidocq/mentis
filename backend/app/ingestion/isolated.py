@@ -2,8 +2,11 @@
 
 Documents come from customers and from the web: a crafted or broken file must fail on its own,
 never exhaust the memory of the worker shared by every customer (and crash it again at each
-retry). The child is forked (Linux), gets an address-space limit (standard parsers only: Docling's
-ML runtime reserves large virtual areas) and a CPU-time limit, parses, and sends the result back.
+retry). The child is forked (Linux) in a process group of its own, gets an address-space limit
+(standard parsers only: Docling's ML runtime reserves large virtual areas) and a CPU-time limit,
+parses, cuts the pages into chunks (also under those limits) and sends the result back. When it
+ends, its whole process group is killed, so programs it started (Tesseract) never outlive it, also
+when the job times out.
 
 MENTIS_PARSE_MEMORY_MB (default 2048, 0 = no limit) and MENTIS_PARSE_CPU_SECONDS (default 1500)
 tune the limits; MENTIS_PARSE_ISOLATION=0 parses in the worker process itself.
@@ -11,7 +14,9 @@ tune the limits; MENTIS_PARSE_ISOLATION=0 parses in the worker process itself.
 
 import multiprocessing
 import os
+import pickle
 import resource
+import signal
 
 from app.ingestion.types import ParseLimits, ParseResult
 
@@ -29,13 +34,19 @@ def _env_int(name: str, default: int) -> int:
 
 def _child(conn, data: bytes, file_type: str, limits: ParseLimits, parser: str, memory_mb: int, cpu_s: int) -> None:
     from app.ingestion import parse
+    from app.ingestion.chunking import chunk_pages
 
+    try:
+        os.setsid()  # a process group of its own: the parent kills it whole (OCR programs included)
+    except OSError:
+        pass
     try:
         if memory_mb and parser != "docling":
             resource.setrlimit(resource.RLIMIT_AS, (memory_mb * 1024 * 1024, memory_mb * 1024 * 1024))
         if cpu_s and parser != "docling":  # Docling's threads add up CPU time: the job timeout applies
             resource.setrlimit(resource.RLIMIT_CPU, (cpu_s, cpu_s + 5))
         result = parse(data, file_type, limits, parser=parser)
+        result.chunks = chunk_pages(result.pages)
         conn.send(("ok", result))
     except MemoryError:
         conn.send(("limit", None))
@@ -48,11 +59,24 @@ def _child(conn, data: bytes, file_type: str, limits: ParseLimits, parser: str, 
         conn.close()
 
 
+def _kill_group(pid: int | None) -> None:
+    if not pid:
+        return
+    try:
+        os.killpg(pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError, OSError):
+        pass
+
+
 def parse_isolated(data: bytes, file_type: str, limits: ParseLimits, parser: str = "standard") -> ParseResult:
     from app.ingestion import parse
 
     if os.getenv("MENTIS_PARSE_ISOLATION", "1") == "0":
-        return parse(data, file_type, limits, parser=parser)
+        from app.ingestion.chunking import chunk_pages
+
+        result = parse(data, file_type, limits, parser=parser)
+        result.chunks = chunk_pages(result.pages)
+        return result
     memory_mb = _env_int("MENTIS_PARSE_MEMORY_MB", 2048)
     cpu_s = _env_int("MENTIS_PARSE_CPU_SECONDS", 1500)
     ctx = multiprocessing.get_context("fork")
@@ -65,13 +89,18 @@ def parse_isolated(data: bytes, file_type: str, limits: ParseLimits, parser: str
         status, payload = parent.recv()  # EOFError when the child was killed (memory, CPU)
     except EOFError:
         status, payload = "limit", None
-    except Exception:  # noqa: BLE001 - a reply that cannot be read back (an odd exception type)
+    except (OSError, pickle.UnpicklingError, AttributeError, ImportError, TypeError):
+        # A reply that cannot be read back (an odd exception type). Anything else, such as the job
+        # timeout raised in this process, is not about the file: it goes up unchanged.
         status, payload = "error", ValueError("The file could not be read.")
     finally:
         parent.close()
+        if proc.is_alive():
+            _kill_group(proc.pid)
         proc.join(10)
         if proc.is_alive():
             proc.kill()
+        _kill_group(proc.pid)  # what the child started and left running
     if status == "ok":
         return payload
     if status == "error":

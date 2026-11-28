@@ -69,7 +69,7 @@ def ingest_version(version_id: str) -> None:
                 label=page.label, text=page.text, method=page.method, ocr_confidence=page.ocr_confidence,
                 tables=page.tables, image_key=image_key, flags=page.flags,
             ))
-        for i, c in enumerate(chunk_pages(result.pages)):
+        for i, c in enumerate(result.chunks if result.chunks is not None else chunk_pages(result.pages)):
             db.add(Chunk(version_id=version.id, tenant_id=version.tenant_id, ordinal=i, page_index=c.page_index,
                          heading=c.heading, text=c.text, chars=len(c.text)))
 
@@ -285,7 +285,8 @@ def _reprocess_version(db, version_id, cfg: dict) -> None:
                            label=page.label, text=page.text, method=page.method, ocr_confidence=page.ocr_confidence,
                            tables=page.tables, image_key=image_key, flags=page.flags))
     new = [Chunk(version_id=version.id, tenant_id=version.tenant_id, ordinal=i, page_index=c.page_index,
-                 heading=c.heading, text=c.text, chars=len(c.text)) for i, c in enumerate(chunk_pages(result.pages))]
+                 heading=c.heading, text=c.text, chars=len(c.text))
+           for i, c in enumerate(result.chunks if result.chunks is not None else chunk_pages(result.pages))]
     db.add_all(new)
     db.flush()
     vectors = embeddings.embed(cfg, [indexing.chunk_text_for_embedding(c) for c in new])

@@ -67,9 +67,17 @@ def on_ready(db: Session, version: DocumentVersion) -> None:
             version.is_active = False
 
 
+SELF_APPROVAL = ("This version must be approved by someone other than the person who uploaded it. "
+                 "A tenant admin or super-admin can change this in Settings (Approval by another person).")
+
+
 def approve(db: Session, version: DocumentVersion, reviewer_id) -> None:
     if version.approval != Approval.PENDING:
         raise VersionError("This version is not waiting for approval.")
+    tenant = db.get(Tenant, version.tenant_id)
+    four_eyes = bool((tenant.settings or {}).get("approval_by_another")) if tenant else False
+    if four_eyes and version.uploaded_by is not None and version.uploaded_by == reviewer_id:
+        raise VersionError(SELF_APPROVAL)
     version.approval = Approval.APPROVED
     version.reviewed_by, version.reviewed_at = reviewer_id, utcnow()
     activate(db, version)

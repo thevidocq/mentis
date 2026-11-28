@@ -1,5 +1,7 @@
 """OCR with Tesseract: text plus mean word confidence (0..1)."""
 
+import os
+
 from PIL import Image
 
 
@@ -16,7 +18,17 @@ def ocr_image(image: Image.Image, languages: str) -> tuple[str, float | None]:
             ratio = (MAX_OCR_PIXELS / (image.width * image.height)) ** 0.5
             image = image.resize((max(1, int(image.width * ratio)), max(1, int(image.height * ratio))))
 
-    data = pytesseract.image_to_data(image.convert("L"), lang=languages, output_type=pytesseract.Output.DICT)
+    try:
+        timeout = max(int(os.getenv("MENTIS_OCR_TIMEOUT_SECONDS", "600")), 0)
+    except ValueError:
+        timeout = 600
+    try:  # one picture may not hold the worker for ever (Tesseract is killed after the timeout)
+        data = pytesseract.image_to_data(image.convert("L"), lang=languages, output_type=pytesseract.Output.DICT,
+                                         timeout=timeout)
+    except RuntimeError as e:
+        if "timeout" in str(e).lower():
+            raise ValueError(f"OCR of a picture took longer than {timeout} s: the file was not read.") from None
+        raise
     lines: dict[tuple, list[str]] = {}
     confidences: list[float] = []
     for i, word in enumerate(data["text"]):
