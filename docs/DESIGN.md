@@ -269,6 +269,7 @@ All eight are in 0.1.0.
 - `#` integrations: SIEM (Microsoft Sentinel, Splunk) and SentinelOne; follow-up chips that pre-select an integration.
 - Daybreak Blue once access is approved.
 - SSO/OIDC.
+- Bulk approval in Documents: select all or some of the versions waiting for approval (checkboxes, "select all") and approve or reject them together; each version keeps its own audit entry and the *Approval by another person* rule.
 
 **Backlog**
 

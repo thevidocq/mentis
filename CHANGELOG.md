@@ -6,6 +6,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Changed
+- Roadmap: bulk approval of document versions (DESIGN, Next).
+
 ## [0.6.3] - 2026-11-28
 
 ### Security
