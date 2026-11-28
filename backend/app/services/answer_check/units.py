@@ -1,12 +1,19 @@
 """Statements of an answer: the units both checks work on.
 
-A unit is a line of the answer (a list item, a paragraph line) split at sentence ends. Each keeps
-its raw Markdown (to find it again in the text for highlighting) and the passage numbers it cites.
+Every line the analyst sees becomes a unit, so nothing shown escapes the check:
+- a list item or a paragraph line, split at sentence ends; a heading (`#` or a bold line);
+- a code block (fenced with three backticks), as one unit: commands are what analysts copy;
+- a table row, as one unit (the header row is an introduction).
+Blocks are recognised exactly as the chat renders them (components/Markdown.tsx): a code block opens
+and closes on a line starting with three backticks; a table row starts and ends with "|". Text the
+chat shows as prose (a "~~~" line, an indented fence, "| a" without a closing pipe) is checked as prose.
 
-A list item without a citation takes the citations of its parent: the item it is nested under, the
-heading above it, or the line introducing the list ("The procedure is [2]:"). So "2. True positive [2]"
-followed by three bullets cites [2] for each bullet, and both checks verify them against passage 2.
-A line with nested items under it is a heading (intro), not a statement to cite.
+Each unit keeps its raw Markdown (to find it again in the text for highlighting) and the passage
+numbers it cites. A unit without a citation takes the citations of its parent: the item it is nested
+under, the heading or lead line above it ("The procedure is [2]:"), or the lead line of a code block
+or a table (else the other rows of its table, else every passage the answer cites). A sentence of a
+cited line without its own citation stays uncited. A line with items, code or a table under it is an
+introduction ("intro"): checked for the facts it states, against the passages its items cite.
 """
 
 import re
@@ -17,25 +24,39 @@ _LIST = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
 _NUMBERED = re.compile(r"^\s*\d+[.)]\s+")
 _BOLD_LINE = re.compile(r"^\*\*[^*]+\*\*\s*(?:\[\d{1,3}\]\s*)*:?\s*$")
 _SENT = re.compile(r"(?<=[.!?])\s+(?=[A-ZÀ-ÖØ-Þ*\"“(])")
+_ROW = re.compile(r"^\s*\|.*\|\s*$")            # as the chat: starts and ends with a pipe
+_SEPARATOR = re.compile(r"^\s*\|[\s\-:|]+\|\s*$")
+BLOCKS = ("code", "row", "rowhead", "skip")    # lines that are not prose
 
 
 @dataclass
 class Unit:
     raw: str                 # Markdown as in the answer, citations removed from the end
     cites: list[int] = field(default_factory=list)
-    intro: bool = False      # ends with ":" ("For Acme:", "The procedure is:") or heads nested items
+    intro: bool = False      # heads nested items, a code block or a table
     inherited: bool = False  # cites are its parent's (a list item under a cited item or heading)
     scope: list[int] = field(default_factory=list)  # an uncited intro: the passages its items cite
     text: str = ""           # the statement as written in the answer, citations inside it kept
+    block: str = ""          # "code" | "row" | "" (prose)
 
     @property
     def plain(self) -> str:
-        return plain(self.raw)
+        return self.raw if self.block == "code" else plain(self.raw)
+
+
+_BOLD = re.compile(r"\*\*(?=\S)(.+?)(?<=\S)\*\*")
+_EM_STAR = re.compile(r"(?<![\w*])\*(?=[^\s*])(.+?)(?<=[^\s*])\*(?![\w*])")
+_EM_UNDER = re.compile(r"(?<![\w_])_(?=[^\s_])(.+?)(?<=[^\s_])_(?![\w_])")
 
 
 def plain(md: str) -> str:
-    text = _CITE.sub("", md)
-    text = re.sub(r"[*_`]", "", text)
+    """The text as the analyst reads it: citations and paired Markdown markers removed, nothing else
+    ("svc_backup", "*.exe" and paths keep their characters)."""
+    text = re.sub(r"^\s*#{1,6}\s+", "", _CITE.sub("", md))
+    text = _BOLD.sub(r"\1", text)
+    text = _EM_STAR.sub(r"\1", text)
+    text = _EM_UNDER.sub(r"\1", text)
+    text = text.replace("`", "")
     return re.sub(r"\s+", " ", text).strip()
 
 
@@ -43,35 +64,51 @@ def plain(md: str) -> str:
 class _Line:
     text: str        # without list marker, stripped
     indent: int
-    kind: str        # "heading" | "numbered" | "bullet" | "para" | "skip"
+    kind: str        # "heading" | "numbered" | "bullet" | "para" | "code" | "row" | "rowhead" | "skip"
     cites: list[int]
-
-
-_FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
+    table: int = -1  # the table a row belongs to
 
 
 def _lines(answer: str) -> list[_Line]:
-    out = []
-    fence = None  # the fence of the code block we are in: its lines are code, not statements
-    for line in answer.splitlines():
+    out: list[_Line] = []
+    rows = answer.replace("\r", "").split("\n")
+    i, table, in_table, head = 0, -1, False, False
+    while i < len(rows):
+        line = rows[i]
+        if line.startswith("```"):  # the chat's code block: up to the next line starting with ```
+            code = []
+            i += 1
+            while i < len(rows) and not rows[i].startswith("```"):
+                code.append(rows[i])
+                i += 1
+            i += 1
+            body = "\n".join(c.rstrip() for c in code).strip("\n")
+            if body.strip():
+                out.append(_Line(body, 0, "code", []))
+            in_table = False
+            continue
+        i += 1
         if not line.strip():
+            in_table = False
             continue
-        m = _FENCE.match(line)
-        if fence is not None or m:
-            if fence is None:
-                fence = m.group(1)
-            elif m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence) and not line.strip()[len(m.group(1)):].strip():
-                fence = None
-            out.append(_Line(line.strip(), 0, "skip", []))
+        if _ROW.match(line):
+            if not in_table:
+                table, in_table = table + 1, True
+                head = True
+            if _SEPARATOR.match(line):
+                out.append(_Line(line.strip(), 0, "skip", [], table))
+                continue
+            text = line.strip()
+            out.append(_Line(text, 0, "rowhead" if head else "row", [int(n) for n in _CITE.findall(text)], table))
+            head = False
             continue
+        in_table = False
         indent = len(line) - len(line.lstrip())
         text = _LIST.sub("", line).strip()
         if _LIST.match(line):
             kind = "numbered" if _NUMBERED.match(line) else "bullet"
         elif text.startswith("#") or _BOLD_LINE.match(text):
             kind = "heading"
-        elif text.startswith(("|", "```")):
-            kind = "skip"
         else:
             kind = "para"
         out.append(_Line(text, indent, kind, [int(n) for n in _CITE.findall(text)]))
@@ -79,9 +116,15 @@ def _lines(answer: str) -> list[_Line]:
 
 
 def _parent(lines: list[_Line], i: int) -> int | None:
-    """The line a list item hangs from, if any: a less indented item (or a numbered item above a
-    bullet at the same indent), the heading above, or a lead line ending with ":"."""
+    """The line a unit hangs from, if any: a less indented item (or a numbered item above a bullet
+    at the same indent), the heading above, a lead line ending with ":", or, for a code block or a
+    table, the prose line right above it."""
     cur = lines[i]
+    if cur.kind in ("code", "row", "rowhead", "skip"):
+        j = i - 1
+        while j >= 0 and cur.table >= 0 and lines[j].table == cur.table:
+            j -= 1
+        return j if j >= 0 and lines[j].kind not in BLOCKS else None
     for j in range(i - 1, -1, -1):
         r = lines[j]
         if cur.kind == "heading":
@@ -92,7 +135,7 @@ def _parent(lines: list[_Line], i: int) -> int | None:
             continue
         if r.kind == "heading":
             return j
-        if r.kind == "skip":
+        if r.kind in BLOCKS:
             return None
         if cur.kind == "para":  # a paragraph hangs only from a heading right above it
             return None
@@ -108,45 +151,71 @@ def _level(text: str) -> int:
     return len(text) - len(text.lstrip("#"))
 
 
-def table_rows(answer: str) -> list[tuple[str, list[int]]]:
-    """Table rows outside code blocks (not the |---| separator), with their citations."""
-    return [(line.text, line.cites) for line in _lines(answer)
-            if line.kind == "skip" and line.text.startswith("|") and not re.fullmatch(r"[|:\s-]+", line.text)]
+def _row_text(line: str) -> str:
+    """A table row as one statement: "Primary | Laura Bianchi | +39 085 444 5566"."""
+    return " | ".join(c.strip() for c in line.strip().strip("|").split("|"))
 
 
 def split(answer: str) -> list[Unit]:
     lines = _lines(answer)
     parents = [_parent(lines, i) for i in range(len(lines))]
     heads = {p for p in parents if p is not None}
+    tables: dict[int, set[int]] = {}  # a table: every passage its rows cite
+    for line in lines:
+        if line.table >= 0:
+            tables.setdefault(line.table, set()).update(line.cites)
     effective: list[list[int]] = []  # each line's own citations, or its parent's
     for i, line in enumerate(lines):
         p = parents[i]
-        effective.append(line.cites or (effective[p] if p is not None else []))
+        inherited = effective[p] if p is not None else []
+        if line.kind == "row" and not line.cites:
+            inherited = sorted(tables.get(line.table, ())) or inherited
+        effective.append(line.cites or inherited)
     below: dict[int, set[int]] = {}  # a head line: the passages its items cite (checked in its place)
     for i, p in enumerate(parents):
         if p is not None:
             below.setdefault(p, set()).update(effective[i])
+    # Code and table rows citing nothing (not even through their lead line): checked against every
+    # passage the answer cites, as their values must come from somewhere the analyst can open.
+    answer_cites = sorted({n for line in lines for n in line.cites})
     units: list[Unit] = []
     for i, line in enumerate(lines):
-        if line.kind == "skip" or line.text.startswith("#") and not line.cites:
+        if line.kind == "skip":
             continue
-        own_line = bool(line.cites)
-        for part in _SENT.split(line.text):
+        if line.kind == "code":
+            units.append(Unit(raw=line.text, cites=list(effective[i] or answer_cites), inherited=True, text=line.text, block="code"))
+            continue
+        if line.kind in ("row", "rowhead"):
+            raw = _CITE.sub("", _row_text(line.text)).strip()
+            if len(plain(raw).replace("|", "").strip()) < 2:
+                continue
+            if line.kind == "rowhead":
+                scope = sorted(tables.get(line.table, ()) | set(effective[i])) or answer_cites
+                units.append(Unit(raw=raw, cites=list(line.cites), intro=True, scope=[] if line.cites else scope,
+                                  text=line.text, block="row"))
+            else:
+                units.append(Unit(raw=raw, cites=list(effective[i] or answer_cites), inherited=not line.cites, text=line.text, block="row"))
+            continue
+        parts = _SENT.split(line.text)
+        for k, part in enumerate(parts):
             cites = [int(n) for n in _CITE.findall(part)]
             # Up to the first citation or the end, without closing punctuation: the exact text to find
             # again in the answer for highlighting ("informed by SMS [1]." -> "informed by SMS").
             raw = _CITE.split(part)[0] if _CITE.search(part) and not _CITE.sub("", part.split("[", 1)[-1]).strip(" .;:!?") else _CITE.sub("", part)
-            intro = (_CITE.sub("", part).rstrip().endswith(":") or (i in heads and not cites)
-                     or line.kind == "heading")
+            # A heading, or the last sentence of a line with items, code or a table under it.
+            intro = line.kind == "heading" or (i in heads and k == len(parts) - 1)
             raw = re.sub(r"[\s.;:!?]+$", "", raw.strip())
             inherited = False
-            if not cites and not own_line and effective[i] and line.kind in ("numbered", "bullet", "para"):
-                cites, inherited = list(effective[i]), True  # the whole line hangs from a cited parent
-            if len(plain(raw)) >= 3:
+            if not cites and not line.cites and effective[i]:
+                # The whole line hangs from a cited parent. A sentence of a cited line without its own
+                # citation does not borrow the others': it is uncited (level 2 still reads it).
+                cites, inherited = list(effective[i]), True
+            if len(plain(raw)) >= 2:
                 scope = sorted(below.get(i, ())) if intro and not cites else []
                 # As written (a citation in the middle kept), up to its closing citations: found
                 # verbatim in the answer, so the chat can mark a value inside this statement.
                 text = re.sub(r"(?:\s*\[\d{1,3}\](?!\())+[\s.;:!?]*$", "", part.strip())
                 text = re.sub(r"[\s.;:!?]+$", "", text)
-                units.append(Unit(raw=raw, cites=cites, intro=intro, inherited=inherited, scope=scope, text=text))
+                units.append(Unit(raw=raw, cites=cites, intro=intro,
+                                  inherited=inherited, scope=scope, text=text))
     return units

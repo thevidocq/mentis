@@ -40,10 +40,14 @@ def test_units_and_merge():
     us = units.split("Per **Acme**:\n\n1. Chiama Mario, +39 085 444 5656 [1].\n2. Poi Laura [1]. Apri un ticket [2].")
     assert [(u.plain, u.cites) for u in us] == [("Per Acme", []), ("Chiama Mario, +39 085 444 5656", [1]),
                                                ("Poi Laura", [1]), ("Apri un ticket", [2])]
-    l1 = [{"level": [1], "kind": "value", "text": "+39 085 444 5656"}]
-    l2 = [{"level": [2], "kind": "statement", "text": us[1].raw}, {"level": [2], "kind": "statement", "text": us[3].raw}]
+    l1 = [{"level": [1], "kind": "value", "text": "+39 085 444 5656", "statement": us[1].text}]
+    l2 = [{"level": [2], "kind": "statement", "text": u.raw, "statement": u.text} for u in (us[1], us[3])]
     merged = merge(l1, l2)
     assert merged[0]["level"] == [1, 2] and [m["text"] for m in merged[1:]] == ["Apri un ticket"]
+    # A value flagged in one statement never swallows the rejection of another (same value inside).
+    l1 = [{"level": [1], "kind": "value", "text": "5 minutes", "statement": "Notify within 5 minutes"}]
+    l2 = [{"level": [2], "kind": "statement", "text": "Isolate within 15 minutes", "statement": "Isolate within 15 minutes"}]
+    assert [m["level"] for m in merge(l1, l2)] == [[1], [2]]
 
 
 def test_list_items_take_the_citation_of_their_heading():
@@ -332,15 +336,17 @@ def test_a_crash_around_the_check_keeps_the_answer(super_admin, fake_llm, monkey
     assert ex["answer"]["status"] == "ok" and msg["check"]["level2"] == "unavailable"
 
 
-def test_sections_do_not_lend_citations_code_is_not_text_and_tables_are_checked():
+def test_sections_do_not_lend_citations_code_and_tables_are_checked():
     from app.services.answer_check import level1, units
 
     passages = {1: "Isolate hosts. Call 06 1111 2222."}
     a = "## Containment [1]\n- Isolate the host from the network\n## Communication\n- Inform the customer's CISO by phone right away"
-    assert level1(a, [{"n": 1}], passages) == [{"level": [1], "kind": "uncited", "text": "Inform the customer's CISO by phone right away"}]
+    assert [(i["kind"], i["text"]) for i in level1(a, [{"n": 1}], passages)] == [("uncited", "Inform the customer's CISO by phone right away")]
     a = "## Containment [1]\n### Network\n- Isolate the host from the network now"
-    assert [u.cites for u in units.split(a)] == [[1], [1]]  # a sub-heading still hangs from its section
-    assert level1("Steps [1]:\n```\n# list sessions\nquser /server:10.0.0.1\n```", [{"n": 1}], passages) == []
+    assert [u.cites for u in units.split(a)] == [[1], [1], [1]]  # a sub-heading still hangs from its section (and is checked)
+    # Code is what analysts copy: its values are checked against the lead line's passages.
+    issues = level1("Steps [1]:\n```\n# list sessions\nquser /server:10.0.0.1\n```", [{"n": 1}], passages)
+    assert [(i["kind"], i["text"]) for i in issues] == [("value", "10.0.0.1")]
     issues = level1("| SOC | 06 9999 0000 |\n|---|---|\nThe answer above [1].", [{"n": 1}], passages)
     assert [(i["kind"], i["text"]) for i in issues] == [("value", "06 9999 0000")]
 

@@ -50,16 +50,16 @@ A second check compares each answer with its sources. A statement that may not m
 
 Under the answer, one line sums it up:
 
-- **✓ Matches the sources**: every statement cites a source, and every value and statement was found in the passages it cites.
+- **✓ Matches the sources**: everything shown was checked (text, headings, code blocks and table rows), every statement cites a source, and every value and statement was found in the passages it cites.
 - **⚠ N statements may not match the sources: check the marked ones.**
 - **Unverified answer**: it cites no source at all.
 - **Checking…**: the check is running (a second or two); the answer is already readable.
-- **Check not available**: the check could not run; verify the sources yourself.
+- **Check not available**: the check could not run, or its reply could not be read; verify the sources yourself.
 - **N statements were not checked**: a very long answer has more statements than the check reads; verify those in the sources.
 
 For some customers an answer that does not match its sources is not shown at all: you get *Not found* with "did not match the sources".
 
-Items of a list take the citation of their heading: under "If it is a true positive [2]", each step counts as citing passage 2 and is checked against it. An answer from the **General Knowledge Base** is a normal answer, not a warning: the source is shown above it. An answer that reached the AI provider's length limit ends with a note saying it was cut: ask for the rest.
+Items of a list take the citation of their heading: under "If it is a true positive [2]", each step counts as citing passage 2 and is checked against it. A code block or a table takes the citation of the line above it. Commands in code blocks and every cell of a table are checked like the text; a problem inside a code block is listed under the answer, since the code is shown exactly as written. An answer from the **General Knowledge Base** is a normal answer, not a warning: the source is shown above it. An answer that reached the AI provider's length limit ends with a note saying it was cut: ask for the rest.
 
 > Always check the source before acting on a contact or a time. Answers come only from the documents, but the documents can be out of date.
 

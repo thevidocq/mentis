@@ -6,7 +6,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
-### Fixed
+### Security
+- **Security review of 0.6.2** (`docs/security/review-v0.6.2.md`).
+  - **Answer check covers everything shown.** Code blocks, table rows, `#` headings, bold lines and short or uncited sentences reached the analyst with "Matches the sources" without being checked. Now every line is a unit, recognised exactly as the chat renders it (a "~~~" or indented fence, or "| a" without a closing pipe, is prose, as on screen): code and rows are checked at both levels against their lead line's passages (else the table's, else the answer's); uncited statements go to level 2 marked "(no citation)" and pass only if they state no fact; "Matches the sources" needs the checker to have read at least one statement. The checker reads the text as shown (paired Markdown removed, "svc_backup" kept), as data.
+  - Level 2 verdicts are read as "S2", 2, lists, ranges ("S1-S3") or other keys ("statement"); a rejection without a readable number makes the check unavailable instead of passing. A level-2 rejection is joined only to level-1 issues of the same statement (a value flagged elsewhere hid it).
+  - Level 1 compares more values: phones in space-separated groups ("800 123 456", were read as amounts), a country code the passage does not give is an invented prefix, defanged indicators, any 30–130 character hex run, MAC addresses, URLs, domains, Windows paths, registry keys, event IDs, ports, extensions, any other number, "1h30", "45-minute", "fifteen minutes", "8 PM", ranges; "1 hour 30 minutes" = "90 min" = "1.5 hours"; bold inside a number no longer splits it.
+
 - **Test suite green again** (395 passed). The mock HTTP answers were already read when built, so `SafeHttp` (which reads the raw stream and inflates it itself) failed with `httpx.StreamConsumed` in every integration and link test since 0.4.1; `tests/http_mock.answer` builds unread streamed answers like a real server. Stale tests updated (pinned connection checked through the Host header, cut-answer note, document status under `active`).
 - **Embedding text:** a chunk that starts with its own heading no longer has that heading embedded twice (since 0.6.1 the section path was always put in front). Run **Reprocess all documents** to re-embed existing documents.
 - **YAML:** with PyYAML 6.0.4 (libyaml nesting limit) a deeply nested file is refused with "nested too deeply" again, instead of a parser message.

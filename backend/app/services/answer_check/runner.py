@@ -40,7 +40,9 @@ def _run_level2(cfg: dict | None, result) -> tuple[list[dict], str, object]:
         return [], "unavailable", None
     try:
         issues, verdict = answer_check.level2(cfg, result.content, result.passage_texts)
-        return issues, "ok", verdict
+        # "Matches the sources" needs the checker to have read the answer: with nothing it could
+        # check against, the answer is not verified.
+        return issues, "ok" if verdict.checked else "unavailable", verdict
     except llm.LLMError as e:
         _log.warning("answer check (level 2) not available: %s", e)
         return [], "unavailable", None
