@@ -8,6 +8,7 @@ import pytest
 from app.connectors import http as connector_http
 from tests import samples
 from tests.conftest import run_jobs
+from tests.http_mock import answer
 
 PAGE = b"""<html><head><title>Apache runbook</title></head><body><nav>Menu</nav>
 <main><h1>Apache CVE-2021-41773</h1><p>Call <b>Mario Rossi</b>, 085 123 4567.</p></main></body></html>"""
@@ -24,8 +25,8 @@ class Site:
         self.seen.append(request)
         status, ctype, body, headers = self.pages.get(request.url.path, (404, "text/plain", b"", {}))
         if request.headers.get("if-none-match") and request.headers["if-none-match"] == headers.get("etag"):
-            return httpx.Response(304)
-        return httpx.Response(status, headers={"content-type": ctype, **headers}, content=body)
+            return answer(304)
+        return answer(status, headers={"content-type": ctype, **headers}, content=body)
 
 
 @pytest.fixture
@@ -89,7 +90,7 @@ def test_github_file_is_read_from_raw(super_admin, site):
     site.pages["/acme/runbooks/main/web/apache.md"] = (200, "text/plain; charset=utf-8", b"# Apache\n\nIsolate the host.\n", {})
     r = _add(super_admin, t["id"], "https://github.com/acme/runbooks/blob/main/web/apache.md", check="manual")
     assert r.status_code == 201, r.text
-    assert site.seen[-1].url.host == "raw.githubusercontent.com"
+    assert site.seen[-1].headers["host"] == "raw.githubusercontent.com"  # connection pinned to the checked IP
     assert r.json()["original_filename"] == "apache.md"
 
 

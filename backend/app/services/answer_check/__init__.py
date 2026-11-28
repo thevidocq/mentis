@@ -10,7 +10,9 @@ chosen by llm_config.checker_for. Per customer (tenant settings "answer_check"):
 The result is stored on the message (ChatMessage.check):
   {"level2": "pending" | "ok" | "unavailable" | "off", "issues": [...], "checker": {"name", "model"},
    "hidden": bool, "hidden_answer": str (audit only)}
-Issues: {"level": [1] | [2] | [1, 2], "kind": "value" | "statement" | "uncited" | "no_citations", "text", "expected"?, "reason"?}
+Issues: {"level": [1] | [2] | [1, 2], "kind": "value" | "statement" | "uncited" | "no_citations", "text",
+         "statement"?, "expected"?, "reason"?}
+"level2" is "ok" only when the checker read at least one statement ("unavailable" otherwise).
 """
 
 from app.services.answer_check import judge as judge_mod
@@ -27,25 +29,22 @@ def mode_of(settings: dict | None) -> str:
     return m if m in MODES else DEFAULT_MODE
 
 
-def _substantive(u: units_mod.Unit) -> bool:
-    """A statement that must cite a source: any line with a value (contact, time, code...), or a
-    statement of at least six words that is not an introduction ("For Acme:", a list heading)."""
-    return bool(values.extract(u.raw)) or (not u.intro and len(u.plain.split()) >= 6)
-
-
 def _in(statement: str, issues: list[dict]) -> list[dict]:
-    """Value issues carry their statement, so the chat marks the value in that statement (the same
-    value may appear elsewhere in the answer, correct)."""
+    """Issues carry their statement, so the chat marks the value in that statement (the same value
+    may appear elsewhere in the answer, correct) and level 2 joins its verdict to the right one."""
     return [{**i, "statement": statement} for i in issues]
 
 
 def level1(content: str, citations: list[dict], passages: dict[int, str]) -> list[dict]:
     """Values and citations, no model.
 
-    - Each statement's values must be in the passages **that statement** cites (a value found only in
-      another passage, e.g. an attacker's ticket or another customer's document, does not count).
-    - A substantive statement without a citation is an issue ("uncited"): level 2 checks only cited
-      statements, so an uncited one would otherwise pass unchecked.
+    - Each statement's values (prose, code blocks, table rows) must be in the passages **that
+      statement** cites (a value found only in another passage, e.g. an attacker's ticket or another
+      customer's document, does not count). An uncited heading over cited items: its values must be in
+      the passages its items cite.
+    - A statement with a value, or of at least six words, and no citation is an issue ("uncited").
+      Every uncited statement also goes to level 2, which accepts it only if it states no fact of its
+      own (so "Wipe DC01." cannot pass for being short).
     - An answer with no citation at all is one issue ("no_citations").
     """
     if not citations:
@@ -55,22 +54,13 @@ def level1(content: str, citations: list[dict], passages: dict[int, str]) -> lis
         return issues
     issues: list[dict] = []
     for u in units_mod.split(content):
-        if not u.cites:
-            if u.scope and values.extract(u.raw):
-                # An uncited heading over cited items: its values must be in the passages its items cite.
-                scope = {n: passages[n] for n in u.scope if n in passages}
-                issues += _in(u.text or u.raw, values.check(u.raw, scope, list(scope.values())))
-            elif _substantive(u):
-                issues.append({"level": [1], "kind": "uncited", "text": u.raw})
-            continue
-        own = {n: passages[n] for n in u.cites if n in passages}
-        issues += _in(u.text or u.raw, values.check(u.raw, own, list(own.values())))
-    # Table rows are not statements, but their values (a phone, an address) must still come from the
-    # passages: the row's own citations, else any passage the answer cites.
-    cited_all = {c for u in units_mod.split(content) for c in u.cites} | {c for _, cs in units_mod.table_rows(content) for c in cs}
-    for row, cites in units_mod.table_rows(content):
-        scope = {n: passages[n] for n in (cites or cited_all) if n in passages}
-        issues += values.check(units_mod.plain(row), scope, list(scope.values()))
+        statement = u.text or u.raw
+        nums = u.cites or u.scope
+        if nums:
+            own = {n: passages[n] for n in nums if n in passages}
+            issues += _in(statement, values.check(u.plain, own, list(own.values())))
+        elif values.extract(u.plain) or (not u.intro and u.block != "row" and len(u.plain.split()) >= 6):
+            issues.append({"level": [1], "kind": "uncited", "text": u.raw, "statement": statement})
     out, seen = [], set()
     for i in issues:
         key = (i["kind"], i["text"], i.get("statement"))
@@ -84,16 +74,21 @@ def level2(cfg: dict, content: str, passages: dict[int, str]) -> tuple[list[dict
     """Statements the checker rejects, as issues (raises llm.LLMError when it cannot check)."""
     units = units_mod.split(content)
     verdict = judge_mod.judge(cfg, units, passages)
-    return [{"level": [2], "kind": "statement", "text": units[v["unit"]].raw, "reason": v["reason"]} for v in verdict.unsupported], verdict
+    return [{"level": [2], "kind": "statement", "text": units[v["unit"]].raw,
+             "statement": units[v["unit"]].text or units[v["unit"]].raw, "reason": v["reason"]}
+            for v in verdict.unsupported], verdict
 
 
 def merge(l1: list[dict], l2: list[dict]) -> list[dict]:
-    """A statement rejected by level 2 that holds a value already flagged by level 1 is one problem
-    found by both: the value issue becomes level [1, 2] and the statement is not repeated."""
+    """A statement rejected by level 2 that level 1 already flagged (a wrong value, no citation) is
+    one problem found by both: those issues become level [1, 2] and the statement is not repeated.
+    Only issues of the same statement are joined."""
     out = [dict(i) for i in l1]
-    l2 = list({(s["kind"], s["text"]): s for s in l2}.values())  # the checker may name a statement twice
+    l2 = list({(s["kind"], s.get("statement") or s["text"]): s for s in l2}.values())  # named twice
     for s in l2:
-        same = [i for i in out if i["kind"] == "value" and i["text"] and i["text"] in units_mod.plain(s["text"]) + s["text"]]
+        key = s.get("statement") or s["text"]
+        same = [i for i in out if i["kind"] in ("value", "uncited") and i.get("level") != [2]
+                and (i.get("statement") or i["text"]) == key]
         if same:
             for i in same:
                 i["level"] = [1, 2]

@@ -216,9 +216,9 @@ def test_http_client_openai_format(monkeypatch):
     seen = {}
 
     class Recorder(TestClient):
-        def post(self, url, **kw):
+        def stream(self, method, url, **kw):  # the answer is read streamed, with a size cap
             seen["url"], seen["json"], seen["headers"] = url, kw["json"], kw.get("headers")
-            return super().post(url, **kw)
+            return super().stream(method, url, **kw)
 
     monkeypatch.setattr(embeddings.httpx, "Client", lambda timeout: Recorder(fake_embeddings.app))
     cfg = {"url": "http://embeddings/v1", "model": "BAAI/bge-m3", "api_key": "secret"}
@@ -263,7 +263,7 @@ def test_reprocess_reads_documents_again_and_keeps_them_in_use(super_admin):
     assert {p.payload["chunk_id"] for p in _points(t["id"])} == {str(c) for c in after}
     assert _ask([t["id"]], "phishing procedure")
     doc = super_admin.get(f"/api/tenants/{t['id']}/documents").json()[0]
-    assert doc["status"] == "ready"
+    assert doc["active"]["status"] == "ready"
 
 
 def test_answers_pause_while_the_index_is_rebuilt(super_admin):

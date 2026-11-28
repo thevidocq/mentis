@@ -188,9 +188,24 @@ def import_config(db: Session, data: dict, apply: bool) -> list[str]:
             current = syslog.get_config(db) if key == "syslog" else _setting(db, key)
             if any(current.get(k) != v for k, v in incoming.items()):
                 plan.append(f"Update {label} settings")
+                merged = {**current, **incoming}
+                # A stored secret never follows a new address: it is dropped and must be entered again.
+                if key == "embedding" and "url" in incoming:
+                    from app.services import embeddings
+                    from app.services.llm_config import same_origin
+
+                    if not embeddings.allowed_url(incoming["url"]):
+                        raise ImportError_("The embedding address is not in MENTIS_EMBEDDING_ALLOWED_URLS.")
+                    if not same_origin(incoming["url"], current.get("url") or embeddings.get_config(db)["url"]) and merged.get("api_key_enc"):
+                        merged["api_key_enc"] = None
+                        plan.append("Embedding: the address changed, enter the API key again")
+                from app.services.mail import _moved
+
+                if key == "smtp" and _moved(current, incoming) and merged.get("password_enc"):
+                    merged["password_enc"] = None
+                    plan.append("Email (SMTP): the server changed, enter the password again")
                 if apply:
                     row = db.get(PlatformSetting, key)
-                    merged = {**current, **incoming}
                     if row is None:
                         db.add(PlatformSetting(key=key, value=merged))
                     else:

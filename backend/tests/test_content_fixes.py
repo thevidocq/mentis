@@ -116,7 +116,8 @@ def test_json_answer_with_raw_line_breaks_is_parsed(super_admin, fake_llm):  # n
 
 def test_json_answer_cut_by_the_token_limit_shows_the_answer_text(super_admin, fake_llm):  # noqa: F811
     a = _ask(super_admin, fake_llm, '{"answer": "Call Mario Rossi [1] at 111.\\nThen open a tic')
-    assert a["status"] == "ok" and a["content"] == "Call Mario Rossi [1] at 111.\nThen open a tic"
+    assert a["status"] == "ok" and a["content"].startswith("Call Mario Rossi [1] at 111.\nThen open a tic")
+    assert "cut at the length limit" in a["content"]
 
 
 def _cfg(kind, base="https://llm.example/v1", key="sk-live-0123456789abcdef"):

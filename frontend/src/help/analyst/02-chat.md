@@ -50,16 +50,16 @@ A second check compares each answer with its sources. A statement that may not m
 
 Under the answer, one line sums it up:
 
-- **✓ Matches the sources**: every statement cites a source, and every value and statement was found in the passages it cites.
+- **✓ Matches the sources**: everything shown was checked (text, headings, code blocks and table rows), every statement cites a source, and every value and statement was found in the passages it cites.
 - **⚠ N statements may not match the sources: check the marked ones.**
 - **Unverified answer**: it cites no source at all.
 - **Checking…**: the check is running (a second or two); the answer is already readable.
-- **Check not available**: the check could not run; verify the sources yourself.
+- **Check not available**: the check could not run, or its reply could not be read; verify the sources yourself.
 - **N statements were not checked**: a very long answer has more statements than the check reads; verify those in the sources.
 
-For some customers an answer that does not match its sources is not shown at all: you get *Not found* with "did not match the sources".
+For some customers an answer that does not match its sources is not shown at all: you get *Not found* with "did not match the sources". There an answer too long to be checked in full is not shown either.
 
-Items of a list take the citation of their heading: under "If it is a true positive [2]", each step counts as citing passage 2 and is checked against it. An answer from the **General Knowledge Base** is a normal answer, not a warning: the source is shown above it. An answer that reached the AI provider's length limit ends with a note saying it was cut: ask for the rest.
+Items of a list take the citation of their heading: under "If it is a true positive [2]", each step counts as citing passage 2 and is checked against it. A code block takes the citation of the line above it; a table row without one takes those of the other rows, else of the line above the table. Commands in code blocks and every cell of a table are checked like the text; a problem inside a code block is listed under the answer, since the code is shown exactly as written. An answer from the **General Knowledge Base** is a normal answer, not a warning: the source is shown above it. An answer that reached the AI provider's length limit ends with a note saying it was cut: ask for the rest.
 
 > Always check the source before acting on a contact or a time. Answers come only from the documents, but the documents can be out of date.
 
@@ -80,12 +80,12 @@ The chat fills the screen. The ☰ button at the top left opens the history; **+
 - Past chats are in the left sidebar, grouped by day, with their customer under the title.
 - **Search** finds chats by title or by words in the messages.
 - Hover a chat to **rename** it (the new title is kept) or **delete** it.
-- The title is written automatically from the first question.
+- The title is your first question.
 
 ## When something goes wrong
 
 - **The answer could not be generated**: the AI model or the document search did not respond. Click **Retry**. If it keeps failing, tell your administrator: the technical cause is in the super-admin's Logs.
 - **This customer is no longer available**: the customer was disabled, deleted or removed from your account. Start a new chat.
-- **This answer is hidden**: the answer used the documentation of a customer that is no longer assigned to you. Your question stays; the answer, its sources and suggestions do not.
-- **This answer was removed**: a document it used was deleted (a document uploaded by mistake, for example). Your question stays; ask again to get an answer from the documents in use.
+- **This answer is hidden**: the answer used the documentation of a customer that is no longer assigned to you, or a document or version that no longer exists (deleted, or removed by retention). Your question stays; the answer, its sources and suggestions do not.
+- **This answer was removed**: a document it used (cited or only read) was deleted (a document uploaded by mistake, for example), also while the answer was being written. Your question stays; ask again to get an answer from the documents in use.
 - **Integrations** is greyed out: the chat is on several customers, or the customer has no integration yet (ask your tenant admin).

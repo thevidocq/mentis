@@ -13,7 +13,7 @@ its own: it goes with what follows.
 import re
 from dataclasses import dataclass
 
-from app.ingestion.text import fenced_lines
+from app.ingestion.text import fence_open, fenced_lines
 from app.ingestion.types import ExtractedPage
 
 TARGET_CHARS = 1500
@@ -31,16 +31,18 @@ def _blocks(text: str) -> list[str]:
     """Paragraphs split at blank lines; a fenced code block stays one block, blank lines included."""
     lines = text.split("\n")
     blocks, current = [], []
+    last_code = False  # whether the last line of `current` is code (tracked: linear on long blocks)
     for line, code in zip(lines, fenced_lines(lines)):
         if not code and not line.strip():
             if current:
                 blocks.append("\n".join(current).strip())
                 current = []
             continue
-        if code and current and not fenced_lines(current)[-1] and fenced_lines([line])[0]:
+        if code and current and not last_code and fence_open(line) is not None:
             blocks.append("\n".join(current).strip())  # a fence starts a new block
             current = []
         current.append(line)
+        last_code = code
     if current:
         blocks.append("\n".join(current).strip())
     return [b for b in blocks if b]
@@ -70,7 +72,20 @@ def _split_code(block: str, limit: int = MAX_CHARS) -> list[str]:
     return parts
 
 
-_SEPARATOR = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)*\|?\s*$")
+_SEPARATOR_RX = re.compile(r"\|?[ \t]*:?-{3,}:?[ \t]*(?:\|[ \t]*:?-{3,}:?[ \t]*)*\|?")
+
+
+class _Separator:
+    """A Markdown table separator row. Matched on the stripped line, so no part of the pattern can
+    backtrack over a long run of spaces (it was quadratic)."""
+
+    @staticmethod
+    def match(line: str) -> bool:
+        s = line.strip()
+        return bool(s) and "-" in s and _SEPARATOR_RX.fullmatch(s) is not None
+
+
+_SEPARATOR = _Separator()
 LEAD = 300  # a block this short before a table or a section is kept with it
 
 

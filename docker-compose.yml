@@ -90,6 +90,12 @@ services:
       MENTIS_EMBEDDING_MODEL: ${MENTIS_EMBEDDING_MODEL:-BAAI/bge-m3}
       # Texts per request to the embedding service: lower it (e.g. 4) on hosts with little RAM.
       MENTIS_EMBEDDING_BATCH_SIZE: ${MENTIS_EMBEDDING_BATCH_SIZE:-16}
+      # Origins the embedding service may be moved to from the panel (empty = any).
+      MENTIS_EMBEDDING_ALLOWED_URLS: ${MENTIS_EMBEDDING_ALLOWED_URLS:-}
+      # Limits of the child process that reads each document, and of the OCR of one picture.
+      MENTIS_PARSE_MEMORY_MB: ${MENTIS_PARSE_MEMORY_MB:-2048}
+      MENTIS_PARSE_CPU_SECONDS: ${MENTIS_PARSE_CPU_SECONDS:-1500}
+      MENTIS_OCR_TIMEOUT_SECONDS: ${MENTIS_OCR_TIMEOUT_SECONDS:-600}
       MENTIS_WEB_SETUP: ${MENTIS_WEB_SETUP:-false}
       MENTIS_AUTH_RATE_PER_MINUTE: ${MENTIS_AUTH_RATE_PER_MINUTE:-30}
       MENTIS_CHAT_PASSAGES: ${MENTIS_CHAT_PASSAGES:-8}

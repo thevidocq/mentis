@@ -11,7 +11,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
-from app.models import Chat, ChatMessage, Tenant
+from app.models import Chat, ChatMessage, Document, DocumentVersion, Tenant
 
 REMOVED = "This answer was removed: documentation it used was deleted."
 
@@ -48,17 +48,44 @@ def redact(db: Session, *, tenant_id: uuid.UUID, document_ids: list[uuid.UUID] |
     for m in rows:
         cited = any(_matches(c, doc_ids, tid if (whole or names) else None, set() if whole else names)
                     for c in m.citations or [])
-        read = whole and tid in [str(t) for t in (m.searched or [])]
+        # Every customer or document whose passages the model read counts, cited or not: the
+        # answer, its follow-ups and its check may quote an uncited passage.
+        read = (whole and tid in [str(t) for t in (m.searched or [])]) or bool(doc_ids & {str(d) for d in m.read_documents or []})
         if not (cited or read):
             continue
-        m.content = REMOVED
-        m.citations = []
-        m.followups = []
-        check = dict(m.check or {})
-        check.pop("hidden_answer", None)
-        check.update(issues=[], redacted=True)
-        m.check = check
-        for name in ("citations", "followups", "check"):
-            flag_modified(m, name)
+        clear(m)
         removed += 1
     return removed
+
+
+def clear(m: ChatMessage) -> None:
+    """The answer loses its text, sources, follow-ups and check details; it says why."""
+    m.content = REMOVED
+    m.citations = []
+    m.followups = []
+    check = dict(m.check or {})
+    check.pop("hidden_answer", None)
+    check.update(issues=[], redacted=True)
+    m.check = check
+    for name in ("citations", "followups", "check"):
+        flag_modified(m, name)
+
+
+def _ids(values) -> set[uuid.UUID]:
+    out = set()
+    for v in values:
+        try:
+            out.add(uuid.UUID(str(v)))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def uses_deleted(db: Session, m: ChatMessage) -> bool:
+    """Whether the answer cites or read a document or version that no longer exists."""
+    cites = [c for c in m.citations or [] if isinstance(c, dict)]
+    docs = _ids([c.get("document_id") for c in cites if c.get("document_id")] + list(m.read_documents or []))
+    versions = _ids([c.get("version_id") for c in cites if c.get("version_id")])
+    if docs and len(set(db.scalars(select(Document.id).where(Document.id.in_(docs))))) < len(docs):
+        return True
+    return bool(versions) and len(set(db.scalars(select(DocumentVersion.id).where(DocumentVersion.id.in_(versions))))) < len(versions)

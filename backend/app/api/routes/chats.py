@@ -20,7 +20,7 @@ from app.core.ratelimit import user_rate_limit
 from app.core.db import get_db
 from app.models import Chat, ChatMessage, ChatShare, Role, Tenant, User
 from app.models.base import utcnow
-from app.services import access, answer_check, chat_visibility, integrations
+from app.services import access, answer_check, chat_redaction, chat_visibility, integrations
 from app.services.answer_check import runner as check_runner
 from app.services import answer as answering
 from app.services.embeddings import EmbeddingError
@@ -223,14 +223,15 @@ def _ask(db: Session, user: User, chat: Chat, question: str, first: bool, reques
                     citations=result.citations, followups=result.followups, tenants=result.tenants,
                     provider_name=result.provider_name, model=result.model, latency_ms=result.latency_ms,
                     input_tokens=result.input_tokens, output_tokens=result.output_tokens, check=check,
-                    searched=result.searched)
+                    searched=result.searched, read_documents=result.read_documents or None)
     db.add(a)
     if first and not chat.title_locked:
-        # A title written by the model may repeat a passage. In an "All customers" chat the passages
-        # can come from a customer later removed from the user (or not seen by a reader of a shared
-        # link), and titles are never hidden: there the title is the question itself.
-        model_title = (result.title or "").strip()[:120] if chat.scope_tenant_id is not None else ""
-        chat.title = model_title or question.strip()[:60] or chat.title
+        # The title is the question itself: a title written by the model may repeat a passage, and
+        # titles are shown even when the answer is hidden (access removed, document deleted).
+        chat.title = question.strip()[:60] or chat.title
+    # A document deleted while this answer was written: the answer is removed now, not kept for ever.
+    if a.status == "ok" and chat_redaction.uses_deleted(db, a):
+        chat_redaction.clear(a)
     chat.updated_at = utcnow()
     db.commit()
     # Metadata only: never the question or the answer.

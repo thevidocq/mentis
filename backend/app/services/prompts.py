@@ -6,15 +6,19 @@ The SOC vertical is the default; other verticals can replace SYSTEM_RULES later.
 import re
 import unicodedata
 
-# A passage tag, opening or closing, in any case or spacing; lookalike "<" signs are folded first.
-_TAG = re.compile(r"<(\s*/?\s*)(passage)", re.IGNORECASE)
+# A passage tag, opening or closing, in any case; anything but letters, digits and angle brackets may
+# stand between "<" and the name (spaces, "/", combining marks); lookalike "<" signs are folded first.
+_TAG = re.compile(r"<([^\w<>]{0,12})(passage)", re.IGNORECASE)
 
 
 def data_text(text: str) -> str:
-    """Untrusted text (documents, live records) as it goes inside a passage: compatibility forms
-    folded (fullwidth and small "<" become "<") and every passage tag made harmless ("‹passage"),
-    so the text can neither close its passage nor open a fake one."""
-    return _TAG.sub(lambda m: "‹" + m.group(1) + m.group(2), unicodedata.normalize("NFKC", text or ""))
+    """Untrusted text (documents, live records, quoted drafts) as it goes to a model: compatibility
+    forms folded (fullwidth and small "<" become "<"), invisible format characters removed (a
+    zero-width or invisible separator inside "</passage>" would hide it from the check), and every
+    passage tag made harmless ("‹passage"), so the text can neither close its passage nor open a fake one."""
+    text = unicodedata.normalize("NFKC", text or "")
+    text = "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
+    return _TAG.sub(lambda m: "‹" + m.group(1) + m.group(2), text)
 
 
 def attr(text: str) -> str:

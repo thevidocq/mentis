@@ -31,8 +31,18 @@ def public_smtp(cfg: dict) -> dict:
     }
 
 
+def _moved(current: dict, new: dict) -> bool:
+    """Whether the server (host, port) or the security of the connection changes."""
+    for key in ("host", "port", "security"):
+        if new.get(key) is not None and str(new[key]).strip().lower() != str(current.get(key) or "").strip().lower():
+            return True
+    return False
+
+
 def save_smtp(db: Session, data: dict) -> dict:
     cfg = get_smtp(db)
+    if data.get("password") is None and _moved(cfg, data):
+        cfg["password_enc"] = None  # a saved password is only sent to the server and the way it was saved for
     for key in ("host", "port", "security", "username", "from_address"):
         if data.get(key) is not None:
             cfg[key] = data[key]

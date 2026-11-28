@@ -114,7 +114,9 @@ function withMarks(source: string, marks: Mark[]): string {
         }
       }
     }
-    if (at < 0) at = findFree(s, m);
+    // A value whose statement was found but cannot be marked there (inside a code block, shown as
+    // written) is listed under the answer: never marked on another, correct occurrence.
+    if (at < 0 && stmtEnd < 0) at = findFree(s, m);
     if (at < 0 || !balanced(s, at)) continue; // not found, or inside another
     if (s.slice(at, at + m.length).includes(OPEN) || s.slice(at, at + m.length).includes(CLOSE)) continue;
     const end = at + m.length;

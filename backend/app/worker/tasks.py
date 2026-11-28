@@ -2,6 +2,7 @@
 
 import logging
 import os
+import time
 import uuid
 
 from sqlalchemy import delete
@@ -69,7 +70,7 @@ def ingest_version(version_id: str) -> None:
                 label=page.label, text=page.text, method=page.method, ocr_confidence=page.ocr_confidence,
                 tables=page.tables, image_key=image_key, flags=page.flags,
             ))
-        for i, c in enumerate(chunk_pages(result.pages)):
+        for i, c in enumerate(result.chunks if result.chunks is not None else chunk_pages(result.pages)):
             db.add(Chunk(version_id=version.id, tenant_id=version.tenant_id, ordinal=i, page_index=c.page_index,
                          heading=c.heading, text=c.text, chars=len(c.text)))
 
@@ -181,9 +182,10 @@ def reindex_all() -> None:
         ready = db.scalars(select(DocumentVersion).where(DocumentVersion.status == VersionStatus.READY)).all()
         done_ids = set()
         state(status="running", done=0, total=len(ready), error=None, blocking=True)
+        # From the first deletion on the index may be incomplete: answers stay paused if this fails.
+        cleared = True
         for tenant_id in {t for (t,) in db.execute(select(Tenant.id))}:
             vector_index.delete_tenant(tenant_id)
-        cleared = True
         failed: list[str] = []
 
         def one(v) -> None:
@@ -238,9 +240,13 @@ def reprocess_all() -> None:
         todo = [v.id for v in db.scalars(select(DocumentVersion).where(DocumentVersion.status == VersionStatus.READY))]
         state(status="running", done=0, total=len(todo), error=None)
         failed: list[str] = []
+        stale: list[str] = []  # read again, but old index points could not be removed
         for i, vid in enumerate(todo, start=1):
             try:
                 _reprocess_version(db, vid, cfg)
+            except StalePoints as e:  # the new reading is in use; its old points are reported apart
+                stale.append(str(e))
+                _log.warning("reprocess: %s", e)
             except Exception:  # noqa: BLE001 - this version keeps its current reading
                 db.rollback()
                 v = db.get(DocumentVersion, vid)
@@ -251,15 +257,23 @@ def reprocess_all() -> None:
             if i % 5 == 0 or i == len(todo):
                 state(status="running", done=i, total=len(todo), error=None)
         error = f"{len(failed)} version(s) kept their previous reading: {', '.join(failed[:10])}" if failed else None
+        if stale:
+            note = (f"{len(stale)} version(s) were read again but old index entries remain: {', '.join(stale[:10])}. "
+                    "Run Reindex to remove them.")
+            error = f"{error} {note}" if error else note
         state(status="done", done=len(todo), total=len(todo), error=error, finished_at=utcnow().isoformat())
-        log_event(db, "documents.reprocessed", kind="system", level="warning" if failed else "info",
-                  detail={"versions": len(todo), "failed": failed[:50]})
+        log_event(db, "documents.reprocessed", kind="system", level="warning" if failed or stale else "info",
+                  detail={"versions": len(todo), "failed": failed[:50], "stale_points": stale[:50]})
     except Exception as e:  # noqa: BLE001 - report the failure on the admin page
         db.rollback()
         state(status="failed", error=str(e)[:500])
         _log.exception("reprocess failed")
     finally:
         db.close()
+
+
+class StalePoints(RuntimeError):
+    """A version read again whose old index points could not be removed (the new reading is in use)."""
 
 
 def _reprocess_version(db, version_id, cfg: dict) -> None:
@@ -285,7 +299,8 @@ def _reprocess_version(db, version_id, cfg: dict) -> None:
                            label=page.label, text=page.text, method=page.method, ocr_confidence=page.ocr_confidence,
                            tables=page.tables, image_key=image_key, flags=page.flags))
     new = [Chunk(version_id=version.id, tenant_id=version.tenant_id, ordinal=i, page_index=c.page_index,
-                 heading=c.heading, text=c.text, chars=len(c.text)) for i, c in enumerate(chunk_pages(result.pages))]
+                 heading=c.heading, text=c.text, chars=len(c.text))
+           for i, c in enumerate(result.chunks if result.chunks is not None else chunk_pages(result.pages))]
     db.add_all(new)
     db.flush()
     vectors = embeddings.embed(cfg, [indexing.chunk_text_for_embedding(c) for c in new])
@@ -301,4 +316,14 @@ def _reprocess_version(db, version_id, cfg: dict) -> None:
         db.rollback()
         vector_index.delete_points(version.tenant_id, [c.id for c in new])
         raise
-    vector_index.delete_points(version.tenant_id, old_chunks)
+    # The new reading is committed. Old points carry the version id of a version in use, so they
+    # would take places in searches: removed, retried, and reported apart if they stay.
+    for attempt in (1, 2, 3):
+        try:
+            vector_index.delete_points(version.tenant_id, old_chunks)
+            return
+        except Exception:  # noqa: BLE001 - retried, then reported
+            if attempt == 3:
+                doc_name = version.original_filename
+                raise StalePoints(f"{doc_name} v{version.version}") from None
+            time.sleep(attempt)

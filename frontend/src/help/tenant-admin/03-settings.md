@@ -10,6 +10,10 @@ On by default. Answers also use the General Knowledge Base (general knowledge sh
 
 Off by default. When on, a newly uploaded version stays inactive until you approve it in the preview, so a badly read file never replaces a good one by surprise.
 
+## Approval by another person
+
+Off by default. When on, a version waiting for approval must be approved by someone other than the person who uploaded it (that person can still reject it); for a document read from a link, the person who set the link counts as its uploader. It applies only when versions wait for approval: with **Approve new document versions before publishing** on, or always for the General Knowledge Base. Approving your own upload while it is off is allowed and recorded in the logs.
+
 ## Suggested follow-up questions
 
 On by default. Shows 2–3 clickable questions under each answer, based only on what your documentation can answer.

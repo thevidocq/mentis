@@ -203,8 +203,16 @@ def put_embedding(body: EmbeddingIn, request: Request, db: Session = Depends(get
 
     if body.url is not None and not body.url.startswith(("http://", "https://")):
         raise HTTPException(422, "The URL must start with http:// or https://.")
-    cfg = embeddings.save_config(db, body.url, body.model, body.api_key)
+    from app.services.llm_config import same_origin
+
+    before = embeddings.get_config(db)["url"]
+    try:
+        cfg = embeddings.save_config(db, body.url, body.model, body.api_key)
+    except embeddings.EmbeddingSettingRefused as e:
+        raise HTTPException(422, str(e)) from None
+    # Every document and question goes to this address: a move is a warning in the logs.
     log_event(db, "platform.embedding_updated", actor=admin, ip=client_ip(request),
+              level="info" if same_origin(before, cfg["url"]) else "warning",
               detail={"url": cfg["url"], "model": cfg["model"], "api_key_changed": body.api_key is not None})
     return embeddings.public_config(cfg)
 

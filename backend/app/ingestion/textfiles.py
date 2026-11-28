@@ -30,7 +30,16 @@ def decode(data: bytes) -> str:
 
 # --- Markdown -----------------------------------------------------------------------------
 
-_HEADING = r"\s+(.+?)(?:\s+#+)?\s*$"   # closing hashes only after a space: "# C#" stays "C#"
+def _heading(line: str, top: str) -> str | None:
+    """The title of a `top`-level heading line, or None. Closing hashes go only after a space
+    ("# C#" stays "C#"). No regex over the title: cost stays linear on long runs of spaces."""
+    if not line.startswith(top) or len(line) <= len(top) or not line[len(top)].isspace():
+        return None
+    title = line[len(top):].strip()
+    bare = title.rstrip("#")
+    if bare != title and (not bare or bare[-1].isspace()):
+        title = bare.rstrip()
+    return title or None
 
 
 def parse_md(data: bytes, limits: ParseLimits) -> ParseResult:
@@ -48,11 +57,11 @@ def parse_md(data: bytes, limits: ParseLimits) -> ParseResult:
     sections: list[tuple[str, list[str]]] = []
     label, body = "Beginning", []
     for line, code in zip(lines, in_code):
-        m = None if code or top is None else re.match(rf"^{re.escape(top)}{_HEADING}", line)
-        if m:
+        title = None if code or top is None else _heading(line, top)
+        if title:
             if any(x.strip() for x in body):
                 sections.append((label, body))
-            label, body = m.group(1)[:110], [line]
+            label, body = title[:110], [line]
         else:
             body.append(line)
     if any(x.strip() for x in body) or not sections:

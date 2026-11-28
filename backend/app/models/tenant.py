@@ -6,6 +6,7 @@ from app.models.base import Base, CreatedMixin, IdMixin
 DEFAULT_TENANT_SETTINGS = {
     "include_general": True,       # General documentation included in retrieval
     "require_approval": False,     # new document versions go live only after admin approval
+    "approval_by_another": False,  # a version waiting for approval is approved by someone other than its uploader
     "suggested_followups": True,   # 2-3 follow-up questions under each answer
     "admin_can_set_llm": True,     # tenant admins may choose the tenant's LLM (set by super-admins)
     "chat_passages": None,         # passages read per answer; None = platform default (MENTIS_CHAT_PASSAGES)

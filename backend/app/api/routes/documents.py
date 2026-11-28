@@ -489,8 +489,11 @@ def _transition(action: str, tenant_id: uuid.UUID, version_id: uuid.UUID, reques
         _log.warning("could not %s version %s: %s", action, v.id, e)
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, public_message(e)) from None
     db.commit()
+    self_approved = action == "approve" and versions.author(db, v) == user.id
     log_event(db, f"document.version_{action}d" if action != "reject" else "document.version_rejected", actor=user,
-              tenant_id=tenant.id, target=v.original_filename, ip=client_ip(request), detail={"version": v.version})
+              tenant_id=tenant.id, target=v.original_filename, ip=client_ip(request),
+              level="warning" if self_approved else "info",
+              detail={"version": v.version, **({"self_approved": True} if self_approved else {})})
     return _vout(v)
 
 

@@ -55,3 +55,18 @@ def to_passages(tenant: Tenant, inst: Integration, c: Connector, records: list[R
                                product=c.manifest.label, record_kind=r.kind, record_id=r.id, url=r.url, text=record_text(r),
                                links=dict(r.links))
             for r in records]
+
+
+def nothing_found(label: str, integration_name: str, operation, args: dict) -> str:
+    """The public note for a lookup that found nothing. Only identifier values the core checked
+    against their pattern are named; free text chosen by the model (search words, which a record
+    can steer) never reaches the page: "nothing found for the search"."""
+    import re
+
+    shown = []
+    for k, v in args.items():
+        p = operation.params.get(k) if operation is not None else None
+        if p is not None and p.identifier and p.pattern and re.fullmatch(r"[\w.:@/-]{1,100}", str(v) or ""):
+            shown.append(str(v))
+    what = ", ".join(shown) if shown else "the search"
+    return f"{label} ({integration_name}): nothing found for {what}"[:200]

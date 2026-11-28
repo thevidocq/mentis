@@ -73,4 +73,33 @@ def sweep(db: Session) -> dict:
         for vid in found - known:
             vector_index.delete_version(tenants[thex], vid)
             result["vectors"] += 1
+        # Points of a ready version whose chunk is gone (a reprocess that could not remove its old
+        # points): they would take places in searches. Not while documents are read again or the
+        # index is rebuilt (new points are written before their chunks are committed then).
+        if not _rebuilding(db):
+            from sqlalchemy import select as _select
+
+            from app.models import Chunk
+            from app.models.document import VersionStatus
+
+            tid = tenants[thex]
+            points = vector_index.point_versions(tid)
+            ready = {str(v) for v in db.scalars(_select(DocumentVersion.id).where(
+                DocumentVersion.tenant_id == tid, DocumentVersion.status == VersionStatus.READY))}
+            chunks = {str(c) for c in db.scalars(_select(Chunk.id).where(Chunk.tenant_id == tid))}
+            dead = [p for p, v in points.items() if v in ready and p not in chunks]
+            if dead and not _rebuilding(db):  # again: a reprocess may have started during the scroll
+                vector_index.delete_points(tid, dead)
+                result["vectors"] += len(dead)
     return result
+
+
+def _rebuilding(db: Session) -> bool:
+    from app.models import PlatformSetting
+    from app.worker.tasks import REINDEX_STATE, REPROCESS_STATE
+
+    for key in (REINDEX_STATE, REPROCESS_STATE):
+        row = db.get(PlatformSetting, key)
+        if row and (row.value or {}).get("status") == "running":
+            return True
+    return False

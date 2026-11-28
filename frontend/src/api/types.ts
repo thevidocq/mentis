@@ -28,6 +28,7 @@ export interface AdminUser extends User {
 export interface TenantSettings {
   include_general: boolean;
   require_approval: boolean;
+  approval_by_another: boolean;
   suggested_followups: boolean;
   chat_passages: number | null; // null: platform default (Tenant.chat_passages_default)
   passage_variety: "off" | "normal" | "high";

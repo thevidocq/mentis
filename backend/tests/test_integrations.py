@@ -19,6 +19,7 @@ from app.services import llm
 from tests.conftest import login, new_client
 from tests.fake_connector import FakeDesk, FakeDeskServer
 from tests.fake_llm import FakeLLM
+from tests.http_mock import answer
 from tests.test_chat import _analyst, _provider, _setup
 from tests.test_tenants_users import _invite_and_accept
 
@@ -184,7 +185,7 @@ def test_try_lookup_and_core_guards(super_admin, desk, fake_llm):
 
 def test_safe_http_unit():
     seen = []
-    connector_http.set_transport(httpx.MockTransport(lambda r: seen.append(r) or httpx.Response(302, headers={"location": "https://evil"})))
+    connector_http.set_transport(httpx.MockTransport(lambda r: seen.append(r) or answer(302, headers={"location": "https://evil"})))
     connector_http.set_resolver(lambda host: ["93.184.216.34"])
     try:
         h = connector_http.SafeHttp("P", ["https://a.example.com"], ["https://a.example.com/token"], max_requests=3)

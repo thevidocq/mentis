@@ -24,7 +24,7 @@ from app.models import Integration
 from app.services import llm
 from app.services.integrations import planner
 from app.services.integrations.instances import IntegrationFailed, check_args, run
-from app.services.integrations.passages import record_text
+from app.services.integrations.passages import nothing_found, record_text
 from app.services.llm.tools import ToolConversation
 
 _log = logging.getLogger("mentis.integrations")
@@ -109,7 +109,7 @@ def gather(db, chat, question: str, context: str, items: list[tuple[Integration,
         if records:
             out.records.append((inst, c, records))
         else:
-            out.notes.append(f"{c.manifest.label} ({inst.name}): nothing found for {', '.join(args.values())}"[:200])
+            out.notes.append(nothing_found(c.manifest.label, inst.name, op, args))
         done[key] = _result_text(records)
         return done[key]
 

@@ -67,9 +67,26 @@ def on_ready(db: Session, version: DocumentVersion) -> None:
             version.is_active = False
 
 
+SELF_APPROVAL = ("This version must be approved by someone other than the person who uploaded it "
+                 "(setting Approval by another person, in Settings).")
+
+
+def author(db: Session, version: DocumentVersion):
+    """Who put this content in: the uploader, or for a version read from a link by the schedule,
+    the person who set the link (they control the page)."""
+    if version.uploaded_by is not None:
+        return version.uploaded_by
+    doc = db.get(Document, version.document_id)
+    return doc.created_by if doc is not None and doc.source_url else None
+
+
 def approve(db: Session, version: DocumentVersion, reviewer_id) -> None:
     if version.approval != Approval.PENDING:
         raise VersionError("This version is not waiting for approval.")
+    tenant = db.get(Tenant, version.tenant_id)
+    four_eyes = bool((tenant.settings or {}).get("approval_by_another")) if tenant else False
+    if four_eyes and reviewer_id is not None and reviewer_id == author(db, version):
+        raise VersionError(SELF_APPROVAL)
     version.approval = Approval.APPROVED
     version.reviewed_by, version.reviewed_at = reviewer_id, utcnow()
     activate(db, version)

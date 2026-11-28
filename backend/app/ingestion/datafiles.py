@@ -124,6 +124,8 @@ def yaml_documents(text: str) -> list:
         return [node for node in yaml.compose_all(text, Loader=_LOADER) if node is not None]
     except yaml.YAMLError as e:
         mark = getattr(e, "problem_mark", None)
+        if "nesting depth" in str(getattr(e, "problem", "")):  # libyaml's own limit (PyYAML >= 6.0.4 wheels)
+            raise ValueError("the file is nested too deeply") from None
         where = f"line {mark.line + 1}: " if mark is not None else ""
         raise ValueError(f"{where}{getattr(e, 'problem', None) or 'invalid YAML'}") from None
     except RecursionError:

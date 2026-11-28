@@ -40,7 +40,9 @@ def _run_level2(cfg: dict | None, result) -> tuple[list[dict], str, object]:
         return [], "unavailable", None
     try:
         issues, verdict = answer_check.level2(cfg, result.content, result.passage_texts)
-        return issues, "ok", verdict
+        # "Matches the sources" needs the checker to have read the answer: with nothing it could
+        # check against, the answer is not verified.
+        return issues, "ok" if verdict.checked else "unavailable", verdict
     except llm.LLMError as e:
         _log.warning("answer check (level 2) not available: %s", e)
         return [], "unavailable", None
@@ -55,15 +57,25 @@ def _unchecked(verdict) -> dict:
     return {"unchecked": n} if n else {}
 
 
+def _too_long(verdict) -> list[dict]:
+    return [{"level": [2], "kind": "unchecked", "text": ""}] if getattr(verdict, "unchecked", 0) else []
+
+
 def _problem(issue: dict) -> str:
-    """One issue as the model should read it, with the reason, so the second answer fixes it."""
-    kind, text = issue.get("kind"), issue.get("text") or ""
+    """One issue as the model should read it, with the reason, so the second answer fixes it. The
+    quoted text comes from the draft and the checker: neutralised like passages (prompts.data_text)."""
+    from app.services.prompts import data_text
+
+    kind, text = issue.get("kind"), data_text(issue.get("text") or "")
+    issue = {**issue, "reason": data_text(issue["reason"]) if issue.get("reason") else issue.get("reason")}
     if kind == "value":
         return f'the value "{text}" is not in the passages it cites'
     if kind == "uncited":
         return f'"{text}" has no citation'
     if kind == "no_citations":
         return "the answer cites no passage"
+    if kind == "unchecked":
+        return "the answer has more statements than can be checked: answer more briefly"
     return f'"{text}" is not supported by its cited passages' + (f" ({issue['reason']})" if issue.get("reason") else "")
 
 
@@ -108,9 +120,10 @@ def before_save(db: Session, chat: Chat, question: str, first: bool, result, reg
     if mode == "warn":
         return result, {"level2": "pending", "issues": l1, "checker": _checker_ref(cfg)}, True
 
-    # "hide": check now; a failing answer is written again once, then hidden.
+    # "hide": check now; a failing answer is written again once, then hidden. Statements the checker
+    # could not read (a very long answer) count as a failure: hide mode shows only checked answers.
     l2, state, verdict = _run_level2(cfg, result)
-    issues = answer_check.merge(l1, l2)
+    issues = answer_check.merge(l1, l2) + _too_long(verdict)
     if issues:
         problems = "; ".join(_problem(i) for i in issues)[:900]
         try:
@@ -121,7 +134,7 @@ def before_save(db: Session, chat: Chat, question: str, first: bool, result, reg
         if second is not None and second.status == "ok":
             l1b = _run_level1(second)
             l2b, state, verdict = _run_level2(cfg, second)
-            issues_b = answer_check.merge(l1b, l2b)
+            issues_b = answer_check.merge(l1b, l2b) + _too_long(verdict)
             if not issues_b:
                 check = {"level2": state, "issues": [], "checker": _checker_ref(cfg), "rewritten": True, **_unchecked(verdict)}
                 _log_check(db, chat, check, cfg, verdict, mode, commit=False)
@@ -150,7 +163,15 @@ def after_save(message_id: uuid.UUID, chat_id: uuid.UUID, result) -> None:
         if msg is None or chat is None or not msg.check:
             return
         cfg = _checker(db, _tenant(db, chat), result.used)
+        content = msg.content
+        db.rollback()  # no transaction is held while the checker runs (it may take minutes)
         l2, state, verdict = _run_level2(cfg, result)
+        # Read the message again, locked: it may have been removed meanwhile (a source deleted). Its
+        # current check is the base; a removed answer keeps no issue quoting its old text.
+        msg = db.get(ChatMessage, message_id, with_for_update=True, populate_existing=True)
+        if msg is None or not msg.check or msg.check.get("redacted") or msg.content != content:
+            db.rollback()
+            return
         check = {**msg.check, "level2": state, "issues": answer_check.merge(msg.check.get("issues") or [], l2),
                  **_unchecked(verdict)}
         msg.check = check
@@ -159,8 +180,8 @@ def after_save(message_id: uuid.UUID, chat_id: uuid.UUID, result) -> None:
     except Exception:  # noqa: BLE001 - a failed check must never break the chat
         _log.exception("answer check failed")
         db.rollback()
-        msg = db.get(ChatMessage, message_id)
-        if msg is not None and msg.check:
+        msg = db.get(ChatMessage, message_id, with_for_update=True, populate_existing=True)
+        if msg is not None and msg.check and not msg.check.get("redacted"):
             msg.check = {**msg.check, "level2": "unavailable"}
             db.commit()
     finally:

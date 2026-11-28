@@ -136,6 +136,20 @@ def version_ids(tenant_id) -> set[str]:
             return out
 
 
+def point_versions(tenant_id) -> dict[str, str]:
+    """Every point id (= chunk id) in the tenant's collection, with its version id (no vectors)."""
+    if not _exists(tenant_id):
+        return {}
+    out: dict[str, str] = {}
+    offset = None
+    while True:
+        points, offset = client().scroll(collection_name(tenant_id), limit=2048, offset=offset,
+                                         with_payload=["version_id"], with_vectors=False)
+        out.update((str(p.id), str((p.payload or {}).get("version_id"))) for p in points)
+        if offset is None:
+            return out
+
+
 def move_vectors_to_disk(name: str) -> bool:
     """Collections created before 0.3.5 keep vectors in RAM: move them to disk (Qdrant rebuilds the
     segments in the background; searches keep working). True when a change was requested."""
