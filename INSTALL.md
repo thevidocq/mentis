@@ -131,7 +131,7 @@ docker compose ps worker
 docker compose logs -f worker
 ```
 
-Embeddings: the `embeddings` container runs BAAI/bge-m3 (Hugging Face TEI, CPU). **On first start it downloads the model (about 2.3 GB)**; until then the Embeddings line on Service status is Down and uploads fail with "Indexing failed" (use Retry afterwards). Follow it with `docker compose logs -f embeddings`. Limits: `MENTIS_EMBEDDINGS_CPUS` / `MENTIS_EMBEDDINGS_MEMORY`. RAM: plan at least 8 GB for the whole host; with less, add swap and set `MENTIS_EMBEDDING_BATCH_SIZE=4` (texts per request), or uploads fail with "The document search service is not available" when the embedding service runs out of memory and restarts.
+Embeddings: the `embeddings` container runs BAAI/bge-m3 (Hugging Face TEI, CPU). **On first start it downloads the model (about 2.3 GB)**; until then the Embeddings line on Service status is Down and uploads fail with "Indexing failed" (use Retry afterwards). Follow it with `docker compose logs -f embeddings`. Limits: `MENTIS_EMBEDDINGS_CPUS` / `MENTIS_EMBEDDINGS_MEMORY`. Every document and question is sent to the embedding service: to stop its address from being moved in the panel (**Embedding and Qdrant**), list the allowed origins in `MENTIS_EMBEDDING_ALLOWED_URLS` (comma-separated, e.g. `http://embeddings,https://api.example-provider.com`; empty = any). RAM: plan at least 8 GB for the whole host; with less, add swap and set `MENTIS_EMBEDDING_BATCH_SIZE=4` (texts per request), or uploads fail with "The document search service is not available" when the embedding service runs out of memory and restarts.
 
 More workers in parallel: `MENTIS_WORKER_REPLICAS=3` in `.env`, then `docker compose up -d`.
 

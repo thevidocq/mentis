@@ -6,6 +6,8 @@ or a cloud provider. Settings: platform setting "embedding" over environment def
 
 from collections.abc import Callable
 
+import math
+
 import httpx
 from sqlalchemy.orm import Session
 
@@ -27,6 +29,14 @@ class EmbeddingError(RuntimeError):
         self.public = public
 
 
+class EmbeddingSettingRefused(ValueError):
+    """A change of the embedding settings that is not allowed (shown to the super-admin)."""
+
+
+MAX_DIM = 8192           # no embedding model has more dimensions
+MAX_RESPONSE = 64 << 20  # bytes of one embedding answer
+
+
 class EmbeddingModelChanged(EmbeddingError):
     """The configured model differs from the one the index was built with (a message for users)."""
 
@@ -41,9 +51,15 @@ def get_config(db: Session) -> dict:
     s = get_settings()
     row = db.get(PlatformSetting, EMBED_KEY)
     stored = dict(row.value) if row else {}
-    api_key = crypto.decrypt(stored["api_key_enc"]) if stored.get("api_key_enc") else s.embedding_api_key
+    url = stored.get("url") or s.embedding_url
+    if stored.get("api_key_enc"):
+        api_key = crypto.decrypt(stored["api_key_enc"])
+    else:  # the key from .env goes only to the address from .env
+        from app.services.llm_config import same_origin
+
+        api_key = s.embedding_api_key if same_origin(url, s.embedding_url) else None
     return {
-        "url": stored.get("url") or s.embedding_url,
+        "url": url,
         "model": stored.get("model") or s.embedding_model,
         "api_key": api_key,
         # Recorded when the index was last built, to detect a model change.
@@ -63,11 +79,35 @@ def public_config(cfg: dict) -> dict:
     }
 
 
+def allowed_url(url: str) -> bool:
+    """Whether the embedding service may be moved to `url` (MENTIS_EMBEDDING_ALLOWED_URLS)."""
+    from app.services.llm_config import same_origin
+
+    s = get_settings()
+    allowed = [u.strip() for u in (s.embedding_allowed_urls or "").split(",") if u.strip()]
+    return not allowed or same_origin(url, s.embedding_url) or any(same_origin(url, a) for a in allowed)
+
+
 def save_config(db: Session, url: str | None, model: str | None, api_key: str | None) -> dict:
+    """Raises EmbeddingSettingRefused for an address that is not allowed, or a new address with a
+    stored key and no key given: a stored key is only ever sent to the origin it was saved for."""
+    from app.services.llm_config import same_origin
+
     row = db.get(PlatformSetting, EMBED_KEY)
     value = dict(row.value) if row else {}
     if url is not None:
-        value["url"] = url.rstrip("/")
+        url = url.rstrip("/")
+        if not allowed_url(url):
+            raise EmbeddingSettingRefused("This address is not in MENTIS_EMBEDDING_ALLOWED_URLS: every document and "
+                                          "question is sent to the embedding service, so its address is set in .env.")
+        current = get_config(db)
+        if not same_origin(url, current["url"]):
+            if api_key is None and current["api_key"]:
+                raise EmbeddingSettingRefused("The address changed: enter the API key again (leave it empty for a "
+                                              "service without a key). A saved key is only sent to the address it was saved for.")
+            if api_key is None:
+                value["api_key_enc"] = None
+        value["url"] = url
     if model is not None:
         value["model"] = model.strip()
     if api_key is not None:
@@ -104,16 +144,49 @@ def embed(cfg: dict, texts: list[str]) -> list[list[float]]:
         with httpx.Client(timeout=s.embedding_timeout_seconds) as client:
             for i in range(0, len(texts), s.embedding_batch_size):
                 batch = texts[i : i + s.embedding_batch_size]
-                r = client.post(f"{cfg['url']}/embeddings", json={"model": cfg["model"], "input": batch}, headers=headers)
+                with client.stream("POST", f"{cfg['url']}/embeddings", json={"model": cfg["model"], "input": batch},
+                                   headers=headers) as r:
+                    body = _read_capped(r)
                 if r.status_code != 200:
-                    body = r.text.replace(cfg["api_key"], "[redacted]") if cfg.get("api_key") else r.text  # a key echoed back
-                    raise EmbeddingError(f"Embedding service answered {r.status_code}: {body[:200]}")
-                data = sorted(r.json()["data"], key=lambda d: d["index"])
-                if len(data) != len(batch):
-                    raise EmbeddingError("Embedding service returned a wrong number of vectors.")
-                out.extend(d["embedding"] for d in data)
+                    text = body.decode("utf-8", "replace")
+                    text = text.replace(cfg["api_key"], "[redacted]") if cfg.get("api_key") else text  # a key echoed back
+                    raise EmbeddingError(f"Embedding service answered {r.status_code}: {text[:200]}")
+                import json
+
+                out.extend(_vectors(json.loads(body)["data"], len(batch), out))
     except httpx.HTTPError as e:
         raise EmbeddingError(f"Embedding service not reachable at {cfg['url']}: {e.__class__.__name__}") from None
     except (KeyError, ValueError, TypeError) as e:
-        raise EmbeddingError(f"Unexpected answer from the embedding service: {e}") from None
+        raise EmbeddingError(f"Unexpected answer from the embedding service: {str(e)[:200]}") from None
+    return out
+
+
+def _read_capped(r: httpx.Response) -> bytes:
+    chunks, size = [], 0
+    for chunk in r.iter_bytes():
+        size += len(chunk)
+        if size > MAX_RESPONSE:
+            raise EmbeddingError("Embedding service returned an answer too large.")
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def _vectors(data, n: int, before: list) -> list[list[float]]:
+    """The vectors of one batch, checked: one per text in order (indices 0..n-1, each once), every
+    value a finite number, every vector of the call the same size (the index checks its own size)."""
+    if not isinstance(data, list) or len(data) != n:
+        raise EmbeddingError("Embedding service returned a wrong number of vectors.")
+    if sorted(d.get("index") if isinstance(d, dict) else None for d in data if isinstance(d, dict)) != list(range(n)) \
+            or len(data) != sum(isinstance(d, dict) for d in data):
+        raise EmbeddingError("Embedding service returned vectors in an unreadable order.")
+    dim = len(before[0]) if before else None
+    out = []
+    for d in sorted(data, key=lambda d: d["index"]):
+        v = d.get("embedding")
+        if not isinstance(v, list) or not v or len(v) > MAX_DIM or (dim is not None and len(v) != dim):
+            raise EmbeddingError("Embedding service returned a vector of the wrong size.")
+        if not all(isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x) for x in v):
+            raise EmbeddingError("Embedding service returned a vector with invalid values.")
+        dim = len(v)
+        out.append([float(x) for x in v])
     return out

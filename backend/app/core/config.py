@@ -86,6 +86,9 @@ class Settings(BaseSettings):
     embedding_url: str = "http://embeddings/v1"
     embedding_model: str = "BAAI/bge-m3"
     embedding_api_key: str | None = None
+    # Comma-separated origins (https://host[:port]) the embedding service may be moved to from the
+    # admin page; empty = any. Every document and question is sent there, so pin it in production.
+    embedding_allowed_urls: str = ""
     embedding_batch_size: int = 16  # texts per request to the embedding service: lower = less memory on small hosts
     embedding_timeout_seconds: int = 120
 

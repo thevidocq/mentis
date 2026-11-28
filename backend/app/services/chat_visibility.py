@@ -11,7 +11,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Chat, ChatMessage, Tenant, User
+from app.models import Chat, ChatMessage, Document, DocumentVersion, Tenant, User
 from app.services import access
 
 HIDDEN = ("This answer is hidden: it used documentation that was deleted, or of a customer that is no longer "
@@ -24,6 +24,23 @@ class Visibility:
         rows = list(db.scalars(select(Tenant)))
         self._by_name = {t.name: t.id for t in rows}
         self._general = next((t.id for t in rows if t.is_global), None)
+        self._db = db
+        self._docs: set[str] | None = None
+        self._versions: set[str] | None = None
+
+    def _gone(self, message: ChatMessage) -> bool:
+        """A document or version the answer cited or read no longer exists (deleted, or purged by
+        retention, possibly while the answer was being written): checked on every read, so no race
+        with the deletion can keep its text visible."""
+        cites = [c for c in message.citations or [] if isinstance(c, dict)]
+        docs = {str(c["document_id"]) for c in cites if c.get("document_id")} | {str(d) for d in message.read_documents or []}
+        versions = {str(c["version_id"]) for c in cites if c.get("version_id")}
+        if not docs and not versions:
+            return False
+        if self._docs is None:
+            self._docs = {str(i) for i in self._db.scalars(select(Document.id))}
+            self._versions = {str(i) for i in self._db.scalars(select(DocumentVersion.id))}
+        return not docs <= self._docs or not versions <= self._versions
 
     def _cited_tenant(self, citation: dict) -> uuid.UUID | None:
         tid = citation.get("tenant_id")
@@ -51,6 +68,6 @@ class Visibility:
                     return True
             if not ids <= self.visible:
                 return True
-        if (message.check or {}).get("redacted"):
+        if (message.check or {}).get("redacted") or self._gone(message):
             return True  # a source of this answer was deleted
         return any(self._cited_tenant(c) not in self.visible for c in message.citations or [] if isinstance(c, dict))

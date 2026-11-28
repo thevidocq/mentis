@@ -36,6 +36,7 @@ class Answer:
     output_tokens: int | None = None
     passages: int = 0
     searched: list[str] = field(default_factory=list)  # tenants whose passages the model read (visibility)
+    read_documents: list[str] = field(default_factory=list)  # documents whose passages the model read (deletion)
     # For the answer check (not stored): the passages given to the model, and the model that answered.
     passage_texts: dict[int, str] = field(default_factory=dict)
     used: dict | None = None
@@ -235,7 +236,7 @@ def answer(db: Session, chat: Chat, question: str, first: bool, correction: str 
                       title=question[:60] if first else None, live_notes=live.notes, live_calls=live.calls, live=live)
 
     want_followups = (scope_tenant.settings or {}).get("suggested_followups", True) if scope_tenant else True
-    system = prompts.system_prompt(followups=want_followups, title=first)
+    system = prompts.system_prompt(followups=want_followups, title=False)  # the chat is titled with the question
     # A flagged earlier answer goes back with a note, so its error does not spread to the next answers.
     turns = [llm.Turn(m.role, _history_text(m)) for m in history]
     message = prompts.user_message(question, passages, scope_label)
@@ -284,6 +285,7 @@ def answer(db: Session, chat: Chat, question: str, first: bool, correction: str 
         passage_texts={i: p.text for i, p in enumerate(passages, start=1)}, used=used,
         input_tokens=reply.input_tokens, output_tokens=reply.output_tokens,
         passages=len(passages), searched=[str(t) for t in dict.fromkeys(p.tenant_id for p in passages)],
+        read_documents=[str(d) for d in dict.fromkeys(getattr(p, "document_id", None) for p in passages) if d],
         live_notes=live.notes, live_calls=live.calls, live=live,
         live_links=[] if is_not_found else _missing_links(text, citations),
         cut=cut and not is_not_found,

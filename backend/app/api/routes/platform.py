@@ -44,7 +44,10 @@ def get_smtp(db: Session = Depends(get_db), _: User = Depends(super_admin)) -> d
 def put_smtp(body: SmtpIn, request: Request, db: Session = Depends(get_db), admin: User = Depends(super_admin)) -> dict:
     if body.security is not None and body.security not in mail.SECURITY_MODES:
         raise HTTPException(422, f"Security must be one of: {', '.join(sorted(mail.SECURITY_MODES))}.")
-    cfg = mail.save_smtp(db, body.model_dump())
+    try:
+        cfg = mail.save_smtp(db, body.model_dump())
+    except mail.SmtpRefused as e:
+        raise HTTPException(422, str(e)) from None
     changed = [k for k, v in body.model_dump().items() if v is not None]
     log_event(db, "platform.smtp_updated", actor=admin, ip=client_ip(request), detail={"fields": changed})
     return mail.public_smtp(cfg)
@@ -203,8 +206,16 @@ def put_embedding(body: EmbeddingIn, request: Request, db: Session = Depends(get
 
     if body.url is not None and not body.url.startswith(("http://", "https://")):
         raise HTTPException(422, "The URL must start with http:// or https://.")
-    cfg = embeddings.save_config(db, body.url, body.model, body.api_key)
+    from app.services.llm_config import same_origin
+
+    before = embeddings.get_config(db)["url"]
+    try:
+        cfg = embeddings.save_config(db, body.url, body.model, body.api_key)
+    except embeddings.EmbeddingSettingRefused as e:
+        raise HTTPException(422, str(e)) from None
+    # Every document and question goes to this address: a move is a warning in the logs.
     log_event(db, "platform.embedding_updated", actor=admin, ip=client_ip(request),
+              level="info" if same_origin(before, cfg["url"]) else "warning",
               detail={"url": cfg["url"], "model": cfg["model"], "api_key_changed": body.api_key is not None})
     return embeddings.public_config(cfg)
 

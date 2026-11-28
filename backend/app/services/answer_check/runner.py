@@ -152,7 +152,15 @@ def after_save(message_id: uuid.UUID, chat_id: uuid.UUID, result) -> None:
         if msg is None or chat is None or not msg.check:
             return
         cfg = _checker(db, _tenant(db, chat), result.used)
+        content = msg.content
+        db.rollback()  # no transaction is held while the checker runs (it may take minutes)
         l2, state, verdict = _run_level2(cfg, result)
+        # Read the message again, locked: it may have been removed meanwhile (a source deleted). Its
+        # current check is the base; a removed answer keeps no issue quoting its old text.
+        msg = db.get(ChatMessage, message_id, with_for_update=True, populate_existing=True)
+        if msg is None or not msg.check or msg.check.get("redacted") or msg.content != content:
+            db.rollback()
+            return
         check = {**msg.check, "level2": state, "issues": answer_check.merge(msg.check.get("issues") or [], l2),
                  **_unchecked(verdict)}
         msg.check = check
@@ -161,8 +169,8 @@ def after_save(message_id: uuid.UUID, chat_id: uuid.UUID, result) -> None:
     except Exception:  # noqa: BLE001 - a failed check must never break the chat
         _log.exception("answer check failed")
         db.rollback()
-        msg = db.get(ChatMessage, message_id)
-        if msg is not None and msg.check:
+        msg = db.get(ChatMessage, message_id, with_for_update=True, populate_existing=True)
+        if msg is not None and msg.check and not msg.check.get("redacted"):
             msg.check = {**msg.check, "level2": "unavailable"}
             db.commit()
     finally:

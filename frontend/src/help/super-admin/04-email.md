@@ -12,7 +12,7 @@ Mentis uses email only for invitations, for now.
 | Username / Password | the mailbox or relay account |
 | Sender address | mentis@yourcompany.com |
 
-The password is stored encrypted and never shown again. Leave the field empty to keep the stored one.
+The password is stored encrypted and never shown again. Leave the field empty to keep the stored one. It is only sent to the server it was saved for: when you change the server, enter the password again.
 
 ## Test
 

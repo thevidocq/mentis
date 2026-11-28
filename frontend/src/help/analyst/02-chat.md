@@ -80,12 +80,12 @@ The chat fills the screen. The ☰ button at the top left opens the history; **+
 - Past chats are in the left sidebar, grouped by day, with their customer under the title.
 - **Search** finds chats by title or by words in the messages.
 - Hover a chat to **rename** it (the new title is kept) or **delete** it.
-- The title is written automatically from the first question.
+- The title is your first question.
 
 ## When something goes wrong
 
 - **The answer could not be generated**: the AI model or the document search did not respond. Click **Retry**. If it keeps failing, tell your administrator: the technical cause is in the super-admin's Logs.
 - **This customer is no longer available**: the customer was disabled, deleted or removed from your account. Start a new chat.
 - **This answer is hidden**: the answer used the documentation of a customer that is no longer assigned to you. Your question stays; the answer, its sources and suggestions do not.
-- **This answer was removed**: a document it used was deleted (a document uploaded by mistake, for example). Your question stays; ask again to get an answer from the documents in use.
+- **This answer was removed**: a document it used (cited or only read) was deleted (a document uploaded by mistake, for example), also while the answer was being written. Your question stays; ask again to get an answer from the documents in use.
 - **Integrations** is greyed out: the chat is on several customers, or the customer has no integration yet (ask your tenant admin).

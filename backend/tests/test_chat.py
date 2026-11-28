@@ -125,7 +125,7 @@ def test_chat_answers_from_scoped_customer_with_citations(super_admin, fake_llm)
     c = a["citations"][0]
     assert c["tenant"] == "Alfa" and c["document"] == "Escalation.docx" and c["version"] == 1 and c["page"]
     assert a["tenants"] == ["Alfa"] and a["followups"] and a["provider_name"] == "Claude"
-    assert ex["chat"]["title"] == "Escalation procedure" and ex["chat"]["scope_name"] == "Alfa"
+    assert ex["chat"]["title"] == "Who handles brute force escalation?" and ex["chat"]["scope_name"] == "Alfa"  # the question
     # The LLM only saw Alfa (+ General), never Beta.
     sent = fake_llm.requests[-1]["body"]["messages"][-1]["content"]
     assert "Anna Verdi" not in sent and 'customer="Alfa"' in sent
@@ -140,7 +140,7 @@ def test_scope_is_locked_to_the_chat(super_admin, fake_llm):
     r = an.post(f"/api/chats/{chat['id']}/messages", json={"message": "brute force escalation contact", "tenant_id": beta["id"]})
     assert r.status_code == 200, r.text
     assert "Mario Rossi" in r.json()["answer"]["content"]
-    assert r.json()["chat"]["title"] == "Escalation procedure"  # title set once, from the first exchange
+    assert r.json()["chat"]["title"] == "brute force escalation"  # title set once: the first question
     full = an.get(f"/api/chats/{chat['id']}").json()
     assert [m["role"] for m in full["messages"]] == ["user", "assistant", "user", "assistant"]
     # History is sent to the LLM on follow-ups.

@@ -38,6 +38,7 @@ class ChatMessage(IdMixin, CreatedMixin, Base):
     # Tenant ids whose passages the model read for this answer (cited or not): the answer is hidden
     # from anyone who no longer sees one of them. None for answers saved before 0.6.2.
     searched: Mapped[list | None] = mapped_column(JSON)
+    read_documents: Mapped[list | None] = mapped_column(JSON)  # documents whose passages the model read, cited or not
     provider_name: Mapped[str | None] = mapped_column(String(80))
     model: Mapped[str | None] = mapped_column(String(200))
     latency_ms: Mapped[int | None] = mapped_column(Integer)
