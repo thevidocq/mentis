@@ -6,6 +6,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Fixed
+- **Test suite green again** (395 passed). The mock HTTP answers were already read when built, so `SafeHttp` (which reads the raw stream and inflates it itself) failed with `httpx.StreamConsumed` in every integration and link test since 0.4.1; `tests/http_mock.answer` builds unread streamed answers like a real server. Stale tests updated (pinned connection checked through the Host header, cut-answer note, document status under `active`).
+- **Embedding text:** a chunk that starts with its own heading no longer has that heading embedded twice (since 0.6.1 the section path was always put in front). Run **Reprocess all documents** to re-embed existing documents.
+- **YAML:** with PyYAML 6.0.4 (libyaml nesting limit) a deeply nested file is refused with "nested too deeply" again, instead of a parser message.
+
 ## [0.6.2] - 2026-11-28
 
 ### Security

@@ -9,7 +9,14 @@ from app.services import embeddings, vector_index
 
 def chunk_text_for_embedding(chunk: Chunk) -> str:
     # The section path gives every chunk its context ("Ransomware > Tier 2 > Contacts").
-    return f"{chunk.heading}\n\n{chunk.text}" if chunk.heading else chunk.text
+    if not chunk.heading:
+        return chunk.text
+    first = chunk.text.split("\n", 1)[0]
+    if first.startswith("#") and first.lstrip("#").strip() == chunk.heading.rsplit(" > ", 1)[-1]:
+        # The chunk starts with its own heading: only the parents are added, it is not embedded twice.
+        parent = chunk.heading.rpartition(" > ")[0]
+        return f"{parent}\n\n{chunk.text}" if parent else chunk.text
+    return f"{chunk.heading}\n\n{chunk.text}"
 
 
 def check_model(cfg: dict) -> None:

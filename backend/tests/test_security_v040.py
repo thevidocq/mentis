@@ -15,6 +15,7 @@ from app.services import answer_check, doc_export, prompts
 from app.services.answer_check import values
 from app.services.integrations.live import mode_of
 from tests.fake_connector import FakeDesk
+from tests.http_mock import answer
 from tests.test_integrations import URL, _world, desk, fake_llm  # noqa: F401 - fixtures
 
 PUBLIC = "93.184.216.34"
@@ -23,7 +24,7 @@ PUBLIC = "93.184.216.34"
 @pytest.fixture
 def http():
     seen = []
-    connector_http.set_transport(httpx.MockTransport(lambda r: seen.append(r) or httpx.Response(200, json={"ok": 1})))
+    connector_http.set_transport(httpx.MockTransport(lambda r: seen.append(r) or answer(200, json={"ok": 1})))
     yield seen
     connector_http.set_transport(None)
     connector_http.set_resolver(None)
@@ -84,14 +85,14 @@ def test_addresses_with_query_fragment_or_userinfo_cannot_be_saved():
 
 def test_size_cap_holds_after_decompression():
     bomb = gzip.compress(b"0" * 5_000_000)
-    connector_http.set_transport(httpx.MockTransport(lambda r: httpx.Response(200, content=bomb, headers={"content-encoding": "gzip"})))
+    connector_http.set_transport(httpx.MockTransport(lambda r: answer(200, content=bomb, headers={"content-encoding": "gzip"})))
     connector_http.set_resolver(lambda host: [PUBLIC])
     try:
         with pytest.raises(ConnectorError) as e:
             _client().request("GET", "https://desk.example.com/x")
         assert "too large" in str(e.value)
         small = gzip.compress(b'{"ok": true}')
-        connector_http.set_transport(httpx.MockTransport(lambda r: httpx.Response(200, content=small, headers={"content-encoding": "gzip"})))
+        connector_http.set_transport(httpx.MockTransport(lambda r: answer(200, content=small, headers={"content-encoding": "gzip"})))
         assert _client().request("GET", "https://desk.example.com/x").json() == {"ok": True}
     finally:
         connector_http.set_transport(None)

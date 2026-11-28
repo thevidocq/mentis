@@ -18,6 +18,7 @@ from app.connectors.contract import (
     origin_of,
     status_error,
 )
+from tests.http_mock import answer
 
 TICKETS = {
     "FAKE-12": {"title": "Brute force on vpn-gw01", "state": "In Progress", "group": "SOC L2",
@@ -86,12 +87,12 @@ class FakeDeskServer:
     def handle(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
         if self.status != 200:
-            return httpx.Response(self.status, json={"error": "token tok-SECRET-1 refused"})
+            return answer(self.status, json={"error": "token tok-SECRET-1 refused"})
         if request.headers.get("authorization") != "Bearer tok-SECRET-1":
-            return httpx.Response(401, json={})
+            return answer(401, json={})
         if request.url.path == "/api/ping":
-            return httpx.Response(200, json={"ok": True})
+            return answer(200, json={"ok": True})
         key = request.url.path.rsplit("/", 1)[-1]
         if request.url.path.startswith("/api/tickets/") and key in TICKETS:
-            return httpx.Response(200, json=TICKETS[key])
-        return httpx.Response(404, json={})
+            return answer(200, json=TICKETS[key])
+        return answer(404, json={})
